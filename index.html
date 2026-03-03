@@ -522,6 +522,11 @@ var tool = 'idle';
 var polyPts = [];       // polygon vertices in progress
 var fhPts = [];         // freehand points in progress
 var isFH = false;       // currently drawing freehand?
+var fhLastTime = 0;     // timestamp of last sampled point
+
+// Freehand sampling thresholds (image-space px)
+var FH_MIN_DIST = 0;    // recomputed on image load from log(iw + ih)
+var FH_MAX_DIST = 100;
 
 // Pan state
 var isPan = false;
@@ -778,6 +783,7 @@ function restoreState() {
       img = ni;
       view.iw = state.iw;
       view.ih = state.ih;
+      FH_MIN_DIST = Math.max(1, Math.log2(view.iw + view.ih) - 8.5);
       imgDataUrl = state.img;
       shapes = state.shapes || [];
       colorIdx = state.colorIdx || 0;
@@ -1085,6 +1091,7 @@ function drawOverlay() {
     for (var i = 0; i < pts.length; i++) {
       var p1 = pts[i], p2 = pts[(i + 1) % pts.length];
       var len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      if (len * view.zoom * view.fit < 30) continue;
       var midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
 
       // Offset toward centroid (inside)
@@ -1189,6 +1196,7 @@ function loadImg(file, skipConfirm) {
       img = ni;
       view.iw = ni.naturalWidth;
       view.ih = ni.naturalHeight;
+      FH_MIN_DIST = Math.max(1, Math.log2(view.iw + view.ih) - 8.5);
       imgDataUrl = dataUrl;
 
       fitView();
@@ -1406,6 +1414,7 @@ $(oCvs).on('mousedown', function(e) {
     case 'freehand':
       isFH = true;
       fhPts = [ip];
+      fhLastTime = Date.now();
       overlayDirty = true;
       break;
 
@@ -1442,8 +1451,22 @@ $(document).on('mousemove', function(e) {
   }
 
   if (isFH) {
-    fhPts.push({ x: mix, y: miy });
-    overlayDirty = true;
+    var last = fhPts[fhPts.length - 1];
+    var dx = mix - last.x, dy = miy - last.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    var now = Date.now();
+    var dt = (now - fhLastTime) / 1000;
+    var speed = dt > 0 ? dist / dt : 0;
+
+    var t = Math.min(speed / 2000, 1);
+    var threshold = FH_MIN_DIST + t * (FH_MAX_DIST - FH_MIN_DIST);
+
+    if (dist >= threshold) {
+      fhPts.push({ x: mix, y: miy });
+      fhLastTime = now;
+      overlayDirty = true;
+    }
     return;
   }
 
