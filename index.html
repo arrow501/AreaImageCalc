@@ -54,6 +54,14 @@ html,body{height:100%;overflow:hidden;background:#1a1a1a;color:#e0e0e0;font-fami
 .cursor-grabbing #overlay-canvas{cursor:grabbing!important}
 .cursor-move #overlay-canvas{cursor:move}
 kbd{background:#333;border:1px solid #444;border-radius:3px;padding:1px 5px;font-size:10px;font-family:inherit;color:#aaa}
+.tb-sliders{display:flex;gap:10px;margin-left:auto;align-items:center}
+.tb-sliders label{display:flex;align-items:center;gap:4px;font-size:10px;color:#666}
+.tb-sliders span{width:10px}
+.tb-sliders input[type=range]{-webkit-appearance:none;width:60px;height:4px;background:linear-gradient(to right,#444 0%,#444 48%,#FF6B35 48%,#FF6B35 52%,#444 52%,#444 100%);border-radius:2px;cursor:pointer}
+.tb-sliders input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;background:#ccc;border-radius:50%;cursor:pointer}
+.tb-sliders input[type=range]::-moz-range-thumb{width:10px;height:10px;background:#ccc;border:none;border-radius:50%;cursor:pointer}
+.tb-sliders input[type=range]:hover::-webkit-slider-thumb{background:#fff}
+.tb-sliders input[type=range]:hover::-moz-range-thumb{background:#fff}
 </style>
 </head>
 <body>
@@ -70,6 +78,10 @@ kbd{background:#333;border:1px solid #444;border-radius:3px;padding:1px 5px;font
     <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear All</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
+    <div class="tb-sliders">
+      <label title="Brightness"><span>B</span><input type="range" id="sl-bright" min="-100" max="100" value="0"></label>
+      <label title="Contrast"><span>C</span><input type="range" id="sl-contrast" min="-100" max="100" value="0"></label>
+    </div>
     <div class="tb-info">
       <span id="zoom-display">100%</span>
       <span id="scale-display">No scale</span>
@@ -176,6 +188,9 @@ var dpr = window.devicePixelRatio || 1;
 var cw = 0, ch = 0;
 var mx = 0, my = 0, mix = 0, miy = 0;
 var interacting = false, qualTimer = null;
+var saveTimer = null, SAVE_KEY = 'areaCalcState', SAVE_VER = 1;
+var imgDataUrl = null, pendingSave = false;
+var brightness = 0, contrast = 0;
 
 /* DOM */
 var $wrap = $('#canvas-wrap');
@@ -243,6 +258,70 @@ function pip(p,pts){
     if((pts[i].y>p.y)!==(pts[j].y>p.y)&&p.x<(pts[j].x-pts[i].x)*(p.y-pts[i].y)/(pts[j].y-pts[i].y)+pts[i].x) inside=!inside;
   } return inside;
 }
+
+function hasWork(){ return img && (shapes.length>0 || scaleLine); }
+
+/* ===========================================================
+   SAVE / RESTORE STATE
+   =========================================================== */
+function scheduleSave(){
+  if(saveTimer) clearTimeout(saveTimer);
+  pendingSave=true;
+  saveTimer=setTimeout(doSave,2000);
+}
+function doSave(){
+  pendingSave=false;
+  if(!img||!imgDataUrl) return;
+  try{
+    var state={
+      v:SAVE_VER,
+      ts:Date.now(),
+      img:imgDataUrl,
+      iw:view.iw,ih:view.ih,
+      shapes:shapes.map(function(s){
+        return {id:s.id,type:s.type,points:s.points,closed:s.closed,color:s.color,area:s.area,perimeter:s.perimeter};
+      }),
+      colorIdx:colorIdx,
+      shapeN:shapeN,
+      scalePPU:scalePPU,
+      scaleUnit:scaleUnit,
+      scaleLine:scaleLine
+    };
+    localStorage.setItem(SAVE_KEY,JSON.stringify(state));
+  }catch(e){console.warn('Save failed:',e);}
+}
+function restoreState(){
+  try{
+    var raw=localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    var state=JSON.parse(raw);
+    if(!state||state.v!==SAVE_VER||!state.img) return false;
+    var ni=new Image();
+    ni.onload=function(){
+      img=ni; view.iw=state.iw; view.ih=state.ih;
+      imgDataUrl=state.img;
+      shapes=state.shapes||[];
+      colorIdx=state.colorIdx||0;
+      shapeN=state.shapeN||0;
+      scalePPU=state.scalePPU||0;
+      scaleUnit=state.scaleUnit||'cm';
+      scaleLine=state.scaleLine||null;
+      selId=null;
+      fitView(); updateScaleDisp(); updatePanel();
+      $('#dropzone').css('pointer-events','none').find('.dz-content').hide();
+      enableTools(true);
+      status('Session restored. '+shapes.length+' shape(s).');
+    };
+    ni.onerror=function(){ localStorage.removeItem(SAVE_KEY); };
+    ni.src=state.img;
+    return true;
+  }catch(e){
+    console.warn('Restore failed:',e);
+    localStorage.removeItem(SAVE_KEY);
+    return false;
+  }
+}
+function clearSavedState(){ localStorage.removeItem(SAVE_KEY); }
 
 /* ===========================================================
    CANVAS SIZING
@@ -455,21 +534,30 @@ function rr(ctx,x,y,w,h,r){
 /* ===========================================================
    IMAGE LOADING
    =========================================================== */
-function loadImg(file){
+function loadImg(file,skipConfirm){
   if(!file||file.type.indexOf('image/')!==0) return;
-  var url=URL.createObjectURL(file), ni=new Image();
-  ni.onload=function(){
-    URL.revokeObjectURL(url);
-    img=ni; view.iw=ni.naturalWidth; view.ih=ni.naturalHeight;
-    fitView();
-    shapes=[]; selId=null; colorIdx=0;
-    scaleLine=null; scalePPU=0; updateScaleDisp();
-    setTool('idle'); updatePanel();
-    $('#dropzone').css('pointer-events','none').find('.dz-content').hide();
-    enableTools(true);
-    status('Image loaded ('+view.iw+'\u00d7'+view.ih+'). Pick a tool to begin.');
+  if(!skipConfirm&&hasWork()){
+    if(!confirm('Opening a new image will discard your current work.\n\nContinue?')) return;
+  }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var dataUrl=e.target.result;
+    var ni=new Image();
+    ni.onload=function(){
+      img=ni; view.iw=ni.naturalWidth; view.ih=ni.naturalHeight;
+      imgDataUrl=dataUrl;
+      fitView();
+      shapes=[]; selId=null; colorIdx=0; shapeN=0;
+      scaleLine=null; scalePPU=0; updateScaleDisp();
+      setTool('idle'); updatePanel();
+      $('#dropzone').css('pointer-events','none').find('.dz-content').hide();
+      enableTools(true);
+      status('Image loaded ('+view.iw+'\u00d7'+view.ih+'). Pick a tool to begin.');
+      scheduleSave();
+    };
+    ni.src=dataUrl;
   };
-  ni.src=url;
+  reader.readAsDataURL(file);
 }
 
 function fitView(){
@@ -504,6 +592,10 @@ function updateScaleDisp(){
   else $('#scale-display').text('No scale');
 }
 function status(t){ $('#status-text').text(t); }
+function updateFilters(){
+  var b=1+brightness/100, c=1+contrast/100;
+  iCvs.style.filter='brightness('+b+') contrast('+c+')';
+}
 
 /* ===========================================================
    TOOL MANAGEMENT
@@ -603,6 +695,7 @@ $(document).on('mouseup',function(e){
     dragPt=null; dragShape=null; dragIdx=-1;
     overlayDirty=true; updatePanel();
     status('Point moved. Drag control points to edit shapes.');
+    scheduleSave();
   }
 });
 
@@ -679,7 +772,9 @@ $('.tb-btn[data-tool]').on('click',function(){
 $('#btn-delete').on('click',function(){ if(selId) delShape(selId); });
 $('#btn-clear').on('click',function(){
   if(!shapes.length) return;
-  shapes=[]; selId=null; colorIdx=0; overlayDirty=true; updatePanel(); status('Cleared all shapes');
+  if(!confirm('Delete all '+shapes.length+' shape(s)?')) return;
+  shapes=[]; selId=null; colorIdx=0; shapeN=0; overlayDirty=true; updatePanel(); status('Cleared all shapes');
+  scheduleSave();
 });
 $('#btn-fit').on('click',function(){ if(img) fitView(); });
 $('#btn-toggle-panel').on('click',function(){
@@ -715,6 +810,7 @@ function confirmScale(){
   for(var i=0;i<shapes.length;i++) if(shapes[i].closed) worker.postMessage({type:'calcArea',id:shapes[i].id,points:shapes[i].points});
   overlayDirty=true; updatePanel();
   status('Scale set: '+val+' '+unit+' = '+Math.round(px)+'px');
+  scheduleSave();
 }
 
 /* ===========================================================
@@ -727,6 +823,7 @@ function closePoly(){
   selId=id; polyPts=[];
   worker.postMessage({type:'calcArea',id:id,points:shapes[shapes.length-1].points});
   overlayDirty=true; updatePanel(); setTool('idle');
+  scheduleSave();
 }
 function finishFH(){
   var id='s'+(++shapeN), pts=fhPts.slice(); fhPts=[];
@@ -735,11 +832,13 @@ function finishFH(){
   var eps=2/(view.zoom*view.fit);
   worker.postMessage({type:'simplify',id:id,points:pts,epsilon:eps});
   overlayDirty=true; updatePanel(); setTool('idle');
+  scheduleSave();
 }
 function delShape(id){
   shapes=shapes.filter(function(s){return s.id!==id;});
   if(selId===id) selId=null;
   overlayDirty=true; updatePanel(); status('Shape deleted');
+  scheduleSave();
 }
 function selectAt(ip){
   var found=null;
@@ -801,6 +900,11 @@ $(window).on('resize',function(){ resize(); imageDirty=overlayDirty=true; });
    =========================================================== */
 resize();
 enableTools(false);
+restoreState();
+
+$(window).on('beforeunload',function(){
+  if(pendingSave) doSave();
+});
 
 }); // end ready
 </script>
