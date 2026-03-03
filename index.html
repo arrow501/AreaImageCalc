@@ -210,6 +210,25 @@ function fmtPerim(p){
     return u.toFixed(4)+' '+scaleUnit;
   } return p.toFixed(0)+' px';
 }
+function fmtLen(px){
+  if(scalePPU>0){ var u=px/scalePPU;
+    if(u>=100) return u.toFixed(1)+scaleUnit;
+    if(u>=1) return u.toFixed(2)+scaleUnit;
+    return u.toFixed(3)+scaleUnit;
+  } return Math.round(px)+'px';
+}
+function findNearestPt(ip,thr){
+  var best=Infinity, sh=null, idx=-1;
+  for(var i=0;i<shapes.length;i++){
+    var s=shapes[i]; if(!s.closed) continue;
+    for(var j=0;j<s.points.length;j++){
+      var p=s.points[j], d=Math.hypot(p.x-ip.x,p.y-ip.y);
+      if(d<best){best=d;sh=s;idx=j;}
+    }
+  }
+  if(best<=thr) return {shape:sh,idx:idx,dist:best};
+  return null;
+}
 
 function distSeg(p,a,b){
   var dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
@@ -325,6 +344,19 @@ function drawOverlay(){
     }
   }
 
+  // edit mode: highlight hovered point
+  if(tool==='edit'&&!dragPt){
+    var thr=10*inv, hp=findNearestPt({x:mix,y:miy},thr);
+    if(hp){
+      ctx.beginPath(); ctx.arc(hp.shape.points[hp.idx].x,hp.shape.points[hp.idx].y,6*inv,0,6.2832);
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2*inv; ctx.stroke();
+    }
+  }
+  // edit mode: highlight dragging point
+  if(dragPt&&dragShape){
+    dot(ctx,dragPt.x,dragPt.y,6*inv,'#fff');
+  }
+
   // active freehand
   if(tool==='freehand'&&fhPts.length>1){
     ctx.beginPath(); ctx.moveTo(fhPts[0].x,fhPts[0].y);
@@ -333,6 +365,60 @@ function drawOverlay(){
   }
 
   ctx.restore(); /* back to screen space */
+
+  // side length labels for active polygon
+  if(tool==='polygon'&&polyPts.length>0){
+    var pts=polyPts, c=COLORS[colorIdx%COLORS.length];
+    var tempPts=pts.concat([{x:mix,y:miy}]);
+    var cp=centroid(tempPts);
+    ctx.font='600 10px "JetBrains Mono",monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    var off=12/(view.zoom*view.fit);
+    // completed sides
+    for(var i=0;i<pts.length-1;i++){
+      var p1=pts[i], p2=pts[i+1];
+      var len=Math.hypot(p2.x-p1.x,p2.y-p1.y);
+      var midX=(p1.x+p2.x)/2, midY=(p1.y+p2.y)/2;
+      var toCx=cp.x-midX, toCy=cp.y-midY, dist=Math.hypot(toCx,toCy);
+      if(dist>0){ midX+=toCx/dist*off; midY+=toCy/dist*off; }
+      var mid=i2s(midX,midY);
+      var txt=fmtLen(len), tw=ctx.measureText(txt).width+6;
+      ctx.fillStyle='rgba(0,0,0,.8)'; rr(ctx,mid.x-tw/2,mid.y-8,tw,14,2); ctx.fill();
+      ctx.fillStyle=c; ctx.fillText(txt,mid.x,mid.y);
+    }
+    // current segment
+    var last=pts[pts.length-1], len2=Math.hypot(mix-last.x,miy-last.y);
+    var midX2=(last.x+mix)/2, midY2=(last.y+miy)/2;
+    var toCx2=cp.x-midX2, toCy2=cp.y-midY2, dist2=Math.hypot(toCx2,toCy2);
+    if(dist2>0){ midX2+=toCx2/dist2*off; midY2+=toCy2/dist2*off; }
+    var mid2=i2s(midX2,midY2);
+    var txt2=fmtLen(len2), tw2=ctx.measureText(txt2).width+6;
+    ctx.fillStyle='rgba(0,0,0,.8)'; rr(ctx,mid2.x-tw2/2,mid2.y-8,tw2,14,2); ctx.fill();
+    ctx.fillStyle=c; ctx.fillText(txt2,mid2.x,mid2.y);
+  }
+
+  // side length labels for completed shapes
+  var fs2=Math.min(Math.max(9,10*view.zoom),14);
+  ctx.font='600 '+fs2+'px "JetBrains Mono",monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(var si=0;si<shapes.length;si++){
+    var sh=shapes[si]; if(!sh.closed||sh.points.length<3) continue;
+    var pts=sh.points, cp=centroid(pts);
+    for(var i=0;i<pts.length;i++){
+      var p1=pts[i], p2=pts[(i+1)%pts.length];
+      var len=Math.hypot(p2.x-p1.x,p2.y-p1.y);
+      var midX=(p1.x+p2.x)/2, midY=(p1.y+p2.y)/2;
+      // offset toward centroid (inside)
+      var toCx=cp.x-midX, toCy=cp.y-midY;
+      var dist=Math.hypot(toCx,toCy);
+      var off=12/(view.zoom*view.fit);
+      if(dist>0){ midX+=toCx/dist*off; midY+=toCy/dist*off; }
+      var sp=i2s(midX,midY);
+      var txt=fmtLen(len), tw=ctx.measureText(txt).width+4;
+      ctx.fillStyle='rgba(0,0,0,.7)'; rr(ctx,sp.x-tw/2,sp.y-7,tw,12,2); ctx.fill();
+      ctx.fillStyle=sh.color; ctx.fillText(txt,sp.x,sp.y);
+    }
+  }
 
   // area labels
   for(var si=0;si<shapes.length;si++){
@@ -396,7 +482,7 @@ function fitView(){
 }
 
 function enableTools(on){
-  var btns=$('#btn-scale,#btn-polygon,#btn-freehand,#btn-delete,#btn-clear,#btn-fit');
+  var btns=$('#btn-scale,#btn-polygon,#btn-freehand,#btn-edit,#btn-delete,#btn-clear,#btn-fit');
   on?btns.removeClass('disabled'):btns.addClass('disabled');
 }
 
@@ -426,18 +512,21 @@ function setTool(t){
   cancelTool(); tool=t;
   $('.tb-btn[data-tool]').removeClass('active');
   if(t!=='idle') $('.tb-btn[data-tool="'+t+'"]').addClass('active');
-  $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing');
+  $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing cursor-move');
   if(t==='scale'||t==='polygon'||t==='freehand') $('body').addClass('cursor-crosshair');
+  if(t==='edit') $('body').addClass('cursor-move');
   switch(t){
     case 'idle': status(img?'Select a tool or click a shape':'Drop an image or click Open'); break;
     case 'scale': status('Click first point of known distance'); break;
     case 'polygon': status('Click to place vertices. Click first point or double-click to close. ESC cancels.'); break;
     case 'freehand': status('Click and drag to trace. Release to finish. ESC cancels.'); break;
+    case 'edit': status('Drag control points to edit shapes. ESC to exit.'); break;
   }
   overlayDirty=true;
 }
 function cancelTool(){
   polyPts=[]; fhPts=[]; isFH=false; scaleP1=scaleP2=null; scaleState=0;
+  dragPt=null; dragShape=null; dragIdx=-1;
   $('#scale-popup').hide(); overlayDirty=true;
 }
 
@@ -472,6 +561,14 @@ $(oCvs).on('mousedown',function(e){
       polyPts.push(ip); overlayDirty=true; break;
     case 'freehand':
       isFH=true; fhPts=[ip]; overlayDirty=true; break;
+    case 'edit':
+      var thr=10/(view.zoom*view.fit), hp=findNearestPt(ip,thr);
+      if(hp){
+        dragShape=hp.shape; dragIdx=hp.idx; dragPt={x:hp.shape.points[hp.idx].x,y:hp.shape.points[hp.idx].y};
+        selId=hp.shape.id; overlayDirty=true; updatePanel();
+        status('Drag to move point');
+      }
+      break;
     case 'idle':
       selectAt(ip); break;
   }
@@ -485,8 +582,14 @@ $(document).on('mousemove',function(e){
     imageDirty=overlayDirty=true; setInteract(); return;
   }
   if(isFH){ fhPts.push({x:mix,y:miy}); overlayDirty=true; return; }
+  if(dragPt&&dragShape){
+    dragPt.x=mix; dragPt.y=miy;
+    dragShape.points[dragIdx]={x:mix,y:miy};
+    overlayDirty=true; return;
+  }
   if(tool==='polygon'&&polyPts.length>0) overlayDirty=true;
   if(tool==='scale'&&scaleState===1) overlayDirty=true;
+  if(tool==='edit') overlayDirty=true;
 });
 
 $(document).on('mouseup',function(e){
@@ -494,6 +597,12 @@ $(document).on('mouseup',function(e){
   if(isFH){
     isFH=false;
     if(fhPts.length>5) finishFH(); else { fhPts=[]; status('Too short \u2014 drag further.'); overlayDirty=true; }
+  }
+  if(dragPt&&dragShape){
+    worker.postMessage({type:'calcArea',id:dragShape.id,points:dragShape.points});
+    dragPt=null; dragShape=null; dragIdx=-1;
+    overlayDirty=true; updatePanel();
+    status('Point moved. Drag control points to edit shapes.');
   }
 });
 
@@ -530,6 +639,7 @@ $(document).on('keydown',function(e){
     case '1': if(img) setTool(tool==='scale'?'idle':'scale'); break;
     case '2': if(img) setTool(tool==='polygon'?'idle':'polygon'); break;
     case '3': if(img) setTool(tool==='freehand'?'idle':'freehand'); break;
+    case '4': if(img) setTool(tool==='edit'?'idle':'edit'); break;
     case '=': case '+': if(img) zoomAt(1.2,cw/2,ch/2); break;
     case '-': if(img) zoomAt(1/1.2,cw/2,ch/2); break;
     case '0': if((e.ctrlKey||e.metaKey)&&img){e.preventDefault();fitView();} break;
@@ -538,7 +648,8 @@ $(document).on('keydown',function(e){
 $(document).on('keyup',function(e){
   if(e.key===' '){
     spaceHeld=false; $('body').removeClass('cursor-grab cursor-grabbing');
-    if(tool!=='idle') $('body').addClass('cursor-crosshair');
+    if(tool==='scale'||tool==='polygon'||tool==='freehand') $('body').addClass('cursor-crosshair');
+    if(tool==='edit') $('body').addClass('cursor-move');
   }
 });
 
