@@ -1,5 +1,7 @@
 # Area Calculator
 
+**[Live Demo](https://areaimagecalc.pages.dev/)**
+
 A single-file web application for measuring areas and perimeters on images. Load any image, set a real-world scale, and draw shapes to calculate their measurements.
 
 ## Features
