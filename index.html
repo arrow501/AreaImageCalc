@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Area Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- Offline: download jquery-3.7.1.min.js locally and update src above -->
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#1a1a1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;user-select:none}
+#app{display:flex;flex-direction:column;height:100vh}
+#toolbar{display:flex;align-items:center;gap:4px;padding:4px 8px;background:#252525;border-bottom:1px solid #333;min-height:40px;flex-shrink:0;overflow-x:auto}
+#main{display:flex;flex:1;overflow:hidden;position:relative}
+#canvas-wrap{flex:1;position:relative;overflow:hidden;background:#2a2a2a;will-change:transform}
+#canvas-wrap canvas{position:absolute;top:0;left:0;display:block}
+#statusbar{padding:4px 12px;background:#252525;border-top:1px solid #333;font-size:12px;color:#999;min-height:26px;display:flex;align-items:center;flex-shrink:0}
+.tb-btn{background:none;border:1px solid transparent;color:#ccc;padding:4px 10px;cursor:pointer;border-radius:3px;font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap;line-height:1.4}
+.tb-btn:hover{background:#333;color:#fff}
+.tb-btn.active{background:#FF6B35;color:#fff;border-color:#e55a20}
+.tb-btn.disabled{opacity:.35;pointer-events:none}
+.tb-sep{width:1px;height:20px;background:#444;margin:0 4px;flex-shrink:0}
+.tb-info{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:#888;display:flex;gap:12px;flex-shrink:0}
+#shapes-panel{width:220px;background:#222;border-left:1px solid #333;display:flex;flex-direction:column;flex-shrink:0;transition:width .15s}
+#shapes-panel.collapsed{width:0;overflow:hidden;border:none}
+#shapes-header{padding:8px 10px;font-weight:600;font-size:12px;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center}
+#shapes-list{flex:1;overflow-y:auto;padding:4px}
+.shape-item{padding:6px 8px;border-radius:3px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:2px}
+.shape-item:hover{background:#2a2a2a}
+.shape-item.selected{background:#333;outline:1px solid #555}
+.shape-swatch{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+.shape-info{flex:1;min-width:0}
+.shape-info .area{font-family:'JetBrains Mono',monospace;color:#4A9EFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shape-info .perim{font-family:'JetBrains Mono',monospace;color:#666;font-size:10px}
+.shape-del{background:none;border:none;color:#555;cursor:pointer;font-size:16px;padding:0 2px;line-height:1}
+.shape-del:hover{color:#ff4444}
+#shapes-total{padding:8px 10px;border-top:1px solid #333;font-family:'JetBrains Mono',monospace;font-size:11px;color:#4A9EFF}
+#scale-popup{position:absolute;background:#2a2a2a;border:1px solid #FF6B35;border-radius:4px;padding:10px;z-index:100;display:none;box-shadow:0 4px 16px rgba(0,0,0,.6)}
+#scale-popup label{font-size:11px;color:#aaa;display:block;margin-bottom:6px}
+#scale-popup input[type=number]{background:#1a1a1a;border:1px solid #444;color:#e0e0e0;padding:4px 8px;width:90px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:12px}
+#scale-popup input:focus{outline:none;border-color:#FF6B35}
+#scale-popup select{background:#1a1a1a;border:1px solid #444;color:#e0e0e0;padding:4px;border-radius:3px;font-size:12px}
+#scale-popup button{background:#FF6B35;color:#fff;border:none;padding:4px 12px;border-radius:3px;cursor:pointer;font-size:12px;margin-left:4px}
+#scale-popup button:hover{background:#e55a20}
+#dropzone{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:50}
+#dropzone.drag-over{background:rgba(255,107,53,.08);outline:2px dashed #FF6B35;outline-offset:-8px;pointer-events:auto}
+.dz-content{text-align:center;color:#555;pointer-events:none}
+.dz-content .big{font-size:20px;color:#777;margin-bottom:6px}
+.dz-content .sub{font-size:12px}
+.cursor-crosshair #overlay-canvas{cursor:crosshair}
+.cursor-grab #overlay-canvas{cursor:grab}
+.cursor-grabbing #overlay-canvas{cursor:grabbing!important}
+.cursor-move #overlay-canvas{cursor:move}
+kbd{background:#333;border:1px solid #444;border-radius:3px;padding:1px 5px;font-size:10px;font-family:inherit;color:#aaa}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <button class="tb-btn" id="btn-open" title="Open image file">Open</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Set scale [1]">Scale</button>
+    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon lasso [2]">Polygon</button>
+    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand trace [3]">Freehand</button>
+    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points [4]">Edit</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn disabled" id="btn-delete" title="Delete selected [Del]">Delete</button>
+    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear All</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
+    <div class="tb-info">
+      <span id="zoom-display">100%</span>
+      <span id="scale-display">No scale</span>
+    </div>
+  </div>
+  <div id="main">
+    <div id="canvas-wrap">
+      <canvas id="image-canvas"></canvas>
+      <canvas id="overlay-canvas"></canvas>
+      <div id="dropzone">
+        <div class="dz-content">
+          <div class="big">Drop image here</div>
+          <div class="sub">or click <b>Open</b> &middot; <kbd>Ctrl+V</kbd> to paste</div>
+        </div>
+      </div>
+      <div id="scale-popup">
+        <label>Known distance between points:</label>
+        <input type="number" id="scale-value" min="0.001" step="any" placeholder="0.00">
+        <select id="scale-unit">
+          <option value="mm">mm</option>
+          <option value="cm" selected>cm</option>
+          <option value="m">m</option>
+          <option value="in">in</option>
+          <option value="ft">ft</option>
+          <option value="yd">yd</option>
+        </select>
+        <button id="scale-confirm">Set</button>
+      </div>
+    </div>
+    <div id="shapes-panel">
+      <div id="shapes-header">
+        <span>Shapes</span>
+        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&raquo;</button>
+      </div>
+      <div id="shapes-list"></div>
+      <div id="shapes-total"></div>
+    </div>
+  </div>
+  <div id="statusbar">
+    <span id="status-text">Drop an image, click Open, or paste to start</span>
+  </div>
+</div>
+<input type="file" id="file-input" accept="image/*" style="display:none">
+<script>
+$(function(){
+
+/* ===========================================================
+   WEB WORKER (Blob-based, all math off main thread)
+   =========================================================== */
+var workerSrc = [
+'self.onmessage=function(e){',
+'var d=e.data,t=d.type;',
+'if(t==="calcArea"){',
+'  var pts=d.points,n=pts.length,a=0,p=0;',
+'  for(var i=0;i<n;i++){var j=(i+1)%n;a+=pts[i].x*pts[j].y-pts[j].x*pts[i].y;',
+'  var dx=pts[j].x-pts[i].x,dy=pts[j].y-pts[i].y;p+=Math.sqrt(dx*dx+dy*dy);}',
+'  self.postMessage({type:"areaResult",id:d.id,area:Math.abs(a/2),perimeter:p});',
+'}else if(t==="simplify"){',
+'  self.postMessage({type:"simplifyResult",id:d.id,points:rdp(d.points,d.epsilon)});',
+'}};',
+'function rdp(pts,eps){',
+'  if(pts.length<=2)return pts.slice();',
+'  var a=pts[0],b=pts[pts.length-1],md=0,mi=0;',
+'  for(var i=1;i<pts.length-1;i++){var d=pd(pts[i],a,b);if(d>md){md=d;mi=i;}}',
+'  if(md>eps){var l=rdp(pts.slice(0,mi+1),eps),r=rdp(pts.slice(mi),eps);return l.slice(0,-1).concat(r);}',
+'  return[a,b];',
+'}',
+'function pd(p,a,b){',
+'  var dx=b.x-a.x,dy=b.y-a.y,len=Math.sqrt(dx*dx+dy*dy);',
+'  if(len===0)return Math.sqrt((p.x-a.x)*(p.x-a.x)+(p.y-a.y)*(p.y-a.y));',
+'  return Math.abs(dy*p.x-dx*p.y+b.x*a.y-b.y*a.x)/len;',
+'}'
+].join('\n');
+
+var worker = new Worker(URL.createObjectURL(new Blob([workerSrc],{type:'application/javascript'})));
+
+worker.onmessage = function(e){
+  var d = e.data, s;
+  if(d.type === 'areaResult'){
+    s = findShape(d.id);
+    if(s){ s.area = d.area; s.perimeter = d.perimeter; overlayDirty = true; updatePanel(); }
+  } else if(d.type === 'simplifyResult'){
+    s = findShape(d.id);
+    if(s){ s.points = d.points; worker.postMessage({type:'calcArea',id:s.id,points:s.points}); overlayDirty = true; }
+  }
+};
+
+/* ===========================================================
+   STATE
+   =========================================================== */
+var COLORS = ['#FF6B35','#4A9EFF','#22D88E','#FF4081','#FFD740','#7C4DFF'];
+var colorIdx = 0;
+var view = {ox:0, oy:0, zoom:1, fit:1, iw:0, ih:0};
+var img = null;
+var shapes = [], selId = null, shapeN = 0;
+var scalePPU = 0, scaleUnit = 'cm', scaleLine = null;
+var scaleState = 0, scaleP1 = null, scaleP2 = null;
+var tool = 'idle';
+var polyPts = [], fhPts = [], isFH = false;
+var isPan = false, panSt = null, spaceHeld = false;
+var dragPt = null, dragShape = null, dragIdx = -1;
+var imageDirty = true, overlayDirty = true;
+var dpr = window.devicePixelRatio || 1;
+var cw = 0, ch = 0;
+var mx = 0, my = 0, mix = 0, miy = 0;
+var interacting = false, qualTimer = null;
+
+/* DOM */
+var $wrap = $('#canvas-wrap');
+var iCvs = document.getElementById('image-canvas');
+var oCvs = document.getElementById('overlay-canvas');
+var iCtx = iCvs.getContext('2d');
+var oCtx = oCvs.getContext('2d');
+
+/* ===========================================================
+   HELPERS
+   =========================================================== */
+function findShape(id){ for(var i=0;i<shapes.length;i++) if(shapes[i].id===id) return shapes[i]; return null; }
+function nextColor(){ return COLORS[colorIdx++ % COLORS.length]; }
+
+function s2i(sx,sy){ var s=view.zoom*view.fit; return {x:(sx-view.ox)/s, y:(sy-view.oy)/s}; }
+function i2s(ix,iy){ var s=view.zoom*view.fit; return {x:ix*s+view.ox, y:iy*s+view.oy}; }
+
+function centroid(pts){ var cx=0,cy=0; for(var i=0;i<pts.length;i++){cx+=pts[i].x;cy+=pts[i].y;} return {x:cx/pts.length,y:cy/pts.length}; }
+
+function fmtArea(a){
+  if(scalePPU>0){ var u=a/(scalePPU*scalePPU);
+    if(u>=1e6) return (u/1e6).toFixed(2)+' '+scaleUnit+'\u00b2(M)';
+    if(u>=1e3) return u.toFixed(1)+' '+scaleUnit+'\u00b2';
+    if(u>=1) return u.toFixed(2)+' '+scaleUnit+'\u00b2';
+    return u.toFixed(4)+' '+scaleUnit+'\u00b2';
+  } return a.toFixed(0)+' px\u00b2';
+}
+function fmtPerim(p){
+  if(scalePPU>0){ var u=p/scalePPU;
+    if(u>=1e3) return u.toFixed(1)+' '+scaleUnit;
+    if(u>=1) return u.toFixed(2)+' '+scaleUnit;
+    return u.toFixed(4)+' '+scaleUnit;
+  } return p.toFixed(0)+' px';
+}
+
+function distSeg(p,a,b){
+  var dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+  if(l2===0) return Math.hypot(p.x-a.x,p.y-a.y);
+  var t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));
+  return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
+}
+
+function pip(p,pts){
+  var inside=false;
+  for(var i=0,j=pts.length-1;i<pts.length;j=i++){
+    if((pts[i].y>p.y)!==(pts[j].y>p.y)&&p.x<(pts[j].x-pts[i].x)*(p.y-pts[i].y)/(pts[j].y-pts[i].y)+pts[i].x) inside=!inside;
+  } return inside;
+}
+
+/* ===========================================================
+   CANVAS SIZING
+   =========================================================== */
+function resize(){
+  var w=$wrap.width(), h=$wrap.height();
+  if(w===cw && h===ch) return;
+  cw=w; ch=h; dpr=window.devicePixelRatio||1;
+  iCvs.style.width=oCvs.style.width=w+'px';
+  iCvs.style.height=oCvs.style.height=h+'px';
+  iCvs.width=oCvs.width=w*dpr;
+  iCvs.height=oCvs.height=h*dpr;
+  imageDirty=overlayDirty=true;
+}
+
+/* ===========================================================
+   RENDERING
+   =========================================================== */
+function drawImage(){
+  imageDirty=false;
+  var ctx=iCtx, w=cw*dpr, h=ch*dpr;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#2a2a2a'; ctx.fillRect(0,0,w,h);
+  if(!img) return;
+  ctx.save(); ctx.scale(dpr,dpr);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality=interacting?'low':'high';
+  var s=view.zoom*view.fit;
+  ctx.translate(view.ox,view.oy); ctx.scale(s,s);
+  ctx.drawImage(img,0,0);
+  ctx.restore();
+}
+
+function drawOverlay(){
+  overlayDirty=false;
+  var ctx=oCtx, w=cw*dpr, h=ch*dpr;
+  ctx.clearRect(0,0,w,h);
+  if(!img) return;
+  var s=view.zoom*view.fit, inv=1/s;
+  ctx.save(); ctx.scale(dpr,dpr);
+
+  /* ---- image-space drawing ---- */
+  ctx.save();
+  ctx.translate(view.ox,view.oy); ctx.scale(s,s);
+
+  // scale reference line
+  if(scaleLine){
+    ctx.beginPath(); ctx.setLineDash([6*inv,4*inv]);
+    ctx.strokeStyle='#4A9EFF'; ctx.lineWidth=1.5*inv;
+    ctx.moveTo(scaleLine.p1.x,scaleLine.p1.y); ctx.lineTo(scaleLine.p2.x,scaleLine.p2.y);
+    ctx.stroke(); ctx.setLineDash([]);
+    dot(ctx,scaleLine.p1.x,scaleLine.p1.y,3.5*inv,'#4A9EFF');
+    dot(ctx,scaleLine.p2.x,scaleLine.p2.y,3.5*inv,'#4A9EFF');
+  }
+
+  // scale in-progress
+  if(tool==='scale'&&scaleP1){
+    ctx.beginPath(); ctx.setLineDash([6*inv,4*inv]);
+    ctx.strokeStyle='#4A9EFF'; ctx.lineWidth=1.5*inv;
+    ctx.moveTo(scaleP1.x,scaleP1.y);
+    ctx.lineTo(scaleState===2?scaleP2.x:mix, scaleState===2?scaleP2.y:miy);
+    ctx.stroke(); ctx.setLineDash([]);
+    dot(ctx,scaleP1.x,scaleP1.y,4*inv,'#4A9EFF');
+    if(scaleP2) dot(ctx,scaleP2.x,scaleP2.y,4*inv,'#4A9EFF');
+  }
+
+  // closed shapes
+  for(var si=0;si<shapes.length;si++){
+    var sh=shapes[si]; if(!sh.closed||sh.points.length<3) continue;
+    var pts=sh.points, sel=sh.id===selId;
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for(var pi=1;pi<pts.length;pi++) ctx.lineTo(pts[pi].x,pts[pi].y);
+    ctx.closePath();
+    ctx.fillStyle=sh.color+'20'; ctx.fill();
+    ctx.strokeStyle=sh.color; ctx.lineWidth=(sel?2.5:1.5)*inv; ctx.stroke();
+    if(pts.length<=80||sel){
+      var hr=(sel?4:2.5)*inv;
+      for(var pi=0;pi<pts.length;pi++) dot(ctx,pts[pi].x,pts[pi].y,hr,sh.color);
+    }
+  }
+
+  // active polygon
+  if(tool==='polygon'&&polyPts.length>0){
+    var c=COLORS[colorIdx%COLORS.length], pts=polyPts;
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+    ctx.lineTo(mix,miy);
+    ctx.strokeStyle=c; ctx.lineWidth=1.5*inv; ctx.stroke();
+    for(var i=0;i<pts.length;i++) dot(ctx,pts[i].x,pts[i].y,4*inv,c);
+    // snap preview
+    if(pts.length>=3){
+      var fp=i2s(pts[0].x,pts[0].y), d=Math.hypot(mx-fp.x,my-fp.y);
+      if(d<15){
+        dot(ctx,pts[0].x,pts[0].y,7*inv,c);
+        ctx.beginPath(); ctx.setLineDash([4*inv,3*inv]); ctx.strokeStyle=c+'80'; ctx.lineWidth=inv;
+        ctx.moveTo(pts[pts.length-1].x,pts[pts.length-1].y); ctx.lineTo(pts[0].x,pts[0].y);
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // active freehand
+  if(tool==='freehand'&&fhPts.length>1){
+    ctx.beginPath(); ctx.moveTo(fhPts[0].x,fhPts[0].y);
+    for(var i=1;i<fhPts.length;i++) ctx.lineTo(fhPts[i].x,fhPts[i].y);
+    ctx.strokeStyle=COLORS[colorIdx%COLORS.length]; ctx.lineWidth=1.5*inv; ctx.stroke();
+  }
+
+  ctx.restore(); /* back to screen space */
+
+  // area labels
+  for(var si=0;si<shapes.length;si++){
+    var sh=shapes[si]; if(!sh.closed||sh.area==null) continue;
+    var cp=centroid(sh.points), sp=i2s(cp.x,cp.y);
+    var txt=fmtArea(sh.area);
+    var fs=Math.min(Math.max(11,13*view.zoom),22);
+    ctx.font='600 '+fs+'px "JetBrains Mono",monospace';
+    var tw=ctx.measureText(txt).width+10, th=fs+6;
+    ctx.fillStyle='rgba(0,0,0,.75)';
+    rr(ctx,sp.x-tw/2,sp.y-th/2,tw,th,3); ctx.fill();
+    ctx.fillStyle=sh.color; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(txt,sp.x,sp.y);
+  }
+
+  ctx.restore();
+}
+
+function dot(ctx,x,y,r,c){
+  ctx.beginPath(); ctx.arc(x,y,r,0,6.2832);
+  ctx.fillStyle=c; ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=r*.3; ctx.stroke();
+}
+function rr(ctx,x,y,w,h,r){
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r);
+  ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
+  ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
+}
+
+(function loop(){ if(imageDirty) drawImage(); if(overlayDirty) drawOverlay(); requestAnimationFrame(loop); })();
+
+/* ===========================================================
+   IMAGE LOADING
+   =========================================================== */
+function loadImg(file){
+  if(!file||file.type.indexOf('image/')!==0) return;
+  var url=URL.createObjectURL(file), ni=new Image();
+  ni.onload=function(){
+    URL.revokeObjectURL(url);
+    img=ni; view.iw=ni.naturalWidth; view.ih=ni.naturalHeight;
+    fitView();
+    shapes=[]; selId=null; colorIdx=0;
+    scaleLine=null; scalePPU=0; updateScaleDisp();
+    setTool('idle'); updatePanel();
+    $('#dropzone').css('pointer-events','none').find('.dz-content').hide();
+    enableTools(true);
+    status('Image loaded ('+view.iw+'\u00d7'+view.ih+'). Pick a tool to begin.');
+  };
+  ni.src=url;
+}
+
+function fitView(){
+  if(!img) return;
+  view.fit=Math.min(cw/view.iw, ch/view.ih, 1);
+  view.zoom=1;
+  var dw=view.iw*view.fit, dh=view.ih*view.fit;
+  view.ox=(cw-dw)/2; view.oy=(ch-dh)/2;
+  imageDirty=overlayDirty=true; updateZoomDisp();
+}
+
+function enableTools(on){
+  var btns=$('#btn-scale,#btn-polygon,#btn-freehand,#btn-delete,#btn-clear,#btn-fit');
+  on?btns.removeClass('disabled'):btns.addClass('disabled');
+}
+
+/* ===========================================================
+   ZOOM & PAN
+   =========================================================== */
+function zoomAt(factor,sx,sy){
+  var ip=s2i(sx,sy), oz=view.zoom;
+  view.zoom=Math.max(.05,Math.min(50,view.zoom*factor));
+  if(view.zoom===oz) return;
+  var ns=i2s(ip.x,ip.y);
+  view.ox+=sx-ns.x; view.oy+=sy-ns.y;
+  imageDirty=overlayDirty=true; updateZoomDisp(); setInteract();
+}
+function setInteract(){ interacting=true; clearTimeout(qualTimer); qualTimer=setTimeout(function(){ interacting=false; imageDirty=true; },150); }
+function updateZoomDisp(){ $('#zoom-display').text(Math.round(view.zoom*100)+'%'); }
+function updateScaleDisp(){
+  if(scalePPU>0) $('#scale-display').text('1px='+((1/scalePPU).toFixed(3))+scaleUnit);
+  else $('#scale-display').text('No scale');
+}
+function status(t){ $('#status-text').text(t); }
+
+/* ===========================================================
+   TOOL MANAGEMENT
+   =========================================================== */
+function setTool(t){
+  cancelTool(); tool=t;
+  $('.tb-btn[data-tool]').removeClass('active');
+  if(t!=='idle') $('.tb-btn[data-tool="'+t+'"]').addClass('active');
+  $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing');
+  if(t==='scale'||t==='polygon'||t==='freehand') $('body').addClass('cursor-crosshair');
+  switch(t){
+    case 'idle': status(img?'Select a tool or click a shape':'Drop an image or click Open'); break;
+    case 'scale': status('Click first point of known distance'); break;
+    case 'polygon': status('Click to place vertices. Click first point or double-click to close. ESC cancels.'); break;
+    case 'freehand': status('Click and drag to trace. Release to finish. ESC cancels.'); break;
+  }
+  overlayDirty=true;
+}
+function cancelTool(){
+  polyPts=[]; fhPts=[]; isFH=false; scaleP1=scaleP2=null; scaleState=0;
+  $('#scale-popup').hide(); overlayDirty=true;
+}
+
+/* ===========================================================
+   MOUSE HANDLING
+   =========================================================== */
+function canvasXY(e){
+  var r=oCvs.getBoundingClientRect();
+  mx=e.clientX-r.left; my=e.clientY-r.top;
+  var ip=s2i(mx,my); mix=ip.x; miy=ip.y;
+}
+
+$(oCvs).on('mousedown',function(e){
+  e.preventDefault(); canvasXY(e);
+  // Pan: middle button or space+left
+  if(e.button===1||(e.button===0&&spaceHeld)){
+    isPan=true; panSt={x:e.clientX,y:e.clientY,ox:view.ox,oy:view.oy};
+    $('body').removeClass('cursor-grab').addClass('cursor-grabbing'); return;
+  }
+  if(e.button!==0||!img) return;
+  var ip={x:mix,y:miy};
+  switch(tool){
+    case 'scale':
+      if(scaleState===0){ scaleP1=ip; scaleState=1; status('Click second point'); }
+      else if(scaleState===1){ scaleP2=ip; scaleState=2; showScalePopup(); }
+      overlayDirty=true; break;
+    case 'polygon':
+      if(polyPts.length>=3){
+        var fp=i2s(polyPts[0].x,polyPts[0].y);
+        if(Math.hypot(mx-fp.x,my-fp.y)<15){ closePoly(); return; }
+      }
+      polyPts.push(ip); overlayDirty=true; break;
+    case 'freehand':
+      isFH=true; fhPts=[ip]; overlayDirty=true; break;
+    case 'idle':
+      selectAt(ip); break;
+  }
+});
+
+$(document).on('mousemove',function(e){
+  canvasXY(e);
+  if(isPan){
+    view.ox=panSt.ox+(e.clientX-panSt.x);
+    view.oy=panSt.oy+(e.clientY-panSt.y);
+    imageDirty=overlayDirty=true; setInteract(); return;
+  }
+  if(isFH){ fhPts.push({x:mix,y:miy}); overlayDirty=true; return; }
+  if(tool==='polygon'&&polyPts.length>0) overlayDirty=true;
+  if(tool==='scale'&&scaleState===1) overlayDirty=true;
+});
+
+$(document).on('mouseup',function(e){
+  if(isPan){ isPan=false; $('body').removeClass('cursor-grabbing'); if(spaceHeld) $('body').addClass('cursor-grab'); return; }
+  if(isFH){
+    isFH=false;
+    if(fhPts.length>5) finishFH(); else { fhPts=[]; status('Too short \u2014 drag further.'); overlayDirty=true; }
+  }
+});
+
+$(oCvs).on('dblclick',function(e){
+  if(tool==='polygon'&&polyPts.length>=3){ polyPts.pop(); closePoly(); }
+});
+
+// Wheel zoom (native for passive:false)
+oCvs.addEventListener('wheel',function(e){
+  e.preventDefault();
+  if(!img) return;
+  var r=oCvs.getBoundingClientRect(), sx=e.clientX-r.left, sy=e.clientY-r.top;
+  var d=e.ctrlKey?-e.deltaY*3:-e.deltaY;
+  zoomAt(d>0?1.1:1/1.1, sx, sy);
+},{passive:false});
+
+$(oCvs).on('contextmenu',function(e){
+  e.preventDefault();
+  if(tool!=='idle'){ cancelTool(); setTool(tool); }
+});
+
+/* ===========================================================
+   KEYBOARD
+   =========================================================== */
+$(document).on('keydown',function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  switch(e.key){
+    case ' ': if(!spaceHeld){spaceHeld=true;$('body').addClass('cursor-grab');} e.preventDefault(); break;
+    case 'Escape':
+      if(tool!=='idle') setTool('idle');
+      else { selId=null; overlayDirty=true; updatePanel(); } break;
+    case 'Delete': case 'Backspace':
+      if(selId) delShape(selId); e.preventDefault(); break;
+    case '1': if(img) setTool(tool==='scale'?'idle':'scale'); break;
+    case '2': if(img) setTool(tool==='polygon'?'idle':'polygon'); break;
+    case '3': if(img) setTool(tool==='freehand'?'idle':'freehand'); break;
+    case '=': case '+': if(img) zoomAt(1.2,cw/2,ch/2); break;
+    case '-': if(img) zoomAt(1/1.2,cw/2,ch/2); break;
+    case '0': if((e.ctrlKey||e.metaKey)&&img){e.preventDefault();fitView();} break;
+  }
+});
+$(document).on('keyup',function(e){
+  if(e.key===' '){
+    spaceHeld=false; $('body').removeClass('cursor-grab cursor-grabbing');
+    if(tool!=='idle') $('body').addClass('cursor-crosshair');
+  }
+});
+
+/* ===========================================================
+   FILE INPUT / DND / PASTE
+   =========================================================== */
+$('#canvas-wrap').on('dragover',function(e){ e.preventDefault(); $('#dropzone').addClass('drag-over'); })
+  .on('dragleave drop',function(e){ e.preventDefault(); $('#dropzone').removeClass('drag-over');
+    if(e.type==='drop'){ var f=e.originalEvent.dataTransfer.files; if(f.length) loadImg(f[0]); }
+  });
+$(document).on('paste',function(e){
+  var items=e.originalEvent.clipboardData.items;
+  for(var i=0;i<items.length;i++) if(items[i].type.indexOf('image/')===0){ loadImg(items[i].getAsFile()); return; }
+});
+$('#btn-open').on('click',function(){ $('#file-input').click(); });
+$('#file-input').on('change',function(){ if(this.files.length) loadImg(this.files[0]); this.value=''; });
+$(document).on('dragover drop',function(e){ e.preventDefault(); });
+
+/* ===========================================================
+   TOOLBAR BUTTONS
+   =========================================================== */
+$('.tb-btn[data-tool]').on('click',function(){
+  if(!img) return;
+  var t=$(this).data('tool');
+  setTool(tool===t?'idle':t);
+});
+$('#btn-delete').on('click',function(){ if(selId) delShape(selId); });
+$('#btn-clear').on('click',function(){
+  if(!shapes.length) return;
+  shapes=[]; selId=null; colorIdx=0; overlayDirty=true; updatePanel(); status('Cleared all shapes');
+});
+$('#btn-fit').on('click',function(){ if(img) fitView(); });
+$('#btn-toggle-panel').on('click',function(){
+  var p=$('#shapes-panel'); p.toggleClass('collapsed');
+  $(this).html(p.hasClass('collapsed')?'&laquo;':'&raquo;');
+  setTimeout(function(){ resize(); if(img) fitView(); },170);
+});
+
+/* ===========================================================
+   SCALE POPUP
+   =========================================================== */
+function showScalePopup(){
+  var mp=i2s((scaleP1.x+scaleP2.x)/2,(scaleP1.y+scaleP2.y)/2);
+  var l=Math.min(Math.max(mp.x+12,10),cw-250), t=Math.min(Math.max(mp.y-30,10),ch-60);
+  $('#scale-popup').css({left:l,top:t}).show();
+  $('#scale-value').val('').focus();
+  status('Enter real-world distance');
+}
+$('#scale-confirm').on('click',confirmScale);
+$('#scale-value').on('keydown',function(e){
+  if(e.key==='Enter') confirmScale();
+  if(e.key==='Escape'){ cancelTool(); setTool('idle'); }
+});
+function confirmScale(){
+  var val=parseFloat($('#scale-value').val()), unit=$('#scale-unit').val();
+  if(!val||val<=0){ status('Enter a valid distance > 0'); return; }
+  var dx=scaleP2.x-scaleP1.x, dy=scaleP2.y-scaleP1.y, px=Math.sqrt(dx*dx+dy*dy);
+  if(px<1){ status('Points too close'); cancelTool(); setTool('idle'); return; }
+  scalePPU=px/val; scaleUnit=unit;
+  scaleLine={p1:{x:scaleP1.x,y:scaleP1.y},p2:{x:scaleP2.x,y:scaleP2.y}};
+  cancelTool(); setTool('idle'); updateScaleDisp();
+  // recalc existing shapes
+  for(var i=0;i<shapes.length;i++) if(shapes[i].closed) worker.postMessage({type:'calcArea',id:shapes[i].id,points:shapes[i].points});
+  overlayDirty=true; updatePanel();
+  status('Scale set: '+val+' '+unit+' = '+Math.round(px)+'px');
+}
+
+/* ===========================================================
+   SHAPE OPERATIONS
+   =========================================================== */
+function closePoly(){
+  if(polyPts.length<3) return;
+  var id='s'+(++shapeN);
+  shapes.push({id:id,type:'polygon',points:polyPts.slice(),closed:true,area:null,perimeter:null,color:nextColor()});
+  selId=id; polyPts=[];
+  worker.postMessage({type:'calcArea',id:id,points:shapes[shapes.length-1].points});
+  overlayDirty=true; updatePanel(); setTool('idle');
+}
+function finishFH(){
+  var id='s'+(++shapeN), pts=fhPts.slice(); fhPts=[];
+  shapes.push({id:id,type:'freehand',points:pts,closed:true,area:null,perimeter:null,color:nextColor()});
+  selId=id;
+  var eps=2/(view.zoom*view.fit);
+  worker.postMessage({type:'simplify',id:id,points:pts,epsilon:eps});
+  overlayDirty=true; updatePanel(); setTool('idle');
+}
+function delShape(id){
+  shapes=shapes.filter(function(s){return s.id!==id;});
+  if(selId===id) selId=null;
+  overlayDirty=true; updatePanel(); status('Shape deleted');
+}
+function selectAt(ip){
+  var found=null;
+  for(var i=shapes.length-1;i>=0;i--){
+    if(shapes[i].closed&&pip(ip,shapes[i].points)){found=shapes[i].id;break;}
+  }
+  if(!found){
+    var best=Infinity, thr=15/(view.zoom*view.fit);
+    for(var i=0;i<shapes.length;i++){
+      var sh=shapes[i]; if(!sh.closed) continue;
+      for(var j=0;j<sh.points.length;j++){
+        var k=(j+1)%sh.points.length, d=distSeg(ip,sh.points[j],sh.points[k]);
+        if(d<best){best=d;found=sh.id;}
+      }
+    }
+    if(best>thr) found=null;
+  }
+  selId=found; overlayDirty=true; updatePanel();
+  if(found){var sh=findShape(found);if(sh&&sh.area!=null) status('Area: '+fmtArea(sh.area)+' | Perimeter: '+fmtPerim(sh.perimeter));}
+  else status('Select a tool or click a shape');
+}
+
+/* ===========================================================
+   SHAPES PANEL
+   =========================================================== */
+function updatePanel(){
+  var $l=$('#shapes-list'); $l.empty();
+  var total=0;
+  for(var i=0;i<shapes.length;i++){
+    var s=shapes[i], aStr=s.area!=null?fmtArea(s.area):'...', pStr=s.perimeter!=null?fmtPerim(s.perimeter):'';
+    if(s.area!=null) total+=s.area;
+    $l.append('<div class="shape-item'+(s.id===selId?' selected':'')+'" data-id="'+s.id+'">'+
+      '<div class="shape-swatch" style="background:'+s.color+'"></div>'+
+      '<div class="shape-info"><div class="area">'+aStr+'</div>'+(pStr?'<div class="perim">P: '+pStr+'</div>':'')+'</div>'+
+      '<button class="shape-del" data-id="'+s.id+'">&times;</button></div>');
+  }
+  var tStr=shapes.length?'Total: '+fmtArea(total)+' ('+shapes.length+')':'No shapes yet';
+  $('#shapes-total').text(tStr);
+}
+
+// Event delegation for shapes panel
+$('#shapes-list').on('click','.shape-item',function(e){
+  if($(e.target).closest('.shape-del').length) return;
+  selId=$(this).data('id'); overlayDirty=true; updatePanel();
+  var sh=findShape(selId);
+  if(sh&&sh.area!=null) status('Area: '+fmtArea(sh.area)+' | Perimeter: '+fmtPerim(sh.perimeter));
+});
+$('#shapes-list').on('click','.shape-del',function(e){
+  e.stopPropagation(); delShape($(this).data('id'));
+});
+
+/* ===========================================================
+   WINDOW RESIZE
+   =========================================================== */
+$(window).on('resize',function(){ resize(); imageDirty=overlayDirty=true; });
+
+/* ===========================================================
+   INIT
+   =========================================================== */
+resize();
+enableTools(false);
+
+}); // end ready
+</script>
+</body>
+</html>
