@@ -10,8 +10,10 @@ A single-file web application for measuring areas and perimeters on images. Load
 - **Scale Calibration**: Set a known distance to convert pixels to real-world units
 - **Drawing Tools**: Polygon lasso and freehand tracing
 - **Edit Mode**: Drag control points to modify existing shapes
-- **Live Measurements**: Side lengths, area, and perimeter displayed in real-time
+- **Perspective Correction**: Four-corner warp with live preview to de-skew images
+- **Live Measurements**: Side lengths, area, and perimeter with smart label collision avoidance
 - **Image Adjustments**: Brightness and contrast sliders
+- **Touch Support**: Full touchscreen support with two-finger pan/zoom
 - **Session Persistence**: Auto-saves work to localStorage
 - **Responsive UI**: Pan, zoom, and retina display support
 
@@ -31,16 +33,18 @@ A single-file web application for measuring areas and perimeters on images. Load
 | Polygon | `2` | Click to place vertices, click first point or double-click to close |
 | Freehand | `3` | Click and drag to trace, release to finish |
 | Edit | `4` | Drag control points to modify shapes |
+| Perspective | `5` | Drag image corners to correct perspective distortion |
 
 ## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| `1` - `4` | Select tool |
+| `1` - `5` | Select tool |
 | `Space` + drag | Pan the image |
 | `+` / `-` | Zoom in/out |
 | `Ctrl+0` | Fit image to view |
 | `Delete` / `Backspace` | Delete selected shape |
+| `Enter` | Apply perspective correction |
 | `Escape` | Cancel current tool / Deselect shape |
 
 ## Mouse Controls
@@ -53,6 +57,14 @@ A single-file web application for measuring areas and perimeters on images. Load
 | Click shape | Select it |
 | Double-click (polygon) | Close polygon |
 
+## Touch Controls
+
+| Gesture | Result |
+|---------|--------|
+| One finger | Use active tool (draw, edit, select) |
+| Two fingers | Pan and pinch-to-zoom |
+| Tap shape | Select it |
+
 ## Brightness/Contrast Sliders
 
 - **Drag slider track** to adjust value
@@ -60,6 +72,15 @@ A single-file web application for measuring areas and perimeters on images. Load
 - **Drag number up/down** to scrub the value
 - **Double-click** to reset to 0
 - Sliders snap to center when near 0
+
+## Perspective Correction
+
+1. Click **Perspective** (or press `5`)
+2. Drag the four corner handles to match the distortion in the image
+3. A reference grid helps judge alignment
+4. Live CSS preview shows the correction in real-time
+5. Press **Apply** (or `Enter`) to commit, **Cancel** (or `Escape`) to abort
+6. All existing shapes and scale calibration are transformed automatically
 
 ## Scale Calibration
 
@@ -96,7 +117,10 @@ Supported units: mm, cm, m, in, ft, yd
 
 - **Area**: Shoelace formula for polygon area
 - **Path Simplification**: Ramer-Douglas-Peucker algorithm for freehand traces
+- **Freehand Sampling**: Velocity-based adaptive point spacing during drawing
 - **Point-in-Polygon**: Ray casting algorithm for selection
+- **Perspective**: 4-point homography (DLT) with bilinear interpolation re-raster
+- **Label Placement**: AABB collision detection with priority-based rendering
 
 ### Browser Support
 

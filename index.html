@@ -1080,9 +1080,9 @@ function drawOverlay() {
 
   // ========== SCREEN-SPACE DRAWING ==========
 
-  // ---- Label collision detection ----
-  var LABEL_PAD = 3; // padding between labels
-  var labelBoxes = []; // occupied bounding boxes [{x,y,w,h}]
+  // ---- Label collision detection with nudging ----
+  var LABEL_PAD = 3;
+  var labelBoxes = [];
 
   function rectsOverlap(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x &&
@@ -1098,8 +1098,19 @@ function drawOverlay() {
     return true;
   }
 
-  function placeLabel(box) {
-    labelBoxes.push(box);
+  // Try to place a label, nudging it if it overlaps. Returns placed box or null.
+  function tryPlace(box, maxNudge) {
+    if (canPlace(box)) { labelBoxes.push(box); return box; }
+    var dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
+                {x:-0.7,y:-0.7},{x:0.7,y:-0.7},{x:-0.7,y:0.7},{x:0.7,y:0.7}];
+    for (var step = LABEL_PAD + 2; step <= maxNudge; step += LABEL_PAD + 2) {
+      for (var d = 0; d < dirs.length; d++) {
+        var nb = { x: box.x + dirs[d].x * step, y: box.y + dirs[d].y * step,
+                   w: box.w, h: box.h };
+        if (canPlace(nb)) { labelBoxes.push(nb); return nb; }
+      }
+    }
+    return null;
   }
 
   // Side length labels for active polygon (no collision — in-progress drawing)
@@ -1170,16 +1181,16 @@ function drawOverlay() {
     var th = fs + 6;
 
     var box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
-    if (!canPlace(box)) continue;
-    placeLabel(box);
+    var placed = tryPlace(box, 40);
+    if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    roundRect(ctx, box.x, box.y, tw, th, 3);
+    roundRect(ctx, placed.x, placed.y, tw, th, 3);
     ctx.fill();
     ctx.fillStyle = sh.color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(txt, sp.x, sp.y);
+    ctx.fillText(txt, placed.x + tw / 2, placed.y + th / 2);
   }
 
   // ---- Pass 2: Side length labels (sorted by edge length, longest first) ----
@@ -1229,14 +1240,14 @@ function drawOverlay() {
   for (var i = 0; i < sideLabelCandidates.length; i++) {
     var sl = sideLabelCandidates[i];
     var box = { x: sl.x - sl.tw / 2, y: sl.boxY, w: sl.tw, h: sl.th };
-    if (!canPlace(box)) continue;
-    placeLabel(box);
+    var placed = tryPlace(box, 24);
+    if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    roundRect(ctx, box.x, box.y, sl.tw, sl.th, 2);
+    roundRect(ctx, placed.x, placed.y, sl.tw, sl.th, 2);
     ctx.fill();
     ctx.fillStyle = sl.color;
-    ctx.fillText(sl.txt, sl.x, sl.y);
+    ctx.fillText(sl.txt, placed.x + sl.tw / 2, placed.y + sl.th / 2);
   }
 
   // Perspective mode overlay (drawn in screen space)
