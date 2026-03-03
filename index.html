@@ -54,14 +54,18 @@ html,body{height:100%;overflow:hidden;background:#1a1a1a;color:#e0e0e0;font-fami
 .cursor-grabbing #overlay-canvas{cursor:grabbing!important}
 .cursor-move #overlay-canvas{cursor:move}
 kbd{background:#333;border:1px solid #444;border-radius:3px;padding:1px 5px;font-size:10px;font-family:inherit;color:#aaa}
-.tb-sliders{display:flex;gap:10px;margin-left:auto;align-items:center}
-.tb-sliders label{display:flex;align-items:center;gap:4px;font-size:10px;color:#666}
-.tb-sliders span{width:10px}
-.tb-sliders input[type=range]{-webkit-appearance:none;width:60px;height:4px;background:linear-gradient(to right,#444 0%,#444 48%,#FF6B35 48%,#FF6B35 52%,#444 52%,#444 100%);border-radius:2px;cursor:pointer}
-.tb-sliders input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;background:#ccc;border-radius:50%;cursor:pointer}
-.tb-sliders input[type=range]::-moz-range-thumb{width:10px;height:10px;background:#ccc;border:none;border-radius:50%;cursor:pointer}
-.tb-sliders input[type=range]:hover::-webkit-slider-thumb{background:#fff}
-.tb-sliders input[type=range]:hover::-moz-range-thumb{background:#fff}
+.tb-sliders{display:flex;gap:2px;margin-left:auto;align-items:stretch;height:28px}
+.sl-group{display:flex;align-items:center;background:#1a1a1a;border-radius:3px;padding:0 6px;gap:6px}
+.sl-group span{font-size:10px;color:#888;font-weight:600;width:8px}
+.sl-track{position:relative;width:80px;height:8px;background:#333;border-radius:4px;cursor:pointer}
+.sl-track::after{content:'';position:absolute;left:50%;top:0;width:2px;height:100%;background:#555;transform:translateX(-50%);border-radius:1px}
+.sl-fill{position:absolute;top:0;height:100%;background:#FF6B35;border-radius:4px;pointer-events:none}
+.sl-thumb{position:absolute;top:50%;width:14px;height:14px;background:#ddd;border-radius:3px;transform:translate(-50%,-50%);cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.sl-thumb:hover{background:#fff}
+.sl-thumb:active{cursor:grabbing;background:#FF6B35}
+.sl-val{width:32px;background:#252525;border:1px solid #333;border-radius:3px;color:#ccc;font-family:'JetBrains Mono',monospace;font-size:10px;text-align:center;padding:2px 0;cursor:ew-resize;-moz-appearance:textfield}
+.sl-val::-webkit-inner-spin-button,.sl-val::-webkit-outer-spin-button{-webkit-appearance:none}
+.sl-val:focus{outline:none;border-color:#FF6B35;cursor:text;background:#1a1a1a}
 </style>
 </head>
 <body>
@@ -79,8 +83,16 @@ kbd{background:#333;border:1px solid #444;border-radius:3px;padding:1px 5px;font
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
     <div class="tb-sliders">
-      <label title="Brightness"><span>B</span><input type="range" id="sl-bright" min="-100" max="100" value="0"></label>
-      <label title="Contrast"><span>C</span><input type="range" id="sl-contrast" min="-100" max="100" value="0"></label>
+      <div class="sl-group" title="Brightness">
+        <span>B</span>
+        <div class="sl-track" data-slider="bright"><div class="sl-fill"></div><div class="sl-thumb"></div></div>
+        <input type="number" class="sl-val" data-slider="bright" value="0" min="-100" max="100">
+      </div>
+      <div class="sl-group" title="Contrast">
+        <span>C</span>
+        <div class="sl-track" data-slider="contrast"><div class="sl-fill"></div><div class="sl-thumb"></div></div>
+        <input type="number" class="sl-val" data-slider="contrast" value="0" min="-100" max="100">
+      </div>
     </div>
     <div class="tb-info">
       <span id="zoom-display">100%</span>
@@ -894,6 +906,56 @@ $('#shapes-list').on('click','.shape-del',function(e){
    WINDOW RESIZE
    =========================================================== */
 $(window).on('resize',function(){ resize(); imageDirty=overlayDirty=true; });
+
+/* ===========================================================
+   BRIGHTNESS / CONTRAST SLIDERS
+   =========================================================== */
+function setSlider(name,val){
+  val=Math.max(-100,Math.min(100,Math.round(val)));
+  if(name==='bright') brightness=val; else contrast=val;
+  var $grp=$('.sl-group [data-slider="'+name+'"]').closest('.sl-group');
+  var pct=(val+100)/200;
+  $grp.find('.sl-thumb').css('left',(pct*100)+'%');
+  var $fill=$grp.find('.sl-fill');
+  if(val>=0){$fill.css({left:'50%',width:(pct*100-50)+'%'});}
+  else{$fill.css({left:(pct*100)+'%',width:(50-pct*100)+'%'});}
+  $grp.find('.sl-val').val(val);
+  updateFilters();
+}
+
+$('.sl-track').each(function(){
+  var $track=$(this), name=$track.data('slider'), dragging=false;
+  function update(e){
+    var r=$track[0].getBoundingClientRect();
+    var pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    var val=Math.round(pct*200-100);
+    if(Math.abs(val)<6) val=0;
+    setSlider(name,val);
+  }
+  $track.on('mousedown',function(e){dragging=true;update(e);e.preventDefault();});
+  $(document).on('mousemove',function(e){if(dragging)update(e);});
+  $(document).on('mouseup',function(){dragging=false;});
+  $track.on('dblclick',function(){setSlider(name,0);});
+});
+
+$('.sl-val').each(function(){
+  var $inp=$(this), name=$inp.data('slider'), dragY=0, dragVal=0, isDrag=false;
+  $inp.on('change',function(){setSlider(name,+this.value);});
+  $inp.on('mousedown',function(e){
+    if(document.activeElement===this) return;
+    isDrag=true; dragY=e.clientY; dragVal=+this.value;
+    e.preventDefault(); $('body').css('cursor','ns-resize');
+  });
+  $(document).on('mousemove',function(e){
+    if(!isDrag) return;
+    var delta=Math.round((dragY-e.clientY)/2);
+    setSlider(name,dragVal+delta);
+  });
+  $(document).on('mouseup',function(){isDrag=false;$('body').css('cursor','');});
+  $inp.on('dblclick',function(){setSlider(name,0);});
+});
+
+setSlider('bright',0);setSlider('contrast',0);
 
 /* ===========================================================
    INIT
