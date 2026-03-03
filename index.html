@@ -31,7 +31,7 @@
       background: #2a2a2a;
       will-change: transform;
     }
-    #canvas-wrap canvas { position: absolute; top: 0; left: 0; display: block; }
+    #canvas-wrap canvas { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
 
     /* ========== TOOLBAR ========== */
     #toolbar {
@@ -288,6 +288,50 @@
     .cursor-grabbing #overlay-canvas { cursor: grabbing !important; }
     .cursor-move #overlay-canvas { cursor: move; }
 
+    /* ========== PERSPECTIVE MODE ========== */
+    #persp-bar {
+      display: none;
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 90;
+      background: #252525;
+      border: 1px solid #FF6B35;
+      border-radius: 4px;
+      padding: 6px 12px;
+      gap: 8px;
+      align-items: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      font-size: 12px;
+      color: #ccc;
+    }
+    #persp-bar.visible { display: flex; }
+    #persp-bar button {
+      border: none;
+      padding: 4px 14px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #persp-apply {
+      background: #FF6B35;
+      color: #fff;
+    }
+    #persp-apply:hover { background: #e55a20; }
+    #persp-cancel {
+      background: #444;
+      color: #ccc;
+    }
+    #persp-cancel:hover { background: #555; }
+    #persp-reset {
+      background: none;
+      color: #888;
+      text-decoration: underline;
+      padding: 4px 6px;
+    }
+    #persp-reset:hover { color: #ccc; }
+
     /* ========== MISC ========== */
     kbd {
       background: #333;
@@ -316,6 +360,7 @@
     <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear All</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -368,6 +413,13 @@
           <option value="yd">yd</option>
         </select>
         <button id="scale-confirm">Set</button>
+      </div>
+
+      <div id="persp-bar">
+        <span>Perspective Correction</span>
+        <button id="persp-reset">Reset</button>
+        <button id="persp-cancel">Cancel</button>
+        <button id="persp-apply">Apply</button>
       </div>
     </div>
 
@@ -561,6 +613,13 @@ var SAVE_VER = 1;
 // Image adjustments
 var brightness = 0;
 var contrast = 0;
+
+// Perspective correction
+var perspActive = false;       // is perspective mode active?
+var perspCorners = null;       // 4 corners [{x,y}...] in image space (destination)
+var perspSrcCorners = null;    // original 4 corners (source = image rectangle)
+var perspDragIdx = -1;         // which corner is being dragged (-1 = none)
+var perspDragOffset = null;    // offset from corner to mouse at drag start
 
 
 /* =============================================================================
@@ -1021,7 +1080,29 @@ function drawOverlay() {
 
   // ========== SCREEN-SPACE DRAWING ==========
 
-  // Side length labels for active polygon
+  // ---- Label collision detection ----
+  var LABEL_PAD = 3; // padding between labels
+  var labelBoxes = []; // occupied bounding boxes [{x,y,w,h}]
+
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function canPlace(box) {
+    var padded = { x: box.x - LABEL_PAD, y: box.y - LABEL_PAD,
+                   w: box.w + LABEL_PAD * 2, h: box.h + LABEL_PAD * 2 };
+    for (var i = 0; i < labelBoxes.length; i++) {
+      if (rectsOverlap(padded, labelBoxes[i])) return false;
+    }
+    return true;
+  }
+
+  function placeLabel(box) {
+    labelBoxes.push(box);
+  }
+
+  // Side length labels for active polygon (no collision — in-progress drawing)
   if (tool === 'polygon' && polyPts.length > 0) {
     var pts = polyPts;
     var c = COLORS[colorIdx % COLORS.length];
@@ -1074,11 +1155,37 @@ function drawOverlay() {
     ctx.fillText(txt2, mid2.x, mid2.y);
   }
 
-  // Side length labels for completed shapes
+  // ---- Pass 1: Area labels (highest priority) ----
+  for (var si = 0; si < shapes.length; si++) {
+    var sh = shapes[si];
+    if (!sh.closed || sh.area == null) continue;
+
+    var cp = centroid(sh.points);
+    var sp = i2s(cp.x, cp.y);
+    var txt = fmtArea(sh.area);
+    var fs = Math.min(Math.max(11, 13 * view.zoom), 22);
+
+    ctx.font = '600 ' + fs + 'px "JetBrains Mono", monospace';
+    var tw = ctx.measureText(txt).width + 10;
+    var th = fs + 6;
+
+    var box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
+    if (!canPlace(box)) continue;
+    placeLabel(box);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    roundRect(ctx, box.x, box.y, tw, th, 3);
+    ctx.fill();
+    ctx.fillStyle = sh.color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, sp.x, sp.y);
+  }
+
+  // ---- Pass 2: Side length labels (sorted by edge length, longest first) ----
+  var sideLabelCandidates = [];
   var fs2 = Math.min(Math.max(9, 10 * view.zoom), 14);
   ctx.font = '600 ' + fs2 + 'px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
 
   for (var si = 0; si < shapes.length; si++) {
     var sh = shapes[si];
@@ -1102,37 +1209,38 @@ function drawOverlay() {
       var sp = i2s(midX, midY);
       var txt = fmtLen(len);
       var tw = ctx.measureText(txt).width + 4;
+      var th2 = 12;
 
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      roundRect(ctx, sp.x - tw / 2, sp.y - 7, tw, 12, 2);
-      ctx.fill();
-      ctx.fillStyle = sh.color;
-      ctx.fillText(txt, sp.x, sp.y);
+      sideLabelCandidates.push({
+        x: sp.x, y: sp.y, tw: tw, th: th2, txt: txt,
+        color: sh.color, len: len,
+        boxY: sp.y - 7 // original 1px upward shift for visual alignment
+      });
     }
   }
 
-  // Area labels (centered in shape)
-  for (var si = 0; si < shapes.length; si++) {
-    var sh = shapes[si];
-    if (!sh.closed || sh.area == null) continue;
+  // Sort longest edges first (higher priority)
+  sideLabelCandidates.sort(function(a, b) { return b.len - a.len; });
 
-    var cp = centroid(sh.points);
-    var sp = i2s(cp.x, cp.y);
-    var txt = fmtArea(sh.area);
-    var fs = Math.min(Math.max(11, 13 * view.zoom), 22);
+  ctx.font = '600 ' + fs2 + 'px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 
-    ctx.font = '600 ' + fs + 'px "JetBrains Mono", monospace';
-    var tw = ctx.measureText(txt).width + 10;
-    var th = fs + 6;
+  for (var i = 0; i < sideLabelCandidates.length; i++) {
+    var sl = sideLabelCandidates[i];
+    var box = { x: sl.x - sl.tw / 2, y: sl.boxY, w: sl.tw, h: sl.th };
+    if (!canPlace(box)) continue;
+    placeLabel(box);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    roundRect(ctx, sp.x - tw / 2, sp.y - th / 2, tw, th, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    roundRect(ctx, box.x, box.y, sl.tw, sl.th, 2);
     ctx.fill();
-    ctx.fillStyle = sh.color;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(txt, sp.x, sp.y);
+    ctx.fillStyle = sl.color;
+    ctx.fillText(sl.txt, sl.x, sl.y);
   }
+
+  // Perspective mode overlay (drawn in screen space)
+  drawPerspOverlay(ctx);
 
   ctx.restore();
 }
@@ -1187,6 +1295,9 @@ function loadImg(file, skipConfirm) {
     if (!confirm('Opening a new image will discard your current work.\n\nContinue?')) return;
   }
 
+  // Cancel perspective mode if active
+  if (perspActive) cancelPerspective();
+
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
@@ -1238,10 +1349,11 @@ function fitView() {
 
   imageDirty = overlayDirty = true;
   updateZoomDisp();
+  if (perspActive) updatePerspPreview();
 }
 
 function enableTools(on) {
-  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit');
+  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -1263,6 +1375,7 @@ function zoomAt(factor, sx, sy) {
 
   imageDirty = overlayDirty = true;
   updateZoomDisp();
+  if (perspActive) updatePerspPreview();
   setInteract();
 }
 
@@ -1350,6 +1463,8 @@ function cancelTool() {
   dragPt = null;
   dragShape = null;
   dragIdx = -1;
+  touchId = null;
+  touchIsPan = false;
   $('#scale-popup').hide();
   overlayDirty = true;
 }
@@ -1382,6 +1497,20 @@ $(oCvs).on('mousedown', function(e) {
   }
 
   if (e.button !== 0 || !img) return;
+
+  // Perspective mode: handle corner dragging
+  if (perspActive) {
+    var hi = findPerspHandle(mx, my);
+    if (hi >= 0) {
+      perspDragIdx = hi;
+      perspDragOffset = {
+        x: perspCorners[hi].x - mix,
+        y: perspCorners[hi].y - miy
+      };
+      overlayDirty = true;
+    }
+    return;
+  }
 
   var ip = { x: mix, y: miy };
 
@@ -1446,7 +1575,29 @@ $(document).on('mousemove', function(e) {
     view.ox = panSt.ox + (e.clientX - panSt.x);
     view.oy = panSt.oy + (e.clientY - panSt.y);
     imageDirty = overlayDirty = true;
+    if (perspActive) updatePerspPreview();
     setInteract();
+    return;
+  }
+
+  // Perspective corner drag
+  if (perspActive && perspDragIdx >= 0) {
+    perspCorners[perspDragIdx] = { x: mix + perspDragOffset.x, y: miy + perspDragOffset.y };
+    updatePerspPreview();
+    overlayDirty = true;
+    return;
+  }
+
+  // Perspective hover cursor
+  if (perspActive) {
+    var hi = findPerspHandle(mx, my);
+    $('body').removeClass('cursor-move cursor-crosshair cursor-grab');
+    if (hi >= 0) {
+      oCvs.style.cursor = 'grab';
+    } else {
+      oCvs.style.cursor = 'default';
+    }
+    overlayDirty = true;
     return;
   }
 
@@ -1489,6 +1640,14 @@ $(document).on('mouseup', function(e) {
     isPan = false;
     $('body').removeClass('cursor-grabbing');
     if (spaceHeld) $('body').addClass('cursor-grab');
+    return;
+  }
+
+  // End perspective corner drag
+  if (perspActive && perspDragIdx >= 0) {
+    perspDragIdx = -1;
+    perspDragOffset = null;
+    overlayDirty = true;
     return;
   }
 
@@ -1547,6 +1706,293 @@ $(oCvs).on('contextmenu', function(e) {
 
 
 /* =============================================================================
+   TOUCH HANDLING
+   Dedicated touch events for reliable freehand drawing, edit dragging,
+   and two-finger pan/pinch-zoom on touch devices.
+   ============================================================================= */
+
+var touchId = null;            // primary touch identifier for single-finger ops
+var touchIsPan = false;        // two-finger pan/zoom active?
+var touchPinchDist = 0;        // distance between two fingers at gesture start
+var touchPinchMid = null;      // midpoint between two fingers at gesture start
+var touchPanSt = null;         // { x, y, ox, oy } at gesture start
+
+/**
+ * Extract position from a Touch object, mapping to the same
+ * coordinate system as canvasXY() uses for mouse events.
+ */
+function touchXY(touch) {
+  var r = oCvs.getBoundingClientRect();
+  mx = touch.clientX - r.left;
+  my = touch.clientY - r.top;
+  var ip = s2i(mx, my);
+  mix = ip.x;
+  miy = ip.y;
+}
+
+/**
+ * Find a specific touch by identifier in a TouchList.
+ */
+function findTouch(touches, id) {
+  for (var i = 0; i < touches.length; i++) {
+    if (touches[i].identifier === id) return touches[i];
+  }
+  return null;
+}
+
+oCvs.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+
+  var touches = e.touches;
+
+  // Two-finger gesture: pan / pinch-zoom
+  if (touches.length >= 2) {
+    // Cancel any single-finger tool action in progress
+    if (isFH) { isFH = false; fhPts = []; overlayDirty = true; }
+    if (dragPt && dragShape) {
+      // Revert dragged point
+      dragPt = null; dragShape = null; dragIdx = -1;
+      overlayDirty = true;
+    }
+    touchId = null;
+    touchIsPan = true;
+
+    var t0 = touches[0], t1 = touches[1];
+    var r = oCvs.getBoundingClientRect();
+    var mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
+    var mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
+
+    touchPinchDist = Math.hypot(mx1 - mx0, my1 - my0);
+    touchPinchMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
+    touchPanSt = { x: touchPinchMid.x, y: touchPinchMid.y, ox: view.ox, oy: view.oy };
+    return;
+  }
+
+  // If we already track a finger, ignore additional ones
+  if (touchId !== null) return;
+
+  var touch = touches[0];
+  touchId = touch.identifier;
+  touchXY(touch);
+
+  if (!img) return;
+
+  // Perspective touch handling
+  if (perspActive) {
+    var hi = findPerspHandle(mx, my);
+    if (hi >= 0) {
+      perspDragIdx = hi;
+      perspDragOffset = {
+        x: perspCorners[hi].x - mix,
+        y: perspCorners[hi].y - miy
+      };
+      overlayDirty = true;
+    }
+    return;
+  }
+
+  var ip = { x: mix, y: miy };
+
+  switch (tool) {
+    case 'scale':
+      if (scaleState === 0) {
+        scaleP1 = ip;
+        scaleState = 1;
+        status('Tap second point');
+      } else if (scaleState === 1) {
+        scaleP2 = ip;
+        scaleState = 2;
+        showScalePopup();
+      }
+      overlayDirty = true;
+      break;
+
+    case 'polygon':
+      if (polyPts.length >= 3) {
+        var fp = i2s(polyPts[0].x, polyPts[0].y);
+        if (Math.hypot(mx - fp.x, my - fp.y) < 25) {
+          closePoly();
+          return;
+        }
+      }
+      polyPts.push(ip);
+      overlayDirty = true;
+      break;
+
+    case 'freehand':
+      isFH = true;
+      fhPts = [ip];
+      fhLastTime = Date.now();
+      overlayDirty = true;
+      break;
+
+    case 'edit':
+      // Larger hit radius for touch (finger is ~40px vs mouse pointer)
+      var thrScreen = 20 / (view.zoom * view.fit);
+      var hp = findNearestPt(ip, thrScreen);
+      if (hp) {
+        dragShape = hp.shape;
+        dragIdx = hp.idx;
+        dragPt = { x: hp.shape.points[hp.idx].x, y: hp.shape.points[hp.idx].y };
+        selId = hp.shape.id;
+        overlayDirty = true;
+        updatePanel();
+        status('Drag to move point');
+      }
+      break;
+
+    case 'idle':
+      selectAt(ip);
+      break;
+  }
+}, { passive: false });
+
+oCvs.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+
+  var touches = e.touches;
+
+  // Two-finger pan / pinch-zoom
+  if (touchIsPan && touches.length >= 2) {
+    var t0 = touches[0], t1 = touches[1];
+    var r = oCvs.getBoundingClientRect();
+    var mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
+    var mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
+
+    var newDist = Math.hypot(mx1 - mx0, my1 - my0);
+    var newMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
+
+    // Pinch zoom
+    if (touchPinchDist > 0) {
+      var factor = newDist / touchPinchDist;
+      zoomAt(factor, touchPinchMid.x, touchPinchMid.y);
+      touchPinchDist = newDist;
+      touchPinchMid = newMid;
+    }
+
+    // Pan
+    view.ox = touchPanSt.ox + (newMid.x - touchPanSt.x);
+    view.oy = touchPanSt.oy + (newMid.y - touchPanSt.y);
+    touchPanSt.x = newMid.x;
+    touchPanSt.y = newMid.y;
+    touchPanSt.ox = view.ox;
+    touchPanSt.oy = view.oy;
+
+    imageDirty = overlayDirty = true;
+    if (perspActive) updatePerspPreview();
+    setInteract();
+    return;
+  }
+
+  // Single-finger: find our tracked touch
+  if (touchId === null) return;
+  var touch = findTouch(touches, touchId);
+  if (!touch) return;
+
+  touchXY(touch);
+
+  // Perspective corner drag (touch)
+  if (perspActive && perspDragIdx >= 0) {
+    perspCorners[perspDragIdx] = { x: mix + perspDragOffset.x, y: miy + perspDragOffset.y };
+    updatePerspPreview();
+    overlayDirty = true;
+    return;
+  }
+
+  // Freehand drawing
+  if (isFH) {
+    var last = fhPts[fhPts.length - 1];
+    var dx = mix - last.x, dy = miy - last.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    var now = Date.now();
+    var dt = (now - fhLastTime) / 1000;
+    var speed = dt > 0 ? dist / dt : 0;
+
+    var t = Math.min(speed / 2000, 1);
+    var threshold = FH_MIN_DIST + t * (FH_MAX_DIST - FH_MIN_DIST);
+
+    if (dist >= threshold) {
+      fhPts.push({ x: mix, y: miy });
+      fhLastTime = now;
+      overlayDirty = true;
+    }
+    return;
+  }
+
+  // Edit mode: drag control point
+  if (dragPt && dragShape) {
+    dragPt.x = mix;
+    dragPt.y = miy;
+    dragShape.points[dragIdx] = { x: mix, y: miy };
+    overlayDirty = true;
+    return;
+  }
+
+  // Polygon preview (update cursor position for overlay)
+  if (tool === 'polygon' && polyPts.length > 0) overlayDirty = true;
+  if (tool === 'scale' && scaleState === 1) overlayDirty = true;
+  if (tool === 'edit') overlayDirty = true;
+}, { passive: false });
+
+function touchEnd(e) {
+  e.preventDefault();
+
+  // Two-finger gesture ended
+  if (touchIsPan) {
+    // If fewer than 2 touches remain, end the pan gesture
+    if (e.touches.length < 2) {
+      touchIsPan = false;
+      touchId = null;
+    }
+    return;
+  }
+
+  // Check if our tracked touch ended
+  if (touchId === null) return;
+  var found = findTouch(e.touches, touchId);
+  if (found) return; // finger still down
+
+  touchId = null;
+
+  // Perspective corner drag release (touch)
+  if (perspActive && perspDragIdx >= 0) {
+    perspDragIdx = -1;
+    perspDragOffset = null;
+    overlayDirty = true;
+    return;
+  }
+
+  // Freehand release
+  if (isFH) {
+    isFH = false;
+    if (fhPts.length > 5) {
+      finishFH();
+    } else {
+      fhPts = [];
+      status('Too short \u2014 drag further.');
+      overlayDirty = true;
+    }
+  }
+
+  // Edit drag release
+  if (dragPt && dragShape) {
+    worker.postMessage({ type: 'calcArea', id: dragShape.id, points: dragShape.points });
+    dragPt = null;
+    dragShape = null;
+    dragIdx = -1;
+    overlayDirty = true;
+    updatePanel();
+    status('Point moved. Drag control points to edit shapes.');
+    scheduleSave();
+  }
+}
+
+oCvs.addEventListener('touchend', touchEnd, { passive: false });
+oCvs.addEventListener('touchcancel', touchEnd, { passive: false });
+
+
+/* =============================================================================
    KEYBOARD
    ============================================================================= */
 
@@ -1563,7 +2009,9 @@ $(document).on('keydown', function(e) {
       break;
 
     case 'Escape':
-      if (tool !== 'idle') {
+      if (perspActive) {
+        cancelPerspective();
+      } else if (tool !== 'idle') {
         setTool('idle');
       } else {
         selId = null;
@@ -1572,16 +2020,24 @@ $(document).on('keydown', function(e) {
       }
       break;
 
+    case 'Enter':
+      if (perspActive) {
+        applyPerspective();
+        e.preventDefault();
+      }
+      break;
+
     case 'Delete':
     case 'Backspace':
-      if (selId) delShape(selId);
+      if (!perspActive && selId) delShape(selId);
       e.preventDefault();
       break;
 
-    case '1': if (img) setTool(tool === 'scale' ? 'idle' : 'scale'); break;
-    case '2': if (img) setTool(tool === 'polygon' ? 'idle' : 'polygon'); break;
-    case '3': if (img) setTool(tool === 'freehand' ? 'idle' : 'freehand'); break;
-    case '4': if (img) setTool(tool === 'edit' ? 'idle' : 'edit'); break;
+    case '1': if (img && !perspActive) setTool(tool === 'scale' ? 'idle' : 'scale'); break;
+    case '2': if (img && !perspActive) setTool(tool === 'polygon' ? 'idle' : 'polygon'); break;
+    case '3': if (img && !perspActive) setTool(tool === 'freehand' ? 'idle' : 'freehand'); break;
+    case '4': if (img && !perspActive) setTool(tool === 'edit' ? 'idle' : 'edit'); break;
+    case '5': if (img && !perspActive) enterPerspective(); break;
 
     case '=':
     case '+':
@@ -1943,6 +2399,7 @@ $('#shapes-list').on('click', '.shape-del', function(e) {
 $(window).on('resize', function() {
   resize();
   imageDirty = overlayDirty = true;
+  if (perspActive) updatePerspPreview();
 });
 
 
@@ -2076,6 +2533,318 @@ $('.sl-val').each(function() {
 // Initialize sliders
 setSlider('bright', 0);
 setSlider('contrast', 0);
+
+
+/* =============================================================================
+   PERSPECTIVE CORRECTION
+   ============================================================================= */
+
+/**
+ * Solve an 8x8 linear system via Gaussian elimination.
+ * A is array of 8 rows, each length 9 (augmented matrix).
+ */
+function solveLinear8(A) {
+  var n = 8;
+  for (var col = 0; col < n; col++) {
+    var maxVal = Math.abs(A[col][col]), maxRow = col;
+    for (var row = col + 1; row < n; row++) {
+      if (Math.abs(A[row][col]) > maxVal) { maxVal = Math.abs(A[row][col]); maxRow = row; }
+    }
+    var tmp = A[col]; A[col] = A[maxRow]; A[maxRow] = tmp;
+    var pivot = A[col][col];
+    if (Math.abs(pivot) < 1e-12) return null;
+    for (var j = col; j <= n; j++) A[col][j] /= pivot;
+    for (var row = 0; row < n; row++) {
+      if (row === col) continue;
+      var f = A[row][col];
+      for (var j = col; j <= n; j++) A[row][j] -= f * A[col][j];
+    }
+  }
+  var x = [];
+  for (var i = 0; i < n; i++) x.push(A[i][n]);
+  return x;
+}
+
+/**
+ * 3x3 homography from 4 src to 4 dst points.
+ * Returns 9-element row-major array (h8=1), or null.
+ */
+function computeHomography(src, dst) {
+  var A = [];
+  for (var i = 0; i < 4; i++) {
+    var sx = src[i].x, sy = src[i].y, dx = dst[i].x, dy = dst[i].y;
+    A.push([sx, sy, 1, 0, 0, 0, -dx * sx, -dx * sy, dx]);
+    A.push([0, 0, 0, sx, sy, 1, -dy * sx, -dy * sy, dy]);
+  }
+  var h = solveLinear8(A);
+  if (!h) return null;
+  h.push(1);
+  return h;
+}
+
+/** Apply homography H to point (x,y). */
+function applyHomography(H, x, y) {
+  var w = H[6] * x + H[7] * y + H[8];
+  return { x: (H[0] * x + H[1] * y + H[2]) / w, y: (H[3] * x + H[4] * y + H[5]) / w };
+}
+
+/** Invert 3x3 matrix (9-element row-major). */
+function invertH(H) {
+  var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7],k=H[8];
+  var det = a*(e*k-f*h) - b*(d*k-f*g) + c*(d*h-e*g);
+  if (Math.abs(det) < 1e-12) return null;
+  var inv = 1/det;
+  return [
+    (e*k-f*h)*inv, (c*h-b*k)*inv, (b*f-c*e)*inv,
+    (f*g-d*k)*inv, (a*k-c*g)*inv, (c*d-a*f)*inv,
+    (d*h-e*g)*inv, (b*g-a*h)*inv, (a*e-b*d)*inv
+  ];
+}
+
+/** CSS matrix3d from rectangle [0,0]-[w,h] to 4 screen-space dest points. */
+function computeCSS3dMatrix(w, h, dst) {
+  var src = [{x:0,y:0},{x:w,y:0},{x:w,y:h},{x:0,y:h}];
+  var H = computeHomography(src, dst);
+  if (!H) return null;
+  return 'matrix3d(' +
+    H[0]+','+H[3]+',0,'+H[6]+','+
+    H[1]+','+H[4]+',0,'+H[7]+','+
+    '0,0,1,0,'+
+    H[2]+','+H[5]+',0,'+H[8]+')';
+}
+
+function enterPerspective() {
+  if (!img || perspActive) return;
+  setTool('idle');
+  perspActive = true;
+  var iw = view.iw, ih = view.ih;
+  perspSrcCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
+  perspCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
+  perspDragIdx = -1;
+  enableTools(false);
+  $('#btn-persp').addClass('active').removeClass('disabled');
+  $('#persp-bar').addClass('visible');
+  iCvs.style.opacity = '0.6';
+  iCvs.style.transformOrigin = '0 0';
+  overlayDirty = true;
+  status('Drag corner handles to correct perspective. Apply when done.');
+}
+
+function cancelPerspective() {
+  if (!perspActive) return;
+  perspActive = false;
+  perspCorners = null; perspSrcCorners = null; perspDragIdx = -1;
+  iCvs.style.opacity = '';
+  iCvs.style.transform = '';
+  iCvs.style.transformOrigin = '';
+  oCvs.style.cursor = '';
+  enableTools(true);
+  $('#btn-persp').removeClass('active');
+  $('#persp-bar').removeClass('visible');
+  overlayDirty = true; imageDirty = true;
+  status('Perspective correction cancelled.');
+}
+
+function resetPerspective() {
+  if (!perspActive) return;
+  var iw = view.iw, ih = view.ih;
+  perspCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
+  iCvs.style.transform = '';
+  overlayDirty = true;
+  status('Corners reset. Drag to adjust.');
+}
+
+function updatePerspPreview() {
+  if (!perspActive || !perspCorners) return;
+  var moved = false;
+  for (var i = 0; i < 4; i++) {
+    if (Math.abs(perspCorners[i].x - perspSrcCorners[i].x) > 0.5 ||
+        Math.abs(perspCorners[i].y - perspSrcCorners[i].y) > 0.5) { moved = true; break; }
+  }
+  if (!moved) { iCvs.style.transform = ''; return; }
+  var srcS = [], dstS = [];
+  for (var i = 0; i < 4; i++) {
+    srcS.push(i2s(perspSrcCorners[i].x, perspSrcCorners[i].y));
+    dstS.push(i2s(perspCorners[i].x, perspCorners[i].y));
+  }
+  var H = computeHomography(srcS, dstS);
+  if (!H) return;
+  var c0 = applyHomography(H,0,0), c1 = applyHomography(H,cw,0);
+  var c2 = applyHomography(H,cw,ch), c3 = applyHomography(H,0,ch);
+  var css = computeCSS3dMatrix(cw, ch, [c0, c1, c2, c3]);
+  if (css) iCvs.style.transform = css;
+}
+
+function applyPerspective() {
+  if (!perspActive || !perspCorners) return;
+  var moved = false;
+  for (var i = 0; i < 4; i++) {
+    if (Math.abs(perspCorners[i].x - perspSrcCorners[i].x) > 0.5 ||
+        Math.abs(perspCorners[i].y - perspSrcCorners[i].y) > 0.5) { moved = true; break; }
+  }
+  if (!moved) { cancelPerspective(); return; }
+  status('Applying perspective correction...');
+
+  var outW = view.iw, outH = view.ih;
+  var Hfwd = computeHomography(perspSrcCorners, perspCorners);
+  if (!Hfwd) { status('Failed to compute perspective transform.'); return; }
+  var Hinv = invertH(Hfwd);
+  if (!Hinv) { status('Failed to invert perspective transform.'); return; }
+
+  // Source pixel data
+  var srcCvs = document.createElement('canvas');
+  srcCvs.width = outW; srcCvs.height = outH;
+  var srcCtx = srcCvs.getContext('2d');
+  srcCtx.drawImage(img, 0, 0);
+  var srcData = srcCtx.getImageData(0, 0, outW, outH);
+  var srcPx = srcData.data;
+
+  // Output
+  var tmpCvs = document.createElement('canvas');
+  tmpCvs.width = outW; tmpCvs.height = outH;
+  var tmpCtx = tmpCvs.getContext('2d');
+  var outData = tmpCtx.createImageData(outW, outH);
+  var outPx = outData.data;
+  var sw = outW, sh = outH;
+
+  for (var oy = 0; oy < outH; oy++) {
+    for (var ox = 0; ox < outW; ox++) {
+      var sp = applyHomography(Hinv, ox, oy);
+      var ssx = sp.x, ssy = sp.y;
+      var outIdx = (oy * outW + ox) * 4;
+      if (ssx < 0 || ssx >= sw - 1 || ssy < 0 || ssy >= sh - 1) {
+        outPx[outIdx] = outPx[outIdx+1] = outPx[outIdx+2] = outPx[outIdx+3] = 0;
+        continue;
+      }
+      var x0 = Math.floor(ssx), y0 = Math.floor(ssy);
+      var fx = ssx - x0, fy = ssy - y0;
+      var x1 = Math.min(x0+1, sw-1), y1 = Math.min(y0+1, sh-1);
+      var i00 = (y0*sw+x0)*4, i10 = (y0*sw+x1)*4, i01 = (y1*sw+x0)*4, i11 = (y1*sw+x1)*4;
+      for (var c = 0; c < 4; c++) {
+        outPx[outIdx+c] = Math.round(
+          srcPx[i00+c]*(1-fx)*(1-fy) + srcPx[i10+c]*fx*(1-fy) +
+          srcPx[i01+c]*(1-fx)*fy + srcPx[i11+c]*fx*fy);
+      }
+    }
+  }
+  tmpCtx.putImageData(outData, 0, 0);
+
+  var oldScalePxLen = 0;
+  if (scaleLine && scalePPU > 0) {
+    oldScalePxLen = Math.hypot(scaleLine.p2.x - scaleLine.p1.x, scaleLine.p2.y - scaleLine.p1.y);
+  }
+
+  // Transform shape points and scale with Hfwd (source→corrected)
+  for (var si = 0; si < shapes.length; si++) {
+    var sh = shapes[si];
+    for (var pi = 0; pi < sh.points.length; pi++) {
+      var pt = sh.points[pi];
+      var np = applyHomography(Hfwd, pt.x, pt.y);
+      sh.points[pi] = { x: np.x, y: np.y };
+    }
+    if (sh.closed) worker.postMessage({ type: 'calcArea', id: sh.id, points: sh.points });
+  }
+  if (scaleLine) {
+    var np1 = applyHomography(Hfwd, scaleLine.p1.x, scaleLine.p1.y);
+    var np2 = applyHomography(Hfwd, scaleLine.p2.x, scaleLine.p2.y);
+    scaleLine.p1 = np1; scaleLine.p2 = np2;
+    if (scalePPU > 0 && oldScalePxLen > 0) {
+      var realDist = oldScalePxLen / scalePPU;
+      scalePPU = Math.hypot(np2.x - np1.x, np2.y - np1.y) / realDist;
+      updateScaleDisp();
+    }
+  }
+
+  var dataUrl = tmpCvs.toDataURL('image/png');
+  var newImg = new Image();
+  newImg.onload = function() {
+    img = newImg;
+    imgDataUrl = dataUrl;
+    perspActive = false; perspCorners = null; perspSrcCorners = null; perspDragIdx = -1;
+    iCvs.style.opacity = ''; iCvs.style.transform = ''; iCvs.style.transformOrigin = '';
+    oCvs.style.cursor = '';
+    enableTools(true);
+    $('#btn-persp').removeClass('active');
+    $('#persp-bar').removeClass('visible');
+    imageDirty = overlayDirty = true;
+    updatePanel();
+    status('Perspective correction applied.');
+    scheduleSave();
+  };
+  newImg.src = dataUrl;
+}
+
+/** Draw perspective overlay: grid, quad outline, corner handles. */
+function drawPerspOverlay(ctx) {
+  if (!perspActive || !perspCorners) return;
+  ctx.save();
+
+  var GL = 8;
+  var tl = i2s(0,0), tr = i2s(view.iw,0), bl = i2s(0,view.ih), br = i2s(view.iw,view.ih);
+
+  ctx.strokeStyle = 'rgba(74,158,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  for (var i = 1; i < GL; i++) {
+    var t = i/GL;
+    ctx.beginPath();
+    ctx.moveTo(tl.x+(bl.x-tl.x)*t, tl.y+(bl.y-tl.y)*t);
+    ctx.lineTo(tr.x+(br.x-tr.x)*t, tr.y+(br.y-tr.y)*t);
+    ctx.stroke();
+  }
+  for (var i = 1; i < GL; i++) {
+    var t = i/GL;
+    ctx.beginPath();
+    ctx.moveTo(tl.x+(tr.x-tl.x)*t, tl.y+(tr.y-tl.y)*t);
+    ctx.lineTo(bl.x+(br.x-bl.x)*t, bl.y+(br.y-bl.y)*t);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = 'rgba(74,158,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y); ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
+  ctx.closePath(); ctx.stroke();
+
+  var cs = [];
+  for (var i = 0; i < 4; i++) cs.push(i2s(perspCorners[i].x, perspCorners[i].y));
+  ctx.strokeStyle = '#FF6B35'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cs[0].x,cs[0].y);
+  for (var i = 1; i < 4; i++) ctx.lineTo(cs[i].x,cs[i].y);
+  ctx.closePath(); ctx.stroke();
+
+  var HR = 8;
+  var labels = ['TL','TR','BR','BL'];
+  ctx.font = '600 9px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (var i = 0; i < 4; i++) {
+    var cp = cs[i], active = (i === perspDragIdx);
+    ctx.beginPath(); ctx.arc(cp.x,cp.y,HR,0,Math.PI*2);
+    ctx.fillStyle = active ? '#FF6B35' : 'rgba(255,107,53,0.8)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.fillText(labels[i], cp.x, cp.y);
+  }
+  ctx.restore();
+}
+
+function findPerspHandle(sx, sy) {
+  for (var i = 0; i < 4; i++) {
+    var sp = i2s(perspCorners[i].x, perspCorners[i].y);
+    if (Math.hypot(sx - sp.x, sy - sp.y) <= 12) return i;
+  }
+  return -1;
+}
+
+$('#btn-persp').on('click', function() {
+  if (!img) return;
+  if (perspActive) cancelPerspective(); else enterPerspective();
+});
+$('#persp-apply').on('click', applyPerspective);
+$('#persp-cancel').on('click', cancelPerspective);
+$('#persp-reset').on('click', resetPerspective);
 
 
 /* =============================================================================
