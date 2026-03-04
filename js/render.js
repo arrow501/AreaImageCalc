@@ -1,6 +1,6 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, findNearestPt, dot, roundRect } from './geometry.js';
-import { drawPerspOverlay } from './perspective.js';
+import { drawPerspOverlay, drawAutoPerspOverlay } from './perspective.js';
 
 export function resize() {
   var w = $wrap.width(), h = $wrap.height();
@@ -355,6 +355,9 @@ function drawOverlay() {
 
   // Perspective mode overlay
   drawPerspOverlay(ctx);
+
+  // Auto perspective mode overlay
+  drawAutoPerspOverlay(ctx);
 
   ctx.restore();
 }

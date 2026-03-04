@@ -299,12 +299,13 @@
       background: #252525;
       border: 1px solid #FF6B35;
       border-radius: 4px;
-      padding: 6px 12px;
-      gap: 8px;
-      align-items: center;
+      padding: 0;
+      align-items: stretch;
       box-shadow: 0 4px 16px rgba(0,0,0,0.5);
       font-size: 12px;
       color: #ccc;
+      flex-direction: column;
+      min-width: 260px;
     }
     #persp-bar.visible { display: flex; }
     #persp-bar button {
@@ -314,16 +315,44 @@
       cursor: pointer;
       font-size: 12px;
     }
-    #persp-apply {
+
+    /* Mode tabs */
+    .persp-tabs {
+      display: flex;
+      border-bottom: 1px solid #333;
+    }
+    .persp-tab {
+      flex: 1;
+      padding: 7px 12px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: #888;
+      background: #1e1e1e;
+      border: none;
+      transition: color 0.15s, background 0.15s;
+    }
+    .persp-tab:first-child { border-radius: 3px 0 0 0; }
+    .persp-tab:last-child { border-radius: 0 3px 0 0; }
+    .persp-tab:hover { color: #ccc; background: #2a2a2a; }
+    .persp-tab.active { color: #FF6B35; background: #252525; border-bottom: 2px solid #FF6B35; }
+
+    /* Mode content panels */
+    .persp-content { padding: 8px 12px; }
+    .persp-content.hidden { display: none; }
+    .persp-actions { display: flex; gap: 8px; align-items: center; }
+
+    #persp-apply, #auto-persp-apply {
       background: #FF6B35;
       color: #fff;
     }
-    #persp-apply:hover { background: #e55a20; }
-    #persp-cancel {
+    #persp-apply:hover, #auto-persp-apply:hover { background: #e55a20; }
+    #persp-cancel, #auto-persp-cancel {
       background: #444;
       color: #ccc;
     }
-    #persp-cancel:hover { background: #555; }
+    #persp-cancel:hover, #auto-persp-cancel:hover { background: #555; }
     #persp-reset {
       background: none;
       color: #888;
@@ -331,6 +360,97 @@
       padding: 4px 6px;
     }
     #persp-reset:hover { color: #ccc; }
+
+    /* Auto perspective samples list */
+    .auto-persp-samples {
+      max-height: 120px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+    }
+    .auto-persp-samples:empty { display: none; }
+    .ap-sample {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 4px;
+      border-radius: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #aaa;
+    }
+    .ap-sample:hover { background: #2a2a2a; }
+    .ap-sample .ap-idx {
+      color: #FF6B35;
+      font-weight: 600;
+      width: 14px;
+      flex-shrink: 0;
+    }
+    .ap-sample .ap-info { flex: 1; }
+    .ap-sample .ap-del {
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .ap-sample .ap-del:hover { color: #ff4444; }
+    .ap-hint {
+      font-size: 10px;
+      color: #666;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    #auto-persp-apply.disabled,
+    #auto-persp-compute.disabled {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    /* Auto perspective popup */
+    #auto-persp-popup {
+      position: absolute;
+      background: #2a2a2a;
+      border: 1px solid #22D88E;
+      border-radius: 4px;
+      padding: 10px;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    }
+    #auto-persp-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #auto-persp-popup input[type=number] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px 8px;
+      width: 90px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    #auto-persp-popup input:focus { outline: none; border-color: #22D88E; }
+    #auto-persp-popup select {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    #auto-persp-popup button {
+      background: #22D88E;
+      color: #1a1a1a;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+    #auto-persp-popup button:hover { background: #1bc47a; }
 
     /* ========== MISC ========== */
     kbd {
@@ -416,10 +536,39 @@
       </div>
 
       <div id="persp-bar">
-        <span>Perspective Correction</span>
-        <button id="persp-reset">Reset</button>
-        <button id="persp-cancel">Cancel</button>
-        <button id="persp-apply">Apply</button>
+        <div class="persp-tabs">
+          <button class="persp-tab active" data-persp-mode="manual">Manual</button>
+          <button class="persp-tab" data-persp-mode="auto">Auto (Measure)</button>
+        </div>
+        <div class="persp-content" id="persp-manual-content">
+          <div class="persp-actions">
+            <button id="persp-reset">Reset</button>
+            <button id="persp-cancel">Cancel</button>
+            <button id="persp-apply">Apply</button>
+          </div>
+        </div>
+        <div class="persp-content hidden" id="persp-auto-content">
+          <div class="ap-hint" id="ap-hint">Click two points to define a known measurement. Add 2+ samples, then apply.</div>
+          <div class="auto-persp-samples" id="ap-samples"></div>
+          <div class="persp-actions">
+            <button id="auto-persp-cancel">Cancel</button>
+            <button id="auto-persp-apply" class="disabled">Apply</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="auto-persp-popup">
+        <label>Known distance for this segment:</label>
+        <input type="number" id="ap-dist-value" min="0.001" step="any" placeholder="0.00">
+        <select id="ap-dist-unit">
+          <option value="mm">mm</option>
+          <option value="cm" selected>cm</option>
+          <option value="m">m</option>
+          <option value="in">in</option>
+          <option value="ft">ft</option>
+          <option value="yd">yd</option>
+        </select>
+        <button id="ap-dist-confirm">Add</button>
       </div>
     </div>
 

@@ -8,6 +8,7 @@ fn.status = status;
 fn.updatePanel = updatePanel;
 fn.scheduleSave = scheduleSave;
 fn.updateScaleDisp = updateScaleDisp;
+fn.fitView = fitView;
 
 // Worker message handler
 worker.onmessage = function(e) {
@@ -126,6 +127,7 @@ export function loadImg(file, skipConfirm) {
   }
 
   if (S.perspActive) fn.cancelPerspective();
+  if (S.autoPerspActive) fn.cancelAutoPerspective();
 
   var reader = new FileReader();
   reader.onload = function(e) {
@@ -180,6 +182,7 @@ export function fitView() {
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
   if (S.perspActive) fn.updatePerspPreview();
+  if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
 }
 
 export function zoomAt(factor, sx, sy) {
@@ -196,6 +199,7 @@ export function zoomAt(factor, sx, sy) {
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
   if (S.perspActive) fn.updatePerspPreview();
+  if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
   setInteract();
 }
 
@@ -288,6 +292,7 @@ export function cancelTool() {
   S.touchId = null;
   S.touchIsPan = false;
   $('#scale-popup').hide();
+  $('#auto-persp-popup').hide();
   S.overlayDirty = true;
 }
 
