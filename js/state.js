@@ -69,12 +69,21 @@ export var S = {
   brightness: 0,
   contrast: 0,
 
-  // Perspective correction
+  // Perspective correction (manual)
   perspActive: false,
   perspCorners: null,
   perspSrcCorners: null,
   perspDragIdx: -1,
   perspDragOffset: null,
+
+  // Auto perspective correction
+  autoPerspActive: false,
+  autoPerspSamples: [],      // [{p1:{x,y}, p2:{x,y}, dist:Number, unit:String}]
+  autoPerspState: 0,          // 0=idle, 1=waiting for p2, 2=popup shown
+  autoPerspP1: null,
+  autoPerspP2: null,
+  autoPerspPreviewH: null,    // computed homography for preview
+  autoPerspPreviewInv: null,  // inverse for rendering
 
   // Touch
   touchId: null,
