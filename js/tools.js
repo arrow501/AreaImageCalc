@@ -182,7 +182,6 @@ export function fitView() {
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
   if (S.perspActive) fn.updatePerspPreview();
-  if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
 }
 
 export function zoomAt(factor, sx, sy) {
@@ -199,7 +198,6 @@ export function zoomAt(factor, sx, sy) {
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
   if (S.perspActive) fn.updatePerspPreview();
-  if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
   setInteract();
 }
 
