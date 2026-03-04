@@ -494,29 +494,45 @@ function normalizeToMeters(dist, unit) {
   }
 }
 
-function computeAutoPersp() {
-  var samples = S.autoPerspSamples;
-  if (samples.length < 2) return;
+// Multiply two 3x3 homography matrices (as 9-element arrays)
+function multiplyH(A, B) {
+  // A and B are [a0..a8] representing row-major 3x3
+  return [
+    A[0]*B[0] + A[1]*B[3] + A[2]*B[6],  A[0]*B[1] + A[1]*B[4] + A[2]*B[7],  A[0]*B[2] + A[1]*B[5] + A[2]*B[8],
+    A[3]*B[0] + A[4]*B[3] + A[5]*B[6],  A[3]*B[1] + A[4]*B[4] + A[5]*B[7],  A[3]*B[2] + A[4]*B[5] + A[5]*B[8],
+    A[6]*B[0] + A[7]*B[3] + A[8]*B[6],  A[6]*B[1] + A[7]*B[4] + A[8]*B[7],  A[6]*B[2] + A[7]*B[5] + A[8]*B[8]
+  ];
+}
 
-  // Compute PPU for each sample (in meters for normalization)
+// Compute a single-step homography correction from a set of samples
+// (all samples must be in the same coordinate space)
+function computeStepHomography(pts) {
+  // Compute PPU for each sample
   var ppus = [];
-  for (var i = 0; i < samples.length; i++) {
-    var s = samples[i];
-    var pxLen = Math.hypot(s.p2.x - s.p1.x, s.p2.y - s.p1.y);
-    var realM = normalizeToMeters(s.dist, s.unit);
-    if (realM > 0) ppus.push(pxLen / realM);
+  for (var i = 0; i < pts.length; i++) {
+    var pxLen = Math.hypot(pts[i].p2.x - pts[i].p1.x, pts[i].p2.y - pts[i].p1.y);
+    var realM = normalizeToMeters(pts[i].dist, pts[i].unit);
+    if (realM > 0 && pxLen > 0) ppus.push({ idx: i, ppu: pxLen / realM });
   }
+  if (ppus.length < 2) return null;
 
   // Target PPU: median
-  ppus.sort(function(a, b) { return a - b; });
-  var targetPPU = ppus[Math.floor(ppus.length / 2)];
+  ppus.sort(function(a, b) { return a.ppu - b.ppu; });
+  var targetPPU = ppus[Math.floor(ppus.length / 2)].ppu;
 
-  // Compute source and destination points
+  // Check if correction is negligible (all PPUs within 0.1% of target)
+  var maxDev = 0;
+  for (var i = 0; i < ppus.length; i++) {
+    var dev = Math.abs(ppus[i].ppu - targetPPU) / targetPPU;
+    if (dev > maxDev) maxDev = dev;
+  }
+  if (maxDev < 0.001) return null; // already corrected enough
+
+  // Build src → dst point pairs
   var srcPts = [];
   var dstPts = [];
-
-  for (var i = 0; i < samples.length; i++) {
-    var s = samples[i];
+  for (var i = 0; i < pts.length; i++) {
+    var s = pts[i];
     var realM = normalizeToMeters(s.dist, s.unit);
     var targetPxLen = realM * targetPPU;
     var midX = (s.p1.x + s.p2.x) / 2;
@@ -534,17 +550,59 @@ function computeAutoPersp() {
     dstPts.push({ x: midX - dirX * targetPxLen / 2, y: midY - dirY * targetPxLen / 2 });
     dstPts.push({ x: midX + dirX * targetPxLen / 2, y: midY + dirY * targetPxLen / 2 });
   }
+  if (srcPts.length < 4) return null;
 
-  if (srcPts.length < 4) return;
+  return solveHomographyN(srcPts, dstPts);
+}
 
-  // Compute homography
-  var H = solveHomographyN(srcPts, dstPts);
-  if (!H) { fn.status('Could not compute perspective correction.'); return; }
+function computeAutoPersp() {
+  var samples = S.autoPerspSamples;
+  if (samples.length < 2) return;
 
-  var Hinv = invertH(H);
+  // Work on copies of all sample points (in original image space)
+  var pts = samples.map(function(s) {
+    return {
+      p1: { x: s.p1.x, y: s.p1.y },
+      p2: { x: s.p2.x, y: s.p2.y },
+      dist: s.dist,
+      unit: s.unit
+    };
+  });
+
+  // Iteratively compose transforms:
+  // Step 1: compute H from first 2 samples, transform all points
+  // Step 2: compute refinement H' from first 3 (now in corrected space), compose
+  // Step N: each new sample refines from already-corrected space
+  var Hacc = null;
+
+  for (var n = 2; n <= pts.length; n++) {
+    var stepH = computeStepHomography(pts.slice(0, n));
+    if (!stepH) continue;
+
+    // Compose: Hacc maps original → current corrected space
+    Hacc = Hacc ? multiplyH(stepH, Hacc) : stepH;
+
+    // Transform ALL sample points through this step (glue to corrected pixels)
+    for (var i = 0; i < pts.length; i++) {
+      var np1 = applyHomography(stepH, pts[i].p1.x, pts[i].p1.y);
+      var np2 = applyHomography(stepH, pts[i].p2.x, pts[i].p2.y);
+      pts[i].p1 = np1;
+      pts[i].p2 = np2;
+      // real-world distance stays the same
+    }
+  }
+
+  if (!Hacc) { fn.status('Samples are already consistent — no correction needed.'); return; }
+
+  // Normalize so H[8] = 1
+  if (Math.abs(Hacc[8]) > 1e-12) {
+    for (var i = 0; i < 9; i++) Hacc[i] /= Hacc[8];
+  }
+
+  var Hinv = invertH(Hacc);
   if (!Hinv) { fn.status('Could not invert transform.'); return; }
 
-  S.autoPerspPreviewH = H;
+  S.autoPerspPreviewH = Hacc;
   S.autoPerspPreviewInv = Hinv;
 
   // Show CSS preview
