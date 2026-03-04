@@ -130,7 +130,6 @@ $(document).on('mousemove', function(e) {
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
     if (S.perspActive) fn.updatePerspPreview();
-    if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
     setInteract();
     return;
   }
@@ -395,7 +394,6 @@ oCvs.addEventListener('touchmove', function(e) {
 
     S.imageDirty = S.overlayDirty = true;
     if (S.perspActive) fn.updatePerspPreview();
-    if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
     setInteract();
     return;
   }
@@ -797,7 +795,6 @@ $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
   if (S.perspActive) fn.updatePerspPreview();
-  if (S.autoPerspActive && S.autoPerspPreviewH) fn.updateAutoPerspPreview();
 });
 
 // ---- Brightness / Contrast Sliders ----

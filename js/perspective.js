@@ -16,7 +16,7 @@ fn.applyAutoPerspective = applyAutoPerspective;
 fn.computeAutoPersp = computeAutoPersp;
 fn.drawAutoPerspOverlay = drawAutoPerspOverlay;
 fn.switchPerspMode = switchPerspMode;
-fn.updateAutoPerspPreview = updateAutoPerspPreview;
+// updateAutoPerspPreview removed — no CSS live preview for measure mode
 
 function solveLinear8(A) {
   var n = 8;
@@ -391,9 +391,6 @@ function cancelAutoPerspective() {
   S.autoPerspPreviewH = null;
   S.autoPerspPreviewInv = null;
 
-  iCvs.style.opacity = '';
-  iCvs.style.transform = '';
-  iCvs.style.transformOrigin = '';
   oCvs.style.cursor = '';
   $('body').removeClass('cursor-crosshair');
   fn.enableTools(true);
@@ -402,7 +399,7 @@ function cancelAutoPerspective() {
   $('#auto-persp-popup').hide();
   S.overlayDirty = true;
   S.imageDirty = true;
-  fn.status('Auto perspective correction cancelled.');
+  fn.status('Auto perspective mode exited.');
 }
 
 function addAutoPerspSample(dist, unit) {
@@ -422,11 +419,6 @@ function addAutoPerspSample(dist, unit) {
 
   updateAutoSamplesList();
 
-  // Auto-compute preview when we have 2+ samples
-  if (S.autoPerspSamples.length >= 2) {
-    computeAutoPersp();
-  }
-
   S.overlayDirty = true;
   fn.status('Sample added (' + S.autoPerspSamples.length + ' total). ' +
     (S.autoPerspSamples.length < 2 ? 'Add at least one more.' : 'Click Apply or add more samples.'));
@@ -435,16 +427,6 @@ function addAutoPerspSample(dist, unit) {
 function removeAutoPerspSample(idx) {
   S.autoPerspSamples.splice(idx, 1);
   updateAutoSamplesList();
-
-  S.autoPerspPreviewH = null;
-  S.autoPerspPreviewInv = null;
-  iCvs.style.transform = '';
-  iCvs.style.opacity = '';
-
-  if (S.autoPerspSamples.length >= 2) {
-    computeAutoPersp();
-  }
-
   S.overlayDirty = true;
 }
 
@@ -477,7 +459,7 @@ function updateAutoSamplesList() {
   } else if (S.autoPerspSamples.length === 1) {
     $('#ap-hint').text('1 sample added. Add at least 1 more at a different position.');
   } else {
-    $('#ap-hint').text(S.autoPerspSamples.length + ' samples. Preview shown. Add more for accuracy or apply.');
+    $('#ap-hint').text(S.autoPerspSamples.length + ' samples. Click Apply to correct, or add more.');
   }
 }
 
@@ -494,29 +476,45 @@ function normalizeToMeters(dist, unit) {
   }
 }
 
-function computeAutoPersp() {
-  var samples = S.autoPerspSamples;
-  if (samples.length < 2) return;
+// Multiply two 3x3 homography matrices (as 9-element arrays)
+function multiplyH(A, B) {
+  // A and B are [a0..a8] representing row-major 3x3
+  return [
+    A[0]*B[0] + A[1]*B[3] + A[2]*B[6],  A[0]*B[1] + A[1]*B[4] + A[2]*B[7],  A[0]*B[2] + A[1]*B[5] + A[2]*B[8],
+    A[3]*B[0] + A[4]*B[3] + A[5]*B[6],  A[3]*B[1] + A[4]*B[4] + A[5]*B[7],  A[3]*B[2] + A[4]*B[5] + A[5]*B[8],
+    A[6]*B[0] + A[7]*B[3] + A[8]*B[6],  A[6]*B[1] + A[7]*B[4] + A[8]*B[7],  A[6]*B[2] + A[7]*B[5] + A[8]*B[8]
+  ];
+}
 
-  // Compute PPU for each sample (in meters for normalization)
+// Compute a single-step homography correction from a set of samples
+// (all samples must be in the same coordinate space)
+function computeStepHomography(pts) {
+  // Compute PPU for each sample
   var ppus = [];
-  for (var i = 0; i < samples.length; i++) {
-    var s = samples[i];
-    var pxLen = Math.hypot(s.p2.x - s.p1.x, s.p2.y - s.p1.y);
-    var realM = normalizeToMeters(s.dist, s.unit);
-    if (realM > 0) ppus.push(pxLen / realM);
+  for (var i = 0; i < pts.length; i++) {
+    var pxLen = Math.hypot(pts[i].p2.x - pts[i].p1.x, pts[i].p2.y - pts[i].p1.y);
+    var realM = normalizeToMeters(pts[i].dist, pts[i].unit);
+    if (realM > 0 && pxLen > 0) ppus.push({ idx: i, ppu: pxLen / realM });
   }
+  if (ppus.length < 2) return null;
 
   // Target PPU: median
-  ppus.sort(function(a, b) { return a - b; });
-  var targetPPU = ppus[Math.floor(ppus.length / 2)];
+  ppus.sort(function(a, b) { return a.ppu - b.ppu; });
+  var targetPPU = ppus[Math.floor(ppus.length / 2)].ppu;
 
-  // Compute source and destination points
+  // Check if correction is negligible (all PPUs within 0.1% of target)
+  var maxDev = 0;
+  for (var i = 0; i < ppus.length; i++) {
+    var dev = Math.abs(ppus[i].ppu - targetPPU) / targetPPU;
+    if (dev > maxDev) maxDev = dev;
+  }
+  if (maxDev < 0.001) return null; // already corrected enough
+
+  // Build src → dst point pairs
   var srcPts = [];
   var dstPts = [];
-
-  for (var i = 0; i < samples.length; i++) {
-    var s = samples[i];
+  for (var i = 0; i < pts.length; i++) {
+    var s = pts[i];
     var realM = normalizeToMeters(s.dist, s.unit);
     var targetPxLen = realM * targetPPU;
     var midX = (s.p1.x + s.p2.x) / 2;
@@ -534,85 +532,118 @@ function computeAutoPersp() {
     dstPts.push({ x: midX - dirX * targetPxLen / 2, y: midY - dirY * targetPxLen / 2 });
     dstPts.push({ x: midX + dirX * targetPxLen / 2, y: midY + dirY * targetPxLen / 2 });
   }
+  if (srcPts.length < 4) return null;
 
-  if (srcPts.length < 4) return;
-
-  // Compute homography
-  var H = solveHomographyN(srcPts, dstPts);
-  if (!H) { fn.status('Could not compute perspective correction.'); return; }
-
-  var Hinv = invertH(H);
-  if (!Hinv) { fn.status('Could not invert transform.'); return; }
-
-  S.autoPerspPreviewH = H;
-  S.autoPerspPreviewInv = Hinv;
-
-  // Show CSS preview
-  updateAutoPerspPreview();
+  return solveHomographyN(srcPts, dstPts);
 }
 
-function updateAutoPerspPreview() {
-  if (!S.autoPerspPreviewH) return;
+function computeAutoPersp() {
+  var samples = S.autoPerspSamples;
+  if (samples.length < 2) return null;
 
-  var H = S.autoPerspPreviewH;
+  // Work on copies of all sample points (in original image space)
+  var pts = samples.map(function(s) {
+    return {
+      p1: { x: s.p1.x, y: s.p1.y },
+      p2: { x: s.p2.x, y: s.p2.y },
+      dist: s.dist,
+      unit: s.unit
+    };
+  });
 
-  // Transform corners of the image through the homography, in screen space
-  var srcCorners = [
-    {x: 0, y: 0}, {x: S.view.iw, y: 0},
-    {x: S.view.iw, y: S.view.ih}, {x: 0, y: S.view.ih}
-  ];
-  var srcS = [], dstS = [];
-  for (var i = 0; i < 4; i++) {
-    srcS.push(i2s(srcCorners[i].x, srcCorners[i].y));
-    var tp = applyHomography(H, srcCorners[i].x, srcCorners[i].y);
-    dstS.push(i2s(tp.x, tp.y));
+  // Iteratively compose transforms:
+  // Step 1: compute H from first 2 samples, transform all points
+  // Step 2: compute refinement H' from first 3 (now in corrected space), compose
+  // Step N: each new sample refines from already-corrected space
+  var Hacc = null;
+
+  for (var n = 2; n <= pts.length; n++) {
+    var stepH = computeStepHomography(pts.slice(0, n));
+    if (!stepH) continue;
+
+    // Compose: Hacc maps original → current corrected space
+    Hacc = Hacc ? multiplyH(stepH, Hacc) : stepH;
+
+    // Transform ALL sample points through this step (glue to corrected pixels)
+    for (var i = 0; i < pts.length; i++) {
+      var np1 = applyHomography(stepH, pts[i].p1.x, pts[i].p1.y);
+      var np2 = applyHomography(stepH, pts[i].p2.x, pts[i].p2.y);
+      pts[i].p1 = np1;
+      pts[i].p2 = np2;
+      // real-world distance stays the same
+    }
   }
 
-  var Hscreen = computeHomography(srcS, dstS);
-  if (!Hscreen) return;
+  if (!Hacc) { fn.status('Samples are already consistent — no correction needed.'); return null; }
 
-  var c0 = applyHomography(Hscreen, 0, 0);
-  var c1 = applyHomography(Hscreen, S.cw, 0);
-  var c2 = applyHomography(Hscreen, S.cw, S.ch);
-  var c3 = applyHomography(Hscreen, 0, S.ch);
-  var css = computeCSS3dMatrix(S.cw, S.ch, [c0, c1, c2, c3]);
-  if (css) {
-    iCvs.style.opacity = '0.6';
-    iCvs.style.transformOrigin = '0 0';
-    iCvs.style.transform = css;
+  // Normalize so H[8] = 1
+  if (Math.abs(Hacc[8]) > 1e-12) {
+    for (var i = 0; i < 9; i++) Hacc[i] /= Hacc[8];
   }
 
-  S.overlayDirty = true;
+  var Hinv = invertH(Hacc);
+  if (!Hinv) { fn.status('Could not invert transform.'); return null; }
+
+  return { H: Hacc, Hinv: Hinv };
 }
+
+// CSS live preview removed — auto-persp now applies directly
 
 function applyAutoPerspective() {
-  if (!S.autoPerspActive || !S.autoPerspPreviewH) return;
+  if (!S.autoPerspActive || S.autoPerspSamples.length < 2) return;
+
+  // Compute homography from current samples
+  var result = computeAutoPersp();
+  if (!result) return; // already consistent or error
+
+  var H = result.H;
+  var Hinv = result.Hinv;
+
   fn.status('Applying auto perspective correction...');
 
-  var H = S.autoPerspPreviewH;
-  var Hinv = S.autoPerspPreviewInv;
+  // Compute bounding box offset so we can adjust sample points after render
+  var iw = S.view.iw, ih = S.view.ih;
+  var corners = [
+    applyHomography(H, 0, 0), applyHomography(H, iw, 0),
+    applyHomography(H, iw, ih), applyHomography(H, 0, ih)
+  ];
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (var i = 0; i < 4; i++) {
+    if (corners[i].x < minX) minX = corners[i].x;
+    if (corners[i].y < minY) minY = corners[i].y;
+    if (corners[i].x > maxX) maxX = corners[i].x;
+    if (corners[i].y > maxY) maxY = corners[i].y;
+  }
+  var maxDim = Math.max(iw, ih) * 4;
+  minX = Math.max(minX, -maxDim); minY = Math.max(minY, -maxDim);
+  maxX = Math.min(maxX, maxDim); maxY = Math.min(maxY, maxDim);
+  var offX = Math.floor(minX);
+  var offY = Math.floor(minY);
 
-  // Use the infinite canvas version of apply
   applyHomographyToImage(H, Hinv, function() {
-    S.autoPerspActive = false;
-    S.autoPerspSamples = [];
+    // Transform all sample points to new image space (same as shapes/scale)
+    for (var i = 0; i < S.autoPerspSamples.length; i++) {
+      var s = S.autoPerspSamples[i];
+      var np1 = applyHomography(H, s.p1.x, s.p1.y);
+      var np2 = applyHomography(H, s.p2.x, s.p2.y);
+      s.p1 = { x: np1.x - offX, y: np1.y - offY };
+      s.p2 = { x: np2.x - offX, y: np2.y - offY };
+      // dist and unit stay the same — user's measured values are preserved
+    }
+
+    // Clear preview state but stay in auto-persp mode
+    S.autoPerspPreviewH = null;
+    S.autoPerspPreviewInv = null;
     S.autoPerspState = 0;
     S.autoPerspP1 = null;
     S.autoPerspP2 = null;
-    S.autoPerspPreviewH = null;
-    S.autoPerspPreviewInv = null;
-
-    iCvs.style.opacity = '';
-    iCvs.style.transform = '';
-    iCvs.style.transformOrigin = '';
-    oCvs.style.cursor = '';
-    $('body').removeClass('cursor-crosshair');
-    fn.enableTools(true);
-    $('#btn-persp').removeClass('active');
-    $('#persp-bar').removeClass('visible');
     $('#auto-persp-popup').hide();
 
-    fn.status('Auto perspective correction applied.');
+    // Update UI to show transformed samples
+    updateAutoSamplesList();
+    S.overlayDirty = true;
+
+    fn.status('Correction applied. Add more samples or click Done.');
   });
 }
 
