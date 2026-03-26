@@ -692,8 +692,16 @@ function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 }
 
-$('#btn-toggle-panel').on('click', function() {
-  togglePanel('#shapes-panel', $(this), 'Shapes &#9656;', 'Shapes &#9664;');
+$('#btn-collapse-panel').on('click', function() {
+  $('#shapes-panel').addClass('collapsed');
+  $('#btn-show-panel').show();
+  setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
+});
+
+$('#btn-show-panel').on('click', function() {
+  $('#shapes-panel').removeClass('collapsed');
+  $('#btn-show-panel').hide();
+  setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 
 $('#btn-toggle-tabs').on('click', function() {
