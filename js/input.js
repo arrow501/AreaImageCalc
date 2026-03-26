@@ -4,8 +4,9 @@ import { resize } from './render.js';
 import {
   setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
   loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, scheduleSave, status, updateFilters
+  updatePanel, status, updateFilters
 } from './tools.js';
+import { scheduleSave } from './storage.js';
 
 // Expose slider sync for tabs.js to call on tab switch
 fn.syncSliders = function() {

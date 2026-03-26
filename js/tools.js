@@ -1,13 +1,12 @@
-import { S, COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, fn, worker, iCvs, oCvs, $wrap } from './state.js';
+import { S, COLORS, fn, worker, imgWorker, iCvs, oCvs, $wrap } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, distSeg, pip } from './geometry.js';
-import { serializeTab } from './tabs.js';
+import { scheduleSave } from './storage.js';
 
 // Register cross-module functions into fn so perspective.js and tabs.js can call them
 fn.setTool = setTool;
 fn.enableTools = enableTools;
 fn.status = status;
 fn.updatePanel = updatePanel;
-fn.scheduleSave = scheduleSave;
 fn.updateScaleDisp = updateScaleDisp;
 fn.updateZoomDisp = updateZoomDisp;
 fn.updateFilters = updateFilters;
@@ -56,129 +55,87 @@ worker.onmessage = function(e) {
   }
 };
 
-// ---- Persistence ----
+// ---- Image Worker (WebP encoding) ----
 
-export function scheduleSave() {
-  if (S.saveTimer) clearTimeout(S.saveTimer);
-  S.pendingSave = true;
-  S.saveTimer = setTimeout(doSave, 2000);
+function tabForId(id) {
+  return S.tabs.find(function(t) { return t.tabId === id; });
 }
 
-export function doSave() {
-  S.pendingSave = false;
+function bufferToDataUrl(buffer, mime) {
+  var bytes = new Uint8Array(buffer);
+  var chunks = [];
+  var CHUNK = 0x8000;
+  for (var i = 0; i < bytes.length; i += CHUNK) {
+    chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+  }
+  return 'data:' + mime + ';base64,' + btoa(chunks.join(''));
+}
 
-  if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
+imgWorker.onmessage = function(e) {
+  var d = e.data;
+  var tab = tabForId(d.id);
 
-  var hasAny = S.tabs.some(function(t) { return t.imgDataUrl; });
-  if (!hasAny && !S.imgDataUrl) return;
+  if (d.type === 'webpResult') {
+    if (!tab) return;
+    tab.imgWebpUrl = bufferToDataUrl(d.buffer, 'image/webp');
+    tab.webpPending = false;
+    scheduleSave();
 
-  try {
-    var state = {
-      v: SAVE_VER,
-      ts: Date.now(),
-      currentTabIdx: S.currentTabIdx,
-      tabs: S.tabs.map(serializeTab)
-    };
-    var json = JSON.stringify(state);
-    localStorage.setItem(SAVE_KEY, json);
-  } catch (e) {
-    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-      // Retry keeping only the current tab's image; background tabs lose their imgDataUrl in localStorage
-      // (they remain in memory; use Save Project to persist all tabs)
-      try {
-        var compact = {
-          v: SAVE_VER,
-          ts: Date.now(),
-          currentTabIdx: S.currentTabIdx,
-          tabs: S.tabs.map(function(tab, i) {
-            var s = serializeTab(tab);
-            if (i !== S.currentTabIdx) s.imgDataUrl = null;
-            return s;
-          })
-        };
-        localStorage.setItem(SAVE_KEY, JSON.stringify(compact));
-        console.warn('Auto-save: dropped background tab images to fit quota. Use Save Project to persist all tabs.');
-      } catch (e2) {
-        console.warn('Auto-save failed even with compact state:', e2);
+  } else if (d.type === 'webpError') {
+    if (!tab) return;
+    tab.webpPending = false;
+    // OffscreenCanvas not supported — fall back to main-thread canvas encode, only on this signal
+    if (d.fallback && tab.img) {
+      var fbCvs = document.createElement('canvas');
+      fbCvs.width = tab.img.naturalWidth;
+      fbCvs.height = tab.img.naturalHeight;
+      fbCvs.getContext('2d').drawImage(tab.img, 0, 0);
+      var webpUrl = fbCvs.toDataURL('image/webp', 0.35);
+      // Only store if the browser actually produced WebP (not a PNG fallback)
+      if (webpUrl.startsWith('data:image/webp')) {
+        tab.imgWebpUrl = webpUrl;
+        scheduleSave();
       }
-    } else {
-      console.warn('Auto-save failed:', e);
     }
   }
-}
-
-export function restoreState() {
-  try {
-    var raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-
-    var state = JSON.parse(raw);
-    if (!state) return false;
-
-    // Legacy v2 single-tab format
-    if (state.v === SAVE_VER_LEGACY && state.img) {
-      if (!fn.createTab || !fn.switchToTab) return false;
-      var idx = fn.createTab('Restored', state.img, null);
-      var tab = S.tabs[idx];
-      if (state.iw) tab.view.iw = state.iw;
-      if (state.ih) tab.view.ih = state.ih;
-      tab.shapes = state.shapes || [];
-      tab.colorIdx = state.colorIdx || 0;
-      tab.shapeN = state.shapeN || 0;
-      tab.scalePPU = state.scalePPU || 0;
-      tab.scaleUnit = state.scaleUnit || 'cm';
-      tab.scaleLine = state.scaleLine || null;
-      fn.switchToTab(idx);
-      return true;
-    }
-
-    // v3 multi-tab format
-    if (state.v !== SAVE_VER || !state.tabs || !state.tabs.length) return false;
-    if (!fn.createTab || !fn.switchToTab) return false;
-
-    for (var i = 0; i < state.tabs.length; i++) {
-      var td = state.tabs[i];
-      var tidx = fn.createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-      var t = S.tabs[tidx];
-      if (td.view) t.view = td.view;
-      t.shapes = td.shapes || [];
-      t.colorIdx = td.colorIdx || 0;
-      t.shapeN = td.shapeN || 0;
-      t.scalePPU = td.scalePPU || 0;
-      t.scaleUnit = td.scaleUnit || 'cm';
-      t.scaleLine = td.scaleLine || null;
-      t.brightness = td.brightness || 0;
-      t.contrast = td.contrast || 0;
-    }
-
-    var targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
-    fn.switchToTab(targetIdx);
-    return true;
-  } catch (e) {
-    console.warn('Restore failed:', e);
-    localStorage.removeItem(SAVE_KEY);
-    return false;
-  }
-}
+};
 
 // ---- Image Loading ----
 
 export function loadImg(file, skipConfirm) {
   if (!file || file.type.indexOf('image/') !== 0) return;
 
+  // Track B: start decoding the bitmap immediately (runs in parallel with FileReader)
+  var bitmapPromise = (typeof createImageBitmap === 'function')
+    ? createImageBitmap(file).catch(function() { return null; })
+    : Promise.resolve(null);
+
+  // Track A: load as data URL for immediate canvas display
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
     var ni = new Image();
 
     ni.onload = function() {
+      var tab;
       if (S.img && fn.createTab && fn.switchToTab) {
         // Current tab has an image — open in a new tab
         var idx = fn.createTab(file.name || 'Image', dataUrl, ni);
         fn.switchToTab(idx);
+        tab = S.tabs[idx];
       } else {
         // Load into current (blank) tab
         _loadIntoCurrentTab(ni, dataUrl, file.name);
+        tab = S.tabs[S.currentTabIdx];
+      }
+
+      // Kick off background WebP encode once we know which tab this image belongs to
+      if (tab) {
+        tab.webpPending = true;
+        bitmapPromise.then(function(bitmap) {
+          if (!bitmap) { tab.webpPending = false; return; }
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+        });
       }
     };
 

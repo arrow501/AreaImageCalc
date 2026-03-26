@@ -88,7 +88,10 @@ export var S = {
   // Tabs
   tabs: [],          // array of tab state objects
   currentTabIdx: -1, // index of active tab
-  tabN: 0            // tab ID counter (monotonically increasing)
+  tabN: 0,           // tab ID counter (monotonically increasing)
+
+  // Storage UI state
+  hardLimitDialogShown: false
 };
 
 // Constants
@@ -104,8 +107,9 @@ export var oCvs = document.getElementById('overlay-canvas');
 export var iCtx = iCvs.getContext('2d');
 export var oCtx = oCvs.getContext('2d');
 
-// Worker
+// Workers
 export var worker = new Worker('./js/worker.js');
+export var imgWorker = new Worker('./js/imageWorker.js');
 
 // Late-bound cross-module function references (breaks import cycles)
 export var fn = {};

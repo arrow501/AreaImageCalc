@@ -3,7 +3,10 @@ import { S, fn } from './state.js';
 export function makeTabData() {
   return {
     label: 'Untitled',
+    tabId: 0,         // stable ID assigned at createTab time
     imgDataUrl: null,
+    imgWebpUrl: null, // set after background WebP encode completes
+    webpPending: false,
     img: null,
     view: { ox: 0, oy: 0, zoom: 1, fit: 1, iw: 0, ih: 0 },
     shapes: [],
@@ -87,6 +90,7 @@ export function applyTabToState(idx) {
 
 export function createTab(label, imgDataUrl, imgElement) {
   var tab = makeTabData();
+  tab.tabId = S.tabN++;
   tab.label = label || 'Untitled';
   tab.imgDataUrl = imgDataUrl || null;
   tab.img = imgElement || null;
@@ -211,11 +215,12 @@ function _escHtml(s) {
 }
 
 // Serialise a tab snapshot to a plain JSON-safe object.
-// Used by both the auto-save (tools.js) and the explicit project export (export.js).
+// Used by both auto-save (storage.js) and explicit project export (export.js).
+// Always uses the WebP version if available — falls back to original.
 export function serializeTab(tab) {
   return {
     label: tab.label,
-    imgDataUrl: tab.imgDataUrl,
+    imgDataUrl: tab.imgWebpUrl || tab.imgDataUrl,
     view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
     shapes: tab.shapes.map(function(s) {
       return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };
