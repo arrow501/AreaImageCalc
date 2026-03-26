@@ -693,14 +693,14 @@ function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
 }
 
 $('#btn-collapse-panel').on('click', function() {
+  $('#app').addClass('shapes-collapsed');
   $('#shapes-panel').addClass('collapsed');
-  $('#btn-show-panel').show();
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 
 $('#btn-show-panel').on('click', function() {
+  $('#app').removeClass('shapes-collapsed');
   $('#shapes-panel').removeClass('collapsed');
-  $('#btn-show-panel').hide();
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 

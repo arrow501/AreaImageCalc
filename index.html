@@ -152,6 +152,9 @@
       transition: width 0.15s;
     }
     #shapes-panel.collapsed { width: 0; overflow: hidden; border: none; }
+    /* Toolbar "show shapes" button: visible only when panel is collapsed */
+    #btn-show-panel { display: none; }
+    .shapes-collapsed #btn-show-panel { display: flex; }
     #shapes-header {
       padding: 8px 10px;
       font-weight: 600;
@@ -585,7 +588,7 @@
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
-    <button class="tb-btn" id="btn-show-panel" title="Show shapes panel" style="display:none">Shapes &#9654;</button>
+    <button class="tb-btn" id="btn-show-panel" title="Show shapes panel">Shapes &#9654;</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
