@@ -361,96 +361,40 @@
     }
     #persp-reset:hover { color: #ccc; }
 
-    /* Auto perspective samples list */
-    .auto-persp-samples {
-      max-height: 120px;
-      overflow-y: auto;
-      margin-bottom: 8px;
-    }
-    .auto-persp-samples:empty { display: none; }
-    .ap-sample {
+    /* Square calibration panel */
+    .sq-side-row {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 3px 4px;
-      border-radius: 2px;
+      margin-bottom: 8px;
+    }
+    .sq-side-row label { font-size: 10px; color: #888; flex-shrink: 0; }
+    .sq-side-row input[type=number] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 3px 6px;
+      width: 72px;
+      border-radius: 3px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: #aaa;
+      font-size: 12px;
     }
-    .ap-sample:hover { background: #2a2a2a; }
-    .ap-sample .ap-idx {
-      color: #FF6B35;
-      font-weight: 600;
-      width: 14px;
-      flex-shrink: 0;
+    .sq-side-row input:focus { outline: none; border-color: #22D88E; }
+    .sq-side-row select {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 3px;
+      border-radius: 3px;
+      font-size: 12px;
     }
-    .ap-sample .ap-info { flex: 1; }
-    .ap-sample .ap-del {
-      background: none;
-      border: none;
-      color: #555;
-      cursor: pointer;
-      font-size: 14px;
-      padding: 0 2px;
-      line-height: 1;
-    }
-    .ap-sample .ap-del:hover { color: #ff4444; }
     .ap-hint {
       font-size: 10px;
       color: #666;
       margin-bottom: 6px;
       line-height: 1.4;
     }
-    #auto-persp-apply.disabled,
-    #auto-persp-compute.disabled {
-      opacity: 0.35;
-      pointer-events: none;
-    }
-
-    /* Auto perspective popup */
-    #auto-persp-popup {
-      position: absolute;
-      background: #2a2a2a;
-      border: 1px solid #22D88E;
-      border-radius: 4px;
-      padding: 10px;
-      z-index: 100;
-      display: none;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
-    }
-    #auto-persp-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
-    #auto-persp-popup input[type=number] {
-      background: #1a1a1a;
-      border: 1px solid #444;
-      color: #e0e0e0;
-      padding: 4px 8px;
-      width: 90px;
-      border-radius: 3px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-    }
-    #auto-persp-popup input:focus { outline: none; border-color: #22D88E; }
-    #auto-persp-popup select {
-      background: #1a1a1a;
-      border: 1px solid #444;
-      color: #e0e0e0;
-      padding: 4px;
-      border-radius: 3px;
-      font-size: 12px;
-    }
-    #auto-persp-popup button {
-      background: #22D88E;
-      color: #1a1a1a;
-      border: none;
-      padding: 4px 12px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      margin-left: 4px;
-    }
-    #auto-persp-popup button:hover { background: #1bc47a; }
+    #sq-calib-apply.disabled { opacity: 0.35; pointer-events: none; }
 
     /* ========== TAB BAR ========== */
     #tab-bar {
@@ -645,7 +589,7 @@
       <div id="persp-bar">
         <div class="persp-tabs">
           <button class="persp-tab active" data-persp-mode="manual">Manual</button>
-          <button class="persp-tab" data-persp-mode="auto">Auto (Measure)</button>
+          <button class="persp-tab" data-persp-mode="auto">Square Cal</button>
         </div>
         <div class="persp-content" id="persp-manual-content">
           <div class="persp-actions">
@@ -655,27 +599,24 @@
           </div>
         </div>
         <div class="persp-content hidden" id="persp-auto-content">
-          <div class="ap-hint" id="ap-hint">Click two points to define a known measurement. Add 2+ samples, then apply.</div>
-          <div class="auto-persp-samples" id="ap-samples"></div>
+          <div class="ap-hint" id="sq-hint">Click 4 corners of a real-world square (any order).</div>
+          <div class="sq-side-row">
+            <label>Side:</label>
+            <input type="number" id="sq-side-value" min="0.001" step="any" placeholder="0.00">
+            <select id="sq-side-unit">
+              <option value="mm">mm</option>
+              <option value="cm" selected>cm</option>
+              <option value="m">m</option>
+              <option value="in">in</option>
+              <option value="ft">ft</option>
+              <option value="yd">yd</option>
+            </select>
+          </div>
           <div class="persp-actions">
-            <button id="auto-persp-cancel">Cancel</button>
-            <button id="auto-persp-apply" class="disabled">Apply</button>
+            <button id="sq-calib-cancel">Cancel</button>
+            <button id="sq-calib-apply" class="disabled">Apply</button>
           </div>
         </div>
-      </div>
-
-      <div id="auto-persp-popup">
-        <label>Known distance for this segment:</label>
-        <input type="number" id="ap-dist-value" min="0.001" step="any" placeholder="0.00">
-        <select id="ap-dist-unit">
-          <option value="mm">mm</option>
-          <option value="cm" selected>cm</option>
-          <option value="m">m</option>
-          <option value="in">in</option>
-          <option value="ft">ft</option>
-          <option value="yd">yd</option>
-        </select>
-        <button id="ap-dist-confirm">Add</button>
       </div>
     </div>
 

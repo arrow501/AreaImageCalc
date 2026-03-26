@@ -68,14 +68,26 @@ $(oCvs).on('mousedown', function(e) {
     return;
   }
 
-  if (S.autoPerspActive) {
-    handleAutoPerspClick();
-    return;
-  }
-
   var ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
+    case 'squarecal':
+      if (S.polyPts.length === 4) {
+        // Click near an existing corner → start dragging it
+        var grabR = 12 / (S.view.zoom * S.view.fit);
+        S.dragIdx = -1;
+        for (var ci = 0; ci < 4; ci++) {
+          if (Math.hypot(S.mix - S.polyPts[ci].x, S.miy - S.polyPts[ci].y) <= grabR) {
+            S.dragIdx = ci; break;
+          }
+        }
+      } else {
+        S.polyPts.push(ip);
+        S.overlayDirty = true;
+        fn.onSqCalibPoint();
+      }
+      break;
+
     case 'scale':
       if (S.scaleState === 0) {
         S.scaleP1 = ip;
@@ -159,7 +171,18 @@ $(document).on('mousemove', function(e) {
     return;
   }
 
-  if (S.autoPerspActive && S.autoPerspState === 1) {
+  if (S.tool === 'squarecal') {
+    if (S.dragIdx >= 0 && S.dragIdx < S.polyPts.length) {
+      // Drag placed corner to fine-tune position
+      S.polyPts[S.dragIdx] = { x: S.mix, y: S.miy };
+    } else if (S.polyPts.length === 4) {
+      // Show grab cursor when hovering near a corner
+      var grabR2 = 12 / (S.view.zoom * S.view.fit);
+      var nearCorner = S.polyPts.some(function(p) {
+        return Math.hypot(S.mix - p.x, S.miy - p.y) <= grabR2;
+      });
+      oCvs.style.cursor = nearCorner ? 'grab' : '';
+    }
     S.overlayDirty = true;
     return;
   }
@@ -208,6 +231,12 @@ $(document).on('mouseup', function(e) {
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspDragIdx = -1;
     S.perspDragOffset = null;
+    S.overlayDirty = true;
+    return;
+  }
+
+  if (S.tool === 'squarecal' && S.dragIdx >= 0) {
+    S.dragIdx = -1;
     S.overlayDirty = true;
     return;
   }
@@ -310,14 +339,25 @@ oCvs.addEventListener('touchstart', function(e) {
     return;
   }
 
-  if (S.autoPerspActive) {
-    handleAutoPerspClick();
-    return;
-  }
-
   var ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
+    case 'squarecal':
+      if (S.polyPts.length === 4) {
+        var grabRT = 18 / (S.view.zoom * S.view.fit);
+        S.dragIdx = -1;
+        for (var cit = 0; cit < 4; cit++) {
+          if (Math.hypot(S.mix - S.polyPts[cit].x, S.miy - S.polyPts[cit].y) <= grabRT) {
+            S.dragIdx = cit; break;
+          }
+        }
+      } else {
+        S.polyPts.push(ip);
+        S.overlayDirty = true;
+        fn.onSqCalibPoint();
+      }
+      break;
+
     case 'scale':
       if (S.scaleState === 0) {
         S.scaleP1 = ip;
@@ -515,24 +555,8 @@ $(document).on('keydown', function(e) {
       break;
 
     case 'Escape':
-      if (S.autoPerspActive) {
-        if (S.autoPerspState === 2) {
-          // Cancel current sample popup
-          S.autoPerspP1 = null;
-          S.autoPerspP2 = null;
-          S.autoPerspState = 0;
-          $('#auto-persp-popup').hide();
-          S.overlayDirty = true;
-          status('Sample cancelled. Click to start a new measurement.');
-        } else if (S.autoPerspState === 1) {
-          // Cancel current point placement
-          S.autoPerspP1 = null;
-          S.autoPerspState = 0;
-          S.overlayDirty = true;
-          status('Click first point of a known measurement.');
-        } else {
-          fn.cancelAutoPerspective();
-        }
+      if (S.tool === 'squarecal') {
+        fn.cancelSqCalib();
       } else if (S.perspActive) {
         fn.cancelPerspective();
       } else if (S.tool !== 'idle') {
@@ -545,8 +569,8 @@ $(document).on('keydown', function(e) {
       break;
 
     case 'Enter':
-      if (S.autoPerspActive && S.autoPerspSamples.length >= 2 && S.autoPerspState === 0) {
-        fn.applyAutoPerspective();
+      if (S.tool === 'squarecal' && S.polyPts.length === 4) {
+        fn.applySqCalib();
         e.preventDefault();
       } else if (S.perspActive) {
         fn.applyPerspective();
@@ -556,16 +580,16 @@ $(document).on('keydown', function(e) {
 
     case 'Delete':
     case 'Backspace':
-      if (!S.perspActive && !S.autoPerspActive && S.selId) delShape(S.selId);
+      if (!S.perspActive && S.tool !== 'squarecal' && S.selId) delShape(S.selId);
       e.preventDefault();
       break;
 
-    case '1': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'scale' ? 'idle' : 'scale'); break;
-    case '2': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'polygon' ? 'idle' : 'polygon'); break;
-    case '3': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
-    case '4': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
+    case '1': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'scale' ? 'idle' : 'scale'); break;
+    case '2': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'polygon' ? 'idle' : 'polygon'); break;
+    case '3': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
+    case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
     case '5':
-      if (S.img && !S.perspActive && !S.autoPerspActive) fn.enterPerspective();
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') fn.enterPerspective();
       break;
 
     case '=':
@@ -712,44 +736,12 @@ $('#scale-value').on('keydown', function(e) {
   }
 });
 
-// ---- Auto Perspective Click Handler ----
-
-function handleAutoPerspClick() {
-  if (S.autoPerspState === 2) return; // popup is open
-
-  if (S.autoPerspState === 0) {
-    S.autoPerspP1 = { x: S.mix, y: S.miy };
-    S.autoPerspState = 1;
-    S.overlayDirty = true;
-    status('Click second point of measurement');
-    return;
-  }
-
-  if (S.autoPerspState === 1) {
-    S.autoPerspP2 = { x: S.mix, y: S.miy };
-    S.autoPerspState = 2;
-    showAutoPerspPopup();
-    S.overlayDirty = true;
-    return;
-  }
-}
-
-function showAutoPerspPopup() {
-  var mp = i2s((S.autoPerspP1.x + S.autoPerspP2.x) / 2, (S.autoPerspP1.y + S.autoPerspP2.y) / 2);
-  var l = Math.min(Math.max(mp.x + 12, 10), S.cw - 250);
-  var t = Math.min(Math.max(mp.y - 30, 10), S.ch - 60);
-
-  $('#auto-persp-popup').css({ left: l, top: t }).show();
-  $('#ap-dist-value').val('').focus();
-  status('Enter the real-world distance for this segment');
-}
-
 // ---- Perspective Buttons ----
 
 $('#btn-persp').on('click', function() {
   if (!S.img) return;
-  if (S.perspActive) { fn.cancelPerspective(); return; }
-  if (S.autoPerspActive) { fn.cancelAutoPerspective(); return; }
+  if (S.perspActive)          { fn.cancelPerspective(); return; }
+  if (S.tool === 'squarecal') { fn.cancelSqCalib();    return; }
   fn.enterPerspective();
 });
 $('#persp-apply').on('click', function() { fn.applyPerspective(); });
@@ -759,42 +751,7 @@ $('#persp-reset').on('click', function() { fn.resetPerspective(); });
 // ---- Perspective Mode Tabs ----
 
 $('.persp-tab').on('click', function() {
-  var mode = $(this).data('persp-mode');
-  fn.switchPerspMode(mode);
-});
-
-// ---- Auto Perspective Buttons ----
-
-$('#auto-persp-cancel').on('click', function() { fn.cancelAutoPerspective(); });
-$('#auto-persp-apply').on('click', function() { fn.applyAutoPerspective(); });
-
-$('#ap-dist-confirm').on('click', function() {
-  var val = parseFloat($('#ap-dist-value').val());
-  var unit = $('#ap-dist-unit').val();
-  if (!val || val <= 0) { status('Enter a valid distance > 0'); return; }
-  fn.addAutoPerspSample(val, unit);
-});
-
-$('#ap-dist-value').on('keydown', function(e) {
-  if (e.key === 'Enter') {
-    var val = parseFloat($('#ap-dist-value').val());
-    var unit = $('#ap-dist-unit').val();
-    if (!val || val <= 0) { status('Enter a valid distance > 0'); return; }
-    fn.addAutoPerspSample(val, unit);
-  }
-  if (e.key === 'Escape') {
-    S.autoPerspP1 = null;
-    S.autoPerspP2 = null;
-    S.autoPerspState = 0;
-    $('#auto-persp-popup').hide();
-    S.overlayDirty = true;
-    status('Sample cancelled. Click to start a new measurement.');
-  }
-});
-
-$('#ap-samples').on('click', '.ap-del', function(e) {
-  e.stopPropagation();
-  fn.removeAutoPerspSample($(this).data('idx'));
+  fn.switchPerspMode($(this).data('persp-mode'));
 });
 
 // ---- Shapes Panel Events ----
