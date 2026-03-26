@@ -1,4 +1,4 @@
-import { S, fn } from './state.js';
+import { S, fn, imgWorker } from './state.js';
 
 var PDFJS_VERSION = '3.11.174';
 var PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/';
@@ -80,6 +80,11 @@ export function renderPdfTabPage(tabIdx) {
       canvas.width = Math.round(viewport.width);
       canvas.height = Math.round(viewport.height);
       return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise.then(function() {
+        // Kick off WebP encode while canvas is still in scope
+        tab.webpPending = true;
+        createImageBitmap(canvas).then(function(bitmap) {
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+        }).catch(function() { tab.webpPending = false; });
         return canvas.toDataURL('image/png');
       });
     }).then(function(dataUrl) {
