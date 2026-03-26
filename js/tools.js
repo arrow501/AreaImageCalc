@@ -1,5 +1,6 @@
 import { S, COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, fn, worker, iCvs, oCvs, $wrap } from './state.js';
-import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, findNearestPt, distSeg, pip, hasWork } from './geometry.js';
+import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, distSeg, pip } from './geometry.js';
+import { serializeTab } from './tabs.js';
 
 // Register cross-module functions into fn so perspective.js and tabs.js can call them
 fn.setTool = setTool;
@@ -72,33 +73,37 @@ export function doSave() {
   if (!hasAny && !S.imgDataUrl) return;
 
   try {
-    var savedTabs = S.tabs.map(function(tab) {
-      return {
-        label: tab.label,
-        imgDataUrl: tab.imgDataUrl,
-        view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
-        shapes: tab.shapes.map(function(s) {
-          return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };
-        }),
-        colorIdx: tab.colorIdx,
-        shapeN: tab.shapeN,
-        scalePPU: tab.scalePPU,
-        scaleUnit: tab.scaleUnit,
-        scaleLine: tab.scaleLine,
-        brightness: tab.brightness || 0,
-        contrast: tab.contrast || 0
-      };
-    });
-
     var state = {
       v: SAVE_VER,
       ts: Date.now(),
       currentTabIdx: S.currentTabIdx,
-      tabs: savedTabs
+      tabs: S.tabs.map(serializeTab)
     };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    var json = JSON.stringify(state);
+    localStorage.setItem(SAVE_KEY, json);
   } catch (e) {
-    console.warn('Save failed:', e);
+    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      // Retry keeping only the current tab's image; background tabs lose their imgDataUrl in localStorage
+      // (they remain in memory; use Save Project to persist all tabs)
+      try {
+        var compact = {
+          v: SAVE_VER,
+          ts: Date.now(),
+          currentTabIdx: S.currentTabIdx,
+          tabs: S.tabs.map(function(tab, i) {
+            var s = serializeTab(tab);
+            if (i !== S.currentTabIdx) s.imgDataUrl = null;
+            return s;
+          })
+        };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(compact));
+        console.warn('Auto-save: dropped background tab images to fit quota. Use Save Project to persist all tabs.');
+      } catch (e2) {
+        console.warn('Auto-save failed even with compact state:', e2);
+      }
+    } else {
+      console.warn('Auto-save failed:', e);
+    }
   }
 }
 

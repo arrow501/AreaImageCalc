@@ -459,10 +459,14 @@
       background: #1e1e1e;
       border-bottom: 1px solid #333;
       overflow-x: auto;
+      overflow-y: hidden;
       flex-shrink: 0;
       min-height: 28px;
       padding: 0 4px;
+      max-height: 60px;
+      transition: max-height 0.15s ease, min-height 0.15s ease, padding 0.15s ease;
     }
+    #tab-bar.collapsed { max-height: 0; min-height: 0; padding: 0; border-bottom-width: 0; }
     #tab-bar::-webkit-scrollbar { height: 4px; }
     #tab-bar::-webkit-scrollbar-track { background: #1e1e1e; }
     #tab-bar::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
@@ -579,6 +583,8 @@
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">

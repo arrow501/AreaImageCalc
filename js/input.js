@@ -683,14 +683,21 @@ $('#btn-fit').on('click', function() {
   if (S.img) fitView();
 });
 
+// ---- Panel Toggles (shared logic) ----
+
+function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
+  var $p = $(panelSel);
+  $p.toggleClass('collapsed');
+  $btn.html($p.hasClass('collapsed') ? expandHtml : collapseHtml);
+  setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
+}
+
 $('#btn-toggle-panel').on('click', function() {
-  var p = $('#shapes-panel');
-  p.toggleClass('collapsed');
-  $(this).html(p.hasClass('collapsed') ? '&laquo;' : '&raquo;');
-  setTimeout(function() {
-    resize();
-    if (S.img) fitView();
-  }, 170);
+  togglePanel('#shapes-panel', $(this), '&raquo;', '&laquo;');
+});
+
+$('#btn-toggle-tabs').on('click', function() {
+  togglePanel('#tab-bar', $(this), '&#9662; Tabs', '&#9656; Tabs');
 });
 
 // ---- Scale Popup ----

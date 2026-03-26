@@ -1,22 +1,55 @@
-import { S, fn, SAVE_VER } from './state.js';
+/**
+ * Project save/load and measurements export.
+ *
+ * ── Project file (.arcalc) ──────────────────────────────────────────────────
+ * Plain JSON, MIME type application/json. Top-level structure:
+ *
+ * {
+ *   "v": 3,                         // format version (integer)
+ *   "ts": 1234567890123,            // Unix timestamp (ms) of export
+ *   "currentTabIdx": 0,             // index of the tab that was active
+ *   "tabs": [ <Tab>, ... ]          // one entry per tab
+ * }
+ *
+ * Tab object:
+ * {
+ *   "label": "Page 1",              // display name shown in the tab bar
+ *   "imgDataUrl": "data:image/...", // base-64 encoded image (may be null for blank tabs)
+ *   "view": {                       // viewport state at time of save
+ *     "ox": 0, "oy": 0,            //   pan offset in screen pixels
+ *     "zoom": 1, "fit": 0.5,       //   zoom multiplier and fit factor
+ *     "iw": 1920, "ih": 1080       //   image natural dimensions
+ *   },
+ *   "shapes": [ <Shape>, ... ],     // all drawn shapes
+ *   "colorIdx": 3,                  // next colour palette index
+ *   "shapeN": 3,                    // highest shape serial used (for unique IDs)
+ *   "scalePPU": 12.5,               // pixels per unit (0 = no scale set)
+ *   "scaleUnit": "cm",              // unit label
+ *   "scaleLine": {                  // the calibration segment (null if not set)
+ *     "p1": {"x": 100, "y": 200},
+ *     "p2": {"x": 300, "y": 200}
+ *   },
+ *   "brightness": 0,                // brightness adjustment (−100 … +100)
+ *   "contrast": 0                   // contrast adjustment  (−100 … +100)
+ * }
+ *
+ * Shape object:
+ * {
+ *   "id": "s1",                     // unique ID within the tab
+ *   "type": "polygon"|"freehand",
+ *   "points": [{"x":0,"y":0}, ...], // image-space coordinates
+ *   "closed": true,
+ *   "color": "#FF6B35",
+ *   "area": 1234.5,                 // pixels² (null while calculating)
+ *   "perimeter": 150.0              // pixels  (null while calculating)
+ * }
+ *
+ * ── Measurements file (.json) ───────────────────────────────────────────────
+ * See exportMeasurements() below for its schema documentation.
+ */
 
-function serializeTab(tab) {
-  return {
-    label: tab.label,
-    imgDataUrl: tab.imgDataUrl,
-    view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
-    shapes: tab.shapes.map(function(s) {
-      return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };
-    }),
-    colorIdx: tab.colorIdx,
-    shapeN: tab.shapeN,
-    scalePPU: tab.scalePPU,
-    scaleUnit: tab.scaleUnit,
-    scaleLine: tab.scaleLine,
-    brightness: tab.brightness,
-    contrast: tab.contrast
-  };
-}
+import { S, fn, SAVE_VER } from './state.js';
+import { serializeTab } from './tabs.js';
 
 function triggerDownload(content, filename, mime) {
   var blob = new Blob([content], { type: mime || 'application/json' });
@@ -83,6 +116,37 @@ export function importProject(file) {
   reader.readAsText(file);
 }
 
+/**
+ * Export all measurements as a JSON file.
+ *
+ * Top-level structure:
+ * {
+ *   "version": "1.0",
+ *   "source": "AreaImageCalc",
+ *   "exported": "<ISO-8601 timestamp>",
+ *   "tabs": [ <TabMeasurements>, ... ]   // only tabs that contain shapes
+ * }
+ *
+ * TabMeasurements:
+ * {
+ *   "label": "Page 1",
+ *   "scale": { "ppu": 12.5, "unit": "cm" } | null,
+ *   "measurements": [ <Measurement>, ... ]
+ * }
+ *
+ * Measurement:
+ * {
+ *   "id": "s1",
+ *   "type": "polygon"|"freehand",
+ *   "area_px2": 4500.0,           // area in pixels²
+ *   "area": 28.8,                 // area in scale units² (omitted if no scale)
+ *   "unit2": "cm²",               // area unit label     (omitted if no scale)
+ *   "perimeter_px": 280.0,        // perimeter in pixels
+ *   "perimeter": 22.4,            // perimeter in scale units (omitted if no scale)
+ *   "unit": "cm",                 // length unit label   (omitted if no scale)
+ *   "points": [{"x":0,"y":0}, ...]  // image-space coordinates
+ * }
+ */
 export function exportMeasurements() {
   if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
 

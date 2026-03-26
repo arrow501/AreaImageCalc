@@ -114,35 +114,36 @@ export function switchToTab(idx) {
 
   var tab = S.tabs[idx];
 
-  // Reset toolbar tool visuals
+  // Reset toolbar tool visuals without triggering status flicker on every switch
   if (fn.setTool) fn.setTool('idle');
 
   if (tab.img) {
     if (fn.fitView) fn.fitView();
-    if (fn.updateScaleDisp) fn.updateScaleDisp();
+    if (fn.enableTools) fn.enableTools(true);
     if (fn.updateFilters) fn.updateFilters();
     if (fn.syncSliders) fn.syncSliders();
-    if (fn.enableTools) fn.enableTools(true);
     $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
   } else if (tab.pdfSource) {
     if (fn.renderPdfTabPage) fn.renderPdfTabPage(idx);
   } else if (tab.imgDataUrl) {
-    // Parked - reload image
+    // Parked tab — reload the image element on demand
     var ni = new Image();
     var capturedIdx = idx;
     ni.onload = function() {
       S.tabs[capturedIdx].img = ni;
+      S.tabs[capturedIdx].view.iw = ni.naturalWidth;
+      S.tabs[capturedIdx].view.ih = ni.naturalHeight;
       if (S.currentTabIdx !== capturedIdx) return;
       S.img = ni;
       S.view.iw = ni.naturalWidth;
       S.view.ih = ni.naturalHeight;
       S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
       if (fn.fitView) fn.fitView();
-      if (fn.updateScaleDisp) fn.updateScaleDisp();
       if (fn.updateFilters) fn.updateFilters();
       if (fn.syncSliders) fn.syncSliders();
       if (fn.enableTools) fn.enableTools(true);
       if (fn.updatePanel) fn.updatePanel();
+      if (fn.updateScaleDisp) fn.updateScaleDisp();
       $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
     };
     ni.src = tab.imgDataUrl;
@@ -155,7 +156,7 @@ export function switchToTab(idx) {
 
   renderTabBar();
   if (fn.updatePanel) fn.updatePanel();
-  if (fn.updateScaleDisp) fn.updateScaleDisp();
+  if (fn.updateScaleDisp) fn.updateScaleDisp();  // single call covers all branches
   if (fn.updateZoomDisp) fn.updateZoomDisp();
 }
 
@@ -214,4 +215,24 @@ export function renderTabBar() {
 
 function _escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Serialise a tab snapshot to a plain JSON-safe object.
+// Used by both the auto-save (tools.js) and the explicit project export (export.js).
+export function serializeTab(tab) {
+  return {
+    label: tab.label,
+    imgDataUrl: tab.imgDataUrl,
+    view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
+    shapes: tab.shapes.map(function(s) {
+      return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };
+    }),
+    colorIdx: tab.colorIdx,
+    shapeN: tab.shapeN,
+    scalePPU: tab.scalePPU,
+    scaleUnit: tab.scaleUnit,
+    scaleLine: tab.scaleLine,
+    brightness: tab.brightness || 0,
+    contrast: tab.contrast || 0
+  };
 }
