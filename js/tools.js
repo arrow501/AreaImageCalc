@@ -1,13 +1,15 @@
-import { S, COLORS, SAVE_KEY, SAVE_VER, fn, worker, iCvs, oCvs, $wrap } from './state.js';
+import { S, COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, fn, worker, iCvs, oCvs, $wrap } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, findNearestPt, distSeg, pip, hasWork } from './geometry.js';
 
-// Register cross-module functions into fn so perspective.js can call them
+// Register cross-module functions into fn so perspective.js and tabs.js can call them
 fn.setTool = setTool;
 fn.enableTools = enableTools;
 fn.status = status;
 fn.updatePanel = updatePanel;
 fn.scheduleSave = scheduleSave;
 fn.updateScaleDisp = updateScaleDisp;
+fn.updateZoomDisp = updateZoomDisp;
+fn.updateFilters = updateFilters;
 fn.fitView = fitView;
 
 // Worker message handler
@@ -15,6 +17,15 @@ worker.onmessage = function(e) {
   var d = e.data, shape;
 
   if (d.type === 'areaResult') {
+    if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
+      // Result for a background tab — store directly
+      var tab = S.tabs[d.tabIdx];
+      if (tab) {
+        var bgShape = tab.shapes.find(function(s) { return s.id === d.id; });
+        if (bgShape) { bgShape.area = d.area; bgShape.perimeter = d.perimeter; }
+      }
+      return;
+    }
     shape = findShape(d.id);
     if (shape) {
       shape.area = d.area;
@@ -24,10 +35,21 @@ worker.onmessage = function(e) {
     }
   }
   else if (d.type === 'simplifyResult') {
+    if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
+      var tab2 = S.tabs[d.tabIdx];
+      if (tab2) {
+        var bgShape2 = tab2.shapes.find(function(s) { return s.id === d.id; });
+        if (bgShape2) {
+          bgShape2.points = d.points;
+          worker.postMessage({ type: 'calcArea', id: bgShape2.id, points: bgShape2.points, tabIdx: d.tabIdx });
+        }
+      }
+      return;
+    }
     shape = findShape(d.id);
     if (shape) {
       shape.points = d.points;
-      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points });
+      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
       S.overlayDirty = true;
     }
   }
@@ -43,31 +65,36 @@ export function scheduleSave() {
 
 export function doSave() {
   S.pendingSave = false;
-  if (!S.img || !S.imgDataUrl) return;
+
+  if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
+
+  var hasAny = S.tabs.some(function(t) { return t.imgDataUrl; });
+  if (!hasAny && !S.imgDataUrl) return;
 
   try {
+    var savedTabs = S.tabs.map(function(tab) {
+      return {
+        label: tab.label,
+        imgDataUrl: tab.imgDataUrl,
+        view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
+        shapes: tab.shapes.map(function(s) {
+          return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };
+        }),
+        colorIdx: tab.colorIdx,
+        shapeN: tab.shapeN,
+        scalePPU: tab.scalePPU,
+        scaleUnit: tab.scaleUnit,
+        scaleLine: tab.scaleLine,
+        brightness: tab.brightness || 0,
+        contrast: tab.contrast || 0
+      };
+    });
+
     var state = {
       v: SAVE_VER,
       ts: Date.now(),
-      img: S.imgDataUrl,
-      iw: S.view.iw,
-      ih: S.view.ih,
-      shapes: S.shapes.map(function(s) {
-        return {
-          id: s.id,
-          type: s.type,
-          points: s.points,
-          closed: s.closed,
-          color: s.color,
-          area: s.area,
-          perimeter: s.perimeter
-        };
-      }),
-      colorIdx: S.colorIdx,
-      shapeN: S.shapeN,
-      scalePPU: S.scalePPU,
-      scaleUnit: S.scaleUnit,
-      scaleLine: S.scaleLine
+      currentTabIdx: S.currentTabIdx,
+      tabs: savedTabs
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -81,34 +108,46 @@ export function restoreState() {
     if (!raw) return false;
 
     var state = JSON.parse(raw);
-    if (!state || state.v !== SAVE_VER || !state.img) return false;
+    if (!state) return false;
 
-    var ni = new Image();
-    ni.onload = function() {
-      S.img = ni;
-      S.view.iw = state.iw;
-      S.view.ih = state.ih;
-      S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
-      S.imgDataUrl = state.img;
-      S.shapes = state.shapes || [];
-      S.colorIdx = state.colorIdx || 0;
-      S.shapeN = state.shapeN || 0;
-      S.scalePPU = state.scalePPU || 0;
-      S.scaleUnit = state.scaleUnit || 'cm';
-      S.scaleLine = state.scaleLine || null;
-      S.selId = null;
+    // Legacy v2 single-tab format
+    if (state.v === SAVE_VER_LEGACY && state.img) {
+      if (!fn.createTab || !fn.switchToTab) return false;
+      var idx = fn.createTab('Restored', state.img, null);
+      var tab = S.tabs[idx];
+      if (state.iw) tab.view.iw = state.iw;
+      if (state.ih) tab.view.ih = state.ih;
+      tab.shapes = state.shapes || [];
+      tab.colorIdx = state.colorIdx || 0;
+      tab.shapeN = state.shapeN || 0;
+      tab.scalePPU = state.scalePPU || 0;
+      tab.scaleUnit = state.scaleUnit || 'cm';
+      tab.scaleLine = state.scaleLine || null;
+      fn.switchToTab(idx);
+      return true;
+    }
 
-      fitView();
-      updateScaleDisp();
-      updatePanel();
-      $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
-      enableTools(true);
-      status('Session restored. ' + S.shapes.length + ' shape(s).');
-    };
-    ni.onerror = function() {
-      localStorage.removeItem(SAVE_KEY);
-    };
-    ni.src = state.img;
+    // v3 multi-tab format
+    if (state.v !== SAVE_VER || !state.tabs || !state.tabs.length) return false;
+    if (!fn.createTab || !fn.switchToTab) return false;
+
+    for (var i = 0; i < state.tabs.length; i++) {
+      var td = state.tabs[i];
+      var tidx = fn.createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+      var t = S.tabs[tidx];
+      if (td.view) t.view = td.view;
+      t.shapes = td.shapes || [];
+      t.colorIdx = td.colorIdx || 0;
+      t.shapeN = td.shapeN || 0;
+      t.scalePPU = td.scalePPU || 0;
+      t.scaleUnit = td.scaleUnit || 'cm';
+      t.scaleLine = td.scaleLine || null;
+      t.brightness = td.brightness || 0;
+      t.contrast = td.contrast || 0;
+    }
+
+    var targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
+    fn.switchToTab(targetIdx);
     return true;
   } catch (e) {
     console.warn('Restore failed:', e);
@@ -122,48 +161,63 @@ export function restoreState() {
 export function loadImg(file, skipConfirm) {
   if (!file || file.type.indexOf('image/') !== 0) return;
 
-  if (!skipConfirm && hasWork()) {
-    if (!confirm('Opening a new image will discard your current work.\n\nContinue?')) return;
-  }
-
-  if (S.perspActive) fn.cancelPerspective();
-  if (S.autoPerspActive) fn.cancelAutoPerspective();
-
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
     var ni = new Image();
 
     ni.onload = function() {
-      S.img = ni;
-      S.view.iw = ni.naturalWidth;
-      S.view.ih = ni.naturalHeight;
-      S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
-      S.imgDataUrl = dataUrl;
-
-      fitView();
-
-      S.shapes = [];
-      S.selId = null;
-      S.colorIdx = 0;
-      S.shapeN = 0;
-      S.scaleLine = null;
-      S.scalePPU = 0;
-
-      updateScaleDisp();
-      setTool('idle');
-      updatePanel();
-
-      $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
-      enableTools(true);
-      status('Image loaded (' + S.view.iw + '\u00d7' + S.view.ih + '). Pick a tool to begin.');
-      scheduleSave();
+      if (S.img && fn.createTab && fn.switchToTab) {
+        // Current tab has an image — open in a new tab
+        var idx = fn.createTab(file.name || 'Image', dataUrl, ni);
+        fn.switchToTab(idx);
+      } else {
+        // Load into current (blank) tab
+        _loadIntoCurrentTab(ni, dataUrl, file.name);
+      }
     };
 
     ni.src = dataUrl;
   };
 
   reader.readAsDataURL(file);
+}
+
+function _loadIntoCurrentTab(ni, dataUrl, filename) {
+  if (S.perspActive) fn.cancelPerspective();
+  if (S.autoPerspActive) fn.cancelAutoPerspective();
+
+  S.img = ni;
+  S.view.iw = ni.naturalWidth;
+  S.view.ih = ni.naturalHeight;
+  S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
+  S.imgDataUrl = dataUrl;
+
+  // Update current tab metadata
+  if (S.currentTabIdx >= 0 && S.tabs[S.currentTabIdx]) {
+    S.tabs[S.currentTabIdx].label = filename || 'Image';
+    S.tabs[S.currentTabIdx].img = ni;
+    S.tabs[S.currentTabIdx].imgDataUrl = dataUrl;
+  }
+
+  fitView();
+
+  S.shapes = [];
+  S.selId = null;
+  S.colorIdx = 0;
+  S.shapeN = 0;
+  S.scaleLine = null;
+  S.scalePPU = 0;
+
+  updateScaleDisp();
+  setTool('idle');
+  updatePanel();
+
+  $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
+  enableTools(true);
+  status('Image loaded (' + S.view.iw + '\u00d7' + S.view.ih + '). Pick a tool to begin.');
+  if (fn.renderTabBar) fn.renderTabBar();
+  scheduleSave();
 }
 
 // ---- View Control ----
@@ -339,7 +393,7 @@ export function confirmScale() {
 
   for (var i = 0; i < S.shapes.length; i++) {
     if (S.shapes[i].closed) {
-      worker.postMessage({ type: 'calcArea', id: S.shapes[i].id, points: S.shapes[i].points });
+      worker.postMessage({ type: 'calcArea', id: S.shapes[i].id, points: S.shapes[i].points, tabIdx: S.currentTabIdx });
     }
   }
 
@@ -368,7 +422,7 @@ export function closePoly() {
   S.selId = id;
   S.polyPts = [];
 
-  worker.postMessage({ type: 'calcArea', id: id, points: S.shapes[S.shapes.length - 1].points });
+  worker.postMessage({ type: 'calcArea', id: id, points: S.shapes[S.shapes.length - 1].points, tabIdx: S.currentTabIdx });
   S.overlayDirty = true;
   updatePanel();
   setTool('idle');
@@ -393,7 +447,7 @@ export function finishFH() {
   S.selId = id;
 
   var eps = 2 / (S.view.zoom * S.view.fit);
-  worker.postMessage({ type: 'simplify', id: id, points: pts, epsilon: eps });
+  worker.postMessage({ type: 'simplify', id: id, points: pts, epsilon: eps, tabIdx: S.currentTabIdx });
 
   S.overlayDirty = true;
   updatePanel();

@@ -452,6 +452,102 @@
     }
     #auto-persp-popup button:hover { background: #1bc47a; }
 
+    /* ========== TAB BAR ========== */
+    #tab-bar {
+      display: flex;
+      align-items: flex-end;
+      background: #1e1e1e;
+      border-bottom: 1px solid #333;
+      overflow-x: auto;
+      flex-shrink: 0;
+      min-height: 28px;
+      padding: 0 4px;
+    }
+    #tab-bar::-webkit-scrollbar { height: 4px; }
+    #tab-bar::-webkit-scrollbar-track { background: #1e1e1e; }
+    #tab-bar::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+    .tab-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 6px 4px 12px;
+      cursor: pointer;
+      border-radius: 3px 3px 0 0;
+      background: #252525;
+      color: #888;
+      white-space: nowrap;
+      font-size: 11px;
+      flex-shrink: 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      margin-right: 1px;
+      max-width: 160px;
+      user-select: none;
+    }
+    .tab-item:hover { background: #2e2e2e; color: #bbb; }
+    .tab-item.active { background: #2a2a2a; color: #e0e0e0; border-color: #444; border-bottom: 2px solid #FF6B35; }
+    .tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .tab-close {
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .tab-close:hover { color: #ff4444; }
+    #btn-new-tab {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 2px 10px;
+      line-height: 1;
+      align-self: center;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    #btn-new-tab:hover { color: #ccc; background: #333; }
+
+    /* ========== PDF MODAL ========== */
+    #pdf-modal {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 300;
+      background: #2a2a2a;
+      border: 1px solid #FF6B35;
+      border-radius: 6px;
+      padding: 18px 20px;
+      min-width: 290px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+      font-size: 13px;
+      color: #ccc;
+    }
+    #pdf-modal label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #pdf-modal input[type=text] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 5px 8px;
+      width: 100%;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    #pdf-modal input:focus { outline: none; border-color: #FF6B35; }
+    .pdf-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    #pdf-modal-cancel { background: #444; color: #ccc; border: none; padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px; }
+    #pdf-modal-cancel:hover { background: #555; }
+    #pdf-modal-load { background: #FF6B35; color: #fff; border: none; padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; }
+    #pdf-modal-load:hover { background: #e55a20; }
+
     /* ========== MISC ========== */
     kbd {
       background: #333;
@@ -469,7 +565,9 @@
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
-    <button class="tb-btn" id="btn-open" title="Open image file">Open</button>
+    <button class="tb-btn" id="btn-open" title="Open image, PDF, or project [Ctrl+O]">Open</button>
+    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc">Save</button>
+    <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Set scale [1]">Scale</button>
     <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon lasso [2]">Polygon</button>
@@ -507,6 +605,9 @@
       <span id="scale-display">No scale</span>
     </div>
   </div>
+
+  <!-- ========== TAB BAR ========== -->
+  <div id="tab-bar"></div>
 
   <!-- ========== MAIN CONTENT ========== -->
   <div id="main">
@@ -589,7 +690,17 @@
   </div>
 </div>
 
-<input type="file" id="file-input" accept="image/*" style="display:none">
+<input type="file" id="file-input" accept="image/*,.pdf,.arcalc" style="display:none">
+
+<div id="pdf-modal">
+  <div style="margin-bottom:10px">PDF loaded &mdash; <span id="pdf-page-count"></span></div>
+  <label>Pages to load (e.g. 1-5, 1,3,5 or leave blank for all):</label>
+  <input type="text" id="pdf-page-range" placeholder="all">
+  <div class="pdf-modal-actions">
+    <button id="pdf-modal-cancel">Cancel</button>
+    <button id="pdf-modal-load">Load Pages</button>
+  </div>
+</div>
 
 <script type="module" src="js/app.js"></script>
 

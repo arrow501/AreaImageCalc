@@ -90,13 +90,19 @@ export var S = {
   touchIsPan: false,
   touchPinchDist: 0,
   touchPinchMid: null,
-  touchPanSt: null
+  touchPanSt: null,
+
+  // Tabs
+  tabs: [],          // array of tab state objects
+  currentTabIdx: -1, // index of active tab
+  tabN: 0            // tab ID counter (monotonically increasing)
 };
 
 // Constants
 export var COLORS = ['#FF6B35', '#4A9EFF', '#22D88E', '#FF4081', '#FFD740', '#7C4DFF'];
 export var SAVE_KEY = 'areaCalcState';
-export var SAVE_VER = 1;
+export var SAVE_VER = 3;
+export var SAVE_VER_LEGACY = 2;
 
 // DOM references (module scripts are deferred, so DOM exists)
 export var $wrap = $('#canvas-wrap');

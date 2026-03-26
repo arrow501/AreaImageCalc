@@ -7,6 +7,12 @@ import {
   updatePanel, scheduleSave, status, updateFilters
 } from './tools.js';
 
+// Expose slider sync for tabs.js to call on tab switch
+fn.syncSliders = function() {
+  setSlider('bright', S.brightness);
+  setSlider('contrast', S.contrast);
+};
+
 // ---- Coordinate Helpers ----
 
 function canvasXY(e) {
@@ -218,7 +224,7 @@ $(document).on('mouseup', function(e) {
   }
 
   if (S.dragPt && S.dragShape) {
-    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points });
+    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
@@ -480,7 +486,7 @@ function touchEnd(e) {
   }
 
   if (S.dragPt && S.dragShape) {
-    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points });
+    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
@@ -593,6 +599,21 @@ $(document).on('keyup', function(e) {
   }
 });
 
+// ---- File Dispatch ----
+
+function dispatchFile(file) {
+  if (!file) return;
+  var name = file.name || '';
+  var ext = name.split('.').pop().toLowerCase();
+  if (ext === 'pdf' || file.type === 'application/pdf') {
+    if (fn.loadPdf) fn.loadPdf(file);
+  } else if (ext === 'arcalc') {
+    if (fn.importProject) fn.importProject(file);
+  } else if (file.type.indexOf('image/') === 0) {
+    loadImg(file);
+  }
+}
+
 // ---- File Input / Drag & Drop / Paste ----
 
 $('#canvas-wrap')
@@ -605,7 +626,7 @@ $('#canvas-wrap')
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
       var f = e.originalEvent.dataTransfer.files;
-      if (f.length) loadImg(f[0]);
+      if (f.length) dispatchFile(f[0]);
     }
   });
 
@@ -624,7 +645,7 @@ $('#btn-open').on('click', function() {
 });
 
 $('#file-input').on('change', function() {
-  if (this.files.length) loadImg(this.files[0]);
+  if (this.files.length) dispatchFile(this.files[0]);
   this.value = '';
 });
 
@@ -910,6 +931,37 @@ $('.sl-val').each(function() {
   $inp.on('dblclick', function() {
     setSlider(name, 0);
   });
+});
+
+// ---- Tab Bar Events ----
+
+$(document).on('click', '.tab-item', function(e) {
+  if ($(e.target).hasClass('tab-close') || $(e.target).closest('.tab-close').length) return;
+  var idx = parseInt($(this).data('idx'), 10);
+  if (idx !== S.currentTabIdx && fn.switchToTab) fn.switchToTab(idx);
+});
+
+$(document).on('click', '.tab-close', function(e) {
+  e.stopPropagation();
+  var idx = parseInt($(this).data('idx'), 10);
+  if (fn.closeTab) fn.closeTab(idx);
+});
+
+$(document).on('click', '#btn-new-tab', function() {
+  if (fn.createTab && fn.switchToTab) {
+    var idx = fn.createTab('Untitled', null, null);
+    fn.switchToTab(idx);
+  }
+});
+
+// ---- Export Buttons ----
+
+$('#btn-export-project').on('click', function() {
+  if (fn.exportProject) fn.exportProject();
+});
+
+$('#btn-export-measurements').on('click', function() {
+  if (fn.exportMeasurements) fn.exportMeasurements();
 });
 
 // Initialize sliders

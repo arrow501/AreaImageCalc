@@ -96,7 +96,8 @@ export function pip(p, pts) {
 }
 
 export function hasWork() {
-  return S.img && (S.shapes.length > 0 || S.scaleLine);
+  if (S.img && (S.shapes.length > 0 || S.scaleLine)) return true;
+  return S.tabs.some(function(t) { return t.imgDataUrl && (t.shapes.length > 0 || t.scaleLine); });
 }
 
 export function dot(ctx, x, y, r, c) {
