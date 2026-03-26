@@ -693,7 +693,7 @@ function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
 }
 
 $('#btn-toggle-panel').on('click', function() {
-  togglePanel('#shapes-panel', $(this), '&raquo;', '&laquo;');
+  togglePanel('#shapes-panel', $(this), 'Shapes &#9656;', 'Shapes &#9664;');
 });
 
 $('#btn-toggle-tabs').on('click', function() {
