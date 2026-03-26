@@ -1,6 +1,7 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, findNearestPt, dot, roundRect } from './geometry.js';
-import { drawPerspOverlay, drawAutoPerspOverlay } from './perspective.js';
+import { drawPerspOverlay } from './perspective.js';
+import './squareCalib.js';   // registers fn.enterSqCalib / switchPerspMode etc.
 
 export function resize() {
   var w = $wrap.width(), h = $wrap.height();
@@ -120,26 +121,48 @@ function drawOverlay() {
     }
   }
 
-  // Active polygon drawing
-  if (S.tool === 'polygon' && S.polyPts.length > 0) {
-    var c = COLORS[S.colorIdx % COLORS.length];
+  // Active polygon drawing (also used by squarecal tool)
+  if ((S.tool === 'polygon' || S.tool === 'squarecal') && S.polyPts.length > 0) {
+    var isSqCal = S.tool === 'squarecal';
+    var c = isSqCal ? '#22D88E' : COLORS[S.colorIdx % COLORS.length];
     var pts = S.polyPts;
+    var done = isSqCal && pts.length === 4;  // quad complete — draw closed
 
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
-    for (var i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i].x, pts[i].y);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    if (done) {
+      ctx.closePath();
+    } else {
+      ctx.lineTo(S.mix, S.miy);
     }
-    ctx.lineTo(S.mix, S.miy);
     ctx.strokeStyle = c;
     ctx.lineWidth = 1.5 * inv;
+    ctx.setLineDash(isSqCal ? [6 * inv, 4 * inv] : []);
     ctx.stroke();
+    ctx.setLineDash([]);
 
+    // Corner dots — numbered for squarecal, plain for polygon
+    var dotR = isSqCal ? 6 * inv : 4 * inv;
     for (var i = 0; i < pts.length; i++) {
-      dot(ctx, pts[i].x, pts[i].y, 4 * inv, c);
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = c;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5 * inv;
+      ctx.stroke();
+      if (isSqCal) {
+        ctx.font = '600 ' + (9 * inv) + 'px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillText(i + 1, pts[i].x, pts[i].y);
+      }
     }
 
-    if (pts.length >= 3) {
+    // Polygon: show close-hint when hovering near first point
+    if (!isSqCal && pts.length >= 3) {
       var fp = i2s(pts[0].x, pts[0].y);
       var d = Math.hypot(S.mx - fp.x, S.my - fp.y);
       if (d < 15) {
@@ -356,8 +379,7 @@ function drawOverlay() {
   // Perspective mode overlay
   drawPerspOverlay(ctx);
 
-  // Auto perspective mode overlay
-  drawAutoPerspOverlay(ctx);
+  // (squarecal corners rendered by the polygon drawing block above)
 
   ctx.restore();
 }

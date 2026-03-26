@@ -190,7 +190,7 @@ export function loadImg(file, skipConfirm) {
 
 function _loadIntoCurrentTab(ni, dataUrl, filename) {
   if (S.perspActive) fn.cancelPerspective();
-  if (S.autoPerspActive) fn.cancelAutoPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
 
   S.img = ni;
   S.view.iw = ni.naturalWidth;
@@ -309,7 +309,7 @@ export function setTool(t) {
 
   $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing cursor-move');
 
-  if (t === 'scale' || t === 'polygon' || t === 'freehand') {
+  if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal') {
     $('body').addClass('cursor-crosshair');
   }
   if (t === 'edit') {
@@ -331,6 +331,9 @@ export function setTool(t) {
       break;
     case 'edit':
       status('Drag control points to edit shapes. ESC to exit.');
+      break;
+    case 'squarecal':
+      status('Click 4 corners of a known square. Drag to adjust. Enter side length and Apply.');
       break;
   }
 

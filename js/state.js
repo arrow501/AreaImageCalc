@@ -76,14 +76,7 @@ export var S = {
   perspDragIdx: -1,
   perspDragOffset: null,
 
-  // Auto perspective correction
-  autoPerspActive: false,
-  autoPerspSamples: [],      // [{p1:{x,y}, p2:{x,y}, dist:Number, unit:String}]
-  autoPerspState: 0,          // 0=idle, 1=waiting for p2, 2=popup shown
-  autoPerspP1: null,
-  autoPerspP2: null,
-  autoPerspPreviewH: null,    // computed homography for preview
-  autoPerspPreviewInv: null,  // inverse for rendering
+  // (Square calibration uses S.tool === 'squarecal' + S.polyPts — no separate state)
 
   // Touch
   touchId: null,

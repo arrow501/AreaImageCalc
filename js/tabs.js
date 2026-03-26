@@ -39,7 +39,7 @@ export function applyTabToState(idx) {
   if (!tab) return;
 
   if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
-  if (S.autoPerspActive && fn.cancelAutoPerspective) fn.cancelAutoPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
 
   S.imgDataUrl = tab.imgDataUrl;
   S.img = tab.img;
@@ -78,13 +78,6 @@ export function applyTabToState(idx) {
   S.isPan = false;
   S.panSt = null;
   S.spaceHeld = false;
-  S.autoPerspActive = false;
-  S.autoPerspSamples = [];
-  S.autoPerspState = 0;
-  S.autoPerspP1 = null;
-  S.autoPerspP2 = null;
-  S.autoPerspPreviewH = null;
-  S.autoPerspPreviewInv = null;
   S.touchId = null;
   S.touchIsPan = false;
   S.FH_MIN_DIST = (S.view.iw && S.view.ih) ? Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5) : 0;
