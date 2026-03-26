@@ -1,0 +1,125 @@
+import { S, COLORS } from './state.js';
+
+export function findShape(id) {
+  for (var i = 0; i < S.shapes.length; i++) {
+    if (S.shapes[i].id === id) return S.shapes[i];
+  }
+  return null;
+}
+
+export function nextColor() {
+  return COLORS[S.colorIdx++ % COLORS.length];
+}
+
+export function s2i(sx, sy) {
+  var s = S.view.zoom * S.view.fit;
+  return { x: (sx - S.view.ox) / s, y: (sy - S.view.oy) / s };
+}
+
+export function i2s(ix, iy) {
+  var s = S.view.zoom * S.view.fit;
+  return { x: ix * s + S.view.ox, y: iy * s + S.view.oy };
+}
+
+export function centroid(pts) {
+  var cx = 0, cy = 0;
+  for (var i = 0; i < pts.length; i++) {
+    cx += pts[i].x;
+    cy += pts[i].y;
+  }
+  return { x: cx / pts.length, y: cy / pts.length };
+}
+
+export function fmtArea(a) {
+  if (S.scalePPU > 0) {
+    var u = a / (S.scalePPU * S.scalePPU);
+    if (u >= 1e6) return (u / 1e6).toFixed(2) + ' ' + S.scaleUnit + '\u00b2(M)';
+    if (u >= 1e3) return u.toFixed(1) + ' ' + S.scaleUnit + '\u00b2';
+    if (u >= 1)   return u.toFixed(2) + ' ' + S.scaleUnit + '\u00b2';
+    return u.toFixed(4) + ' ' + S.scaleUnit + '\u00b2';
+  }
+  return a.toFixed(0) + ' px\u00b2';
+}
+
+export function fmtPerim(p) {
+  if (S.scalePPU > 0) {
+    var u = p / S.scalePPU;
+    if (u >= 1e3) return u.toFixed(1) + ' ' + S.scaleUnit;
+    if (u >= 1)   return u.toFixed(2) + ' ' + S.scaleUnit;
+    return u.toFixed(4) + ' ' + S.scaleUnit;
+  }
+  return p.toFixed(0) + ' px';
+}
+
+export function fmtLen(px) {
+  if (S.scalePPU > 0) {
+    var u = px / S.scalePPU;
+    if (u >= 100) return u.toFixed(1) + S.scaleUnit;
+    if (u >= 1)   return u.toFixed(2) + S.scaleUnit;
+    return u.toFixed(3) + S.scaleUnit;
+  }
+  return Math.round(px) + 'px';
+}
+
+export function findNearestPt(ip, thr) {
+  var best = Infinity, sh = null, idx = -1;
+  for (var i = 0; i < S.shapes.length; i++) {
+    var s = S.shapes[i];
+    if (!s.closed) continue;
+    for (var j = 0; j < s.points.length; j++) {
+      var p = s.points[j];
+      var d = Math.hypot(p.x - ip.x, p.y - ip.y);
+      if (d < best) { best = d; sh = s; idx = j; }
+    }
+  }
+  if (best <= thr) return { shape: sh, idx: idx, dist: best };
+  return null;
+}
+
+export function distSeg(p, a, b) {
+  var dx = b.x - a.x, dy = b.y - a.y;
+  var l2 = dx * dx + dy * dy;
+  if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  var t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+export function pip(p, pts) {
+  var inside = false;
+  for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    if ((pts[i].y > p.y) !== (pts[j].y > p.y) &&
+        p.x < (pts[j].x - pts[i].x) * (p.y - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+export function hasWork() {
+  if (S.img && (S.shapes.length > 0 || S.scaleLine)) return true;
+  return S.tabs.some(function(t) { return t.imgDataUrl && (t.shapes.length > 0 || t.scaleLine); });
+}
+
+export function dot(ctx, x, y, r, c) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = c;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = r * 0.3;
+  ctx.stroke();
+}
+
+export function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
