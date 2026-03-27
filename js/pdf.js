@@ -82,17 +82,21 @@ export function renderPdfTabPage(tabIdx) {
       return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise.then(function() {
         // Kick off WebP encode while canvas is still in scope
         tab.webpPending = true;
-        createImageBitmap(canvas).then(function(bitmap) {
-          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
-        }).catch(function() {
-          // createImageBitmap unavailable — try CF fallback with canvas blob
-          if (fn.cfEncode) {
-            new Promise(function(resolve) { canvas.toBlob(resolve, 'image/png'); })
-              .then(function(blob) { blob ? fn.cfEncode(tab, blob) : (tab.webpPending = false); });
-          } else {
-            tab.webpPending = false;
-          }
-        });
+        if (fn.getWebpMode && fn.getWebpMode() === 'remote') {
+          new Promise(function(resolve) { canvas.toBlob(resolve, 'image/png'); })
+            .then(function(blob) { blob ? fn.cfEncode(tab, blob) : (tab.webpPending = false); });
+        } else {
+          createImageBitmap(canvas).then(function(bitmap) {
+            imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+          }).catch(function() {
+            if (fn.cfEncode) {
+              new Promise(function(resolve) { canvas.toBlob(resolve, 'image/png'); })
+                .then(function(blob) { blob ? fn.cfEncode(tab, blob) : (tab.webpPending = false); });
+            } else {
+              tab.webpPending = false;
+            }
+          });
+        }
         return canvas.toDataURL('image/png');
       });
     }).then(function(dataUrl) {

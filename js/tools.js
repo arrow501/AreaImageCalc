@@ -11,6 +11,8 @@ fn.updateScaleDisp = updateScaleDisp;
 fn.updateZoomDisp = updateZoomDisp;
 fn.updateFilters = updateFilters;
 fn.fitView = fitView;
+fn.getWebpMode = getWebpMode;
+fn.setWebpMode = setWebpMode;
 
 // Worker message handler
 worker.onmessage = function(e) {
@@ -90,6 +92,12 @@ function _cfEncode(tab, source) {
 }
 fn.cfEncode = _cfEncode; // exposed for pdf.js via fn
 
+// ---- WebP Mode Preference ----
+
+var WEBP_MODE_KEY = 'areaCalcWebpMode';
+export function getWebpMode() { return localStorage.getItem(WEBP_MODE_KEY) || 'local'; }
+export function setWebpMode(m) { localStorage.setItem(WEBP_MODE_KEY, m); }
+
 imgWorker.onmessage = function(e) {
   var d = e.data;
   var tab = tabForId(d.id);
@@ -117,8 +125,10 @@ imgWorker.onmessage = function(e) {
 export function loadImg(file, skipConfirm) {
   if (!file || file.type.indexOf('image/') !== 0) return;
 
-  // Track B: start decoding the bitmap immediately (runs in parallel with FileReader)
-  var bitmapPromise = (typeof createImageBitmap === 'function')
+  var remote = getWebpMode() === 'remote';
+
+  // Track B: only decode bitmap for local mode — skip entirely for remote
+  var bitmapPromise = (!remote && typeof createImageBitmap === 'function')
     ? createImageBitmap(file).catch(function() { return null; })
     : Promise.resolve(null);
 
@@ -141,19 +151,24 @@ export function loadImg(file, skipConfirm) {
         tab = S.tabs[S.currentTabIdx];
       }
 
-      // Kick off background WebP encode once we know which tab this image belongs to
       if (tab) {
         tab.webpPending = true;
-        tab._srcFile = file; // held until worker succeeds or CF fallback completes
-        bitmapPromise.then(function(bitmap) {
-          if (!bitmap) {
-            // createImageBitmap unavailable — go straight to CF fallback
-            var f = tab._srcFile; tab._srcFile = null;
-            if (f) _cfEncode(tab, f); else tab.webpPending = false;
-            return;
-          }
-          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
-        });
+        tab._srcFile = file;
+        if (remote) {
+          // Remote mode: send directly to CF, skip worker entirely
+          var f = tab._srcFile; tab._srcFile = null;
+          _cfEncode(tab, f);
+        } else {
+          bitmapPromise.then(function(bitmap) {
+            if (!bitmap) {
+              // createImageBitmap unavailable — fall back to CF
+              var f2 = tab._srcFile; tab._srcFile = null;
+              if (f2) _cfEncode(tab, f2); else tab.webpPending = false;
+              return;
+            }
+            imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+          });
+        }
       }
     };
 

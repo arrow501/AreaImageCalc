@@ -4,7 +4,7 @@ import { resize } from './render.js';
 import {
   setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
   loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, status, updateFilters
+  updatePanel, status, updateFilters, getWebpMode, setWebpMode
 } from './tools.js';
 import { scheduleSave } from './storage.js';
 
@@ -929,6 +929,16 @@ $('#btn-export-measurements').on('click', function() {
   if (fn.exportMeasurements) fn.exportMeasurements();
 });
 
+$('#btn-webp-mode').on('click', function() {
+  var next = getWebpMode() === 'local' ? 'remote' : 'local';
+  setWebpMode(next);
+  $(this).text(next === 'remote' ? 'Remote' : 'Local').toggleClass('active', next === 'remote');
+});
+
 // Initialize sliders
 setSlider('bright', 0);
 setSlider('contrast', 0);
+
+// Initialize WebP mode button
+$('#btn-webp-mode').text(getWebpMode() === 'remote' ? 'Remote' : 'Local')
+                   .toggleClass('active', getWebpMode() === 'remote');
