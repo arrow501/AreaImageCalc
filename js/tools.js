@@ -71,12 +71,32 @@ function bufferToDataUrl(buffer, mime) {
   return 'data:' + mime + ';base64,' + btoa(chunks.join(''));
 }
 
+// CF Pages Function fallback — called only when OffscreenCanvas is unavailable.
+// source: File | Blob
+function _cfEncode(tab, source) {
+  fetch('/api/encode-webp', { method: 'POST', body: source })
+    .then(function(res) { return res.ok ? res.arrayBuffer() : Promise.reject(res.status); })
+    .then(function(buf) {
+      var t = tabForId(tab.tabId); // re-lookup in case tab state changed
+      if (!t) return;
+      t.imgWebpUrl = bufferToDataUrl(buf, 'image/webp');
+      t.webpPending = false;
+      scheduleSave();
+    })
+    .catch(function() {
+      var t = tabForId(tab.tabId);
+      if (t) t.webpPending = false;
+    });
+}
+fn.cfEncode = _cfEncode; // exposed for pdf.js via fn
+
 imgWorker.onmessage = function(e) {
   var d = e.data;
   var tab = tabForId(d.id);
 
   if (d.type === 'webpResult') {
     if (!tab) return;
+    tab._srcFile = null; // release original file reference
     tab.imgWebpUrl = bufferToDataUrl(d.buffer, 'image/webp');
     tab.webpPending = false;
     scheduleSave();
@@ -84,18 +104,10 @@ imgWorker.onmessage = function(e) {
   } else if (d.type === 'webpError') {
     if (!tab) return;
     tab.webpPending = false;
-    // OffscreenCanvas not supported — fall back to main-thread canvas encode, only on this signal
-    if (d.fallback && tab.img) {
-      var fbCvs = document.createElement('canvas');
-      fbCvs.width = tab.img.naturalWidth;
-      fbCvs.height = tab.img.naturalHeight;
-      fbCvs.getContext('2d').drawImage(tab.img, 0, 0);
-      var webpUrl = fbCvs.toDataURL('image/webp', 0.35);
-      // Only store if the browser actually produced WebP (not a PNG fallback)
-      if (webpUrl.startsWith('data:image/webp')) {
-        tab.imgWebpUrl = webpUrl;
-        scheduleSave();
-      }
+    if (d.fallback) {
+      var f = tab._srcFile;
+      tab._srcFile = null;
+      if (f) _cfEncode(tab, f);
     }
   }
 };
@@ -132,8 +144,14 @@ export function loadImg(file, skipConfirm) {
       // Kick off background WebP encode once we know which tab this image belongs to
       if (tab) {
         tab.webpPending = true;
+        tab._srcFile = file; // held until worker succeeds or CF fallback completes
         bitmapPromise.then(function(bitmap) {
-          if (!bitmap) { tab.webpPending = false; return; }
+          if (!bitmap) {
+            // createImageBitmap unavailable — go straight to CF fallback
+            var f = tab._srcFile; tab._srcFile = null;
+            if (f) _cfEncode(tab, f); else tab.webpPending = false;
+            return;
+          }
           imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
         });
       }
