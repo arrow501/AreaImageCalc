@@ -932,7 +932,7 @@ $('#btn-export-measurements').on('click', function() {
 $('#btn-webp-mode').on('click', function() {
   var next = getWebpMode() === 'local' ? 'remote' : 'local';
   setWebpMode(next);
-  $(this).text(next === 'remote' ? 'Remote' : 'Local').toggleClass('active', next === 'remote');
+  $(this).text(next === 'remote' ? 'WebP: Remote' : 'WebP: Local').toggleClass('active', next === 'remote');
 });
 
 // Initialize sliders
@@ -940,5 +940,7 @@ setSlider('bright', 0);
 setSlider('contrast', 0);
 
 // Initialize WebP mode button
-$('#btn-webp-mode').text(getWebpMode() === 'remote' ? 'Remote' : 'Local')
-                   .toggleClass('active', getWebpMode() === 'remote');
+(function() {
+  var m = getWebpMode();
+  $('#btn-webp-mode').text(m === 'remote' ? 'WebP: Remote' : 'WebP: Local').toggleClass('active', m === 'remote');
+}());
