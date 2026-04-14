@@ -4,7 +4,7 @@ import { resize } from './render.js';
 import {
   setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
   loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, status, updateFilters
+  updatePanel, status, updateFilters, rotateImage
 } from './tools.js';
 import { scheduleSave } from './storage.js';
 
@@ -927,6 +927,57 @@ $('#btn-export-project').on('click', function() {
 
 $('#btn-export-measurements').on('click', function() {
   if (fn.exportMeasurements) fn.exportMeasurements();
+});
+
+// ---- Rotate Buttons ----
+
+$('#btn-rotate-ccw').on('click', function() {
+  if (!S.img) return;
+  rotateImage(-90);
+});
+
+$('#btn-rotate-cw').on('click', function() {
+  if (!S.img) return;
+  rotateImage(90);
+});
+
+$('#btn-rotate-custom').on('click', function() {
+  if (!S.img) return;
+  $('#rotate-angle-input').val('');
+  $('#rotate-popup').show();
+  $('#rotate-angle-input').focus();
+  status('Enter rotation angle and press Apply');
+});
+
+function applyCustomRotate() {
+  var val = parseFloat($('#rotate-angle-input').val());
+  if (isNaN(val)) { status('Enter a valid angle'); return; }
+  if (val === 0) { $('#rotate-popup').hide(); return; }
+  $('#rotate-popup').hide();
+  rotateImage(val);
+}
+
+$('#rotate-apply').on('click', applyCustomRotate);
+
+$('#rotate-angle-input').on('keydown', function(e) {
+  if (e.key === 'Enter') applyCustomRotate();
+  if (e.key === 'Escape') { $('#rotate-popup').hide(); status('Rotation cancelled'); }
+});
+
+$('#rotate-cancel-btn').on('click', function() {
+  $('#rotate-popup').hide();
+  status('Rotation cancelled');
+});
+
+// Quick 90° buttons inside the popup
+$('#rotate-ccw-small').on('click', function() {
+  $('#rotate-popup').hide();
+  rotateImage(-90);
+});
+
+$('#rotate-cw-small').on('click', function() {
+  $('#rotate-popup').hide();
+  rotateImage(90);
 });
 
 // Initialize sliders
