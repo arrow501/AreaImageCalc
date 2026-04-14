@@ -650,8 +650,8 @@ $('#canvas-wrap')
     e.preventDefault();
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
-      var f = e.originalEvent.dataTransfer.files;
-      if (f.length) dispatchFile(f[0]);
+      var files = e.originalEvent.dataTransfer.files;
+      for (var i = 0; i < files.length; i++) dispatchFile(files[i]);
     }
   });
 
@@ -665,12 +665,50 @@ $(document).on('paste', function(e) {
   }
 });
 
+// ---- Shared confirm modal (same style as storage-modal) ----
+
+function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
+  var $overlay = $('<div class="storage-modal-overlay">')
+    .append(
+      $('<div class="storage-modal">')
+        .append($('<p>').html(htmlMessage))
+        .append(
+          $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
+            $overlay.remove();
+            onConfirm();
+          })
+        )
+        .append(
+          $('<button>').text('Cancel').on('click', function() {
+            $overlay.remove();
+          })
+        )
+    )
+    .appendTo('body');
+}
+
+// ---- New button ----
+
+$('#btn-new').on('click', function() {
+  var hasContent = !!(S.img || S.shapes.length);
+  if (hasContent) {
+    showConfirmModal(
+      '<strong>Clear this tab?</strong><br>The current image and all shapes will be removed.',
+      'Clear Tab',
+      function() { if (fn.newCurrentTab) fn.newCurrentTab(); }
+    );
+  } else {
+    if (fn.newCurrentTab) fn.newCurrentTab();
+  }
+});
+
 $('#btn-open').on('click', function() {
   $('#file-input').click();
 });
 
 $('#file-input').on('change', function() {
-  if (this.files.length) dispatchFile(this.files[0]);
+  var files = this.files;
+  for (var i = 0; i < files.length; i++) dispatchFile(files[i]);
   this.value = '';
 });
 

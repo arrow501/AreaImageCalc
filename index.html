@@ -566,6 +566,7 @@
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
+    <button class="tb-btn" id="btn-new" title="New blank tab">New</button>
     <button class="tb-btn" id="btn-open" title="Open image, PDF, or project [Ctrl+O]">Open</button>
     <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc">Save</button>
     <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
@@ -705,7 +706,7 @@
   </div>
 </div>
 
-<input type="file" id="file-input" accept="image/*,.pdf,.arcalc" style="display:none">
+<input type="file" id="file-input" accept="image/*,.pdf,.arcalc" multiple style="display:none">
 
 <div id="pdf-modal">
   <div style="margin-bottom:10px">PDF loaded &mdash; <span id="pdf-page-count"></span></div>
