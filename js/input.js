@@ -624,18 +624,49 @@ $(document).on('keyup', function(e) {
   }
 });
 
-// ---- File Dispatch ----
+// ---- Serial File Queue ----
+// PDFs need user interaction (page selector modal) before the next file
+// can safely be loaded. Images are dispatched immediately and load async.
 
-function dispatchFile(file) {
+var _fileQueue = [];
+var _fileQueueBusy = false;
+
+function queueFile(file) {
   if (!file) return;
+  _fileQueue.push(file);
+  _drainFileQueue();
+}
+
+function _drainFileQueue() {
+  if (_fileQueueBusy || _fileQueue.length === 0) return;
+  _fileQueueBusy = true;
+  var file = _fileQueue.shift();
   var name = file.name || '';
   var ext = name.split('.').pop().toLowerCase();
+
   if (ext === 'pdf' || file.type === 'application/pdf') {
-    if (fn.loadPdf) fn.loadPdf(file);
+    // PDF: pause the queue until the page-selector modal is dismissed
+    if (fn.loadPdf) {
+      fn.loadPdf(file, function() {
+        _fileQueueBusy = false;
+        _drainFileQueue();
+      });
+    } else {
+      _fileQueueBusy = false;
+      _drainFileQueue();
+    }
   } else if (ext === 'arcalc') {
     if (fn.importProject) fn.importProject(file);
+    _fileQueueBusy = false;
+    _drainFileQueue();
   } else if (file.type.indexOf('image/') === 0) {
+    // Images load async without blocking; advance the queue immediately
     loadImg(file);
+    _fileQueueBusy = false;
+    _drainFileQueue();
+  } else {
+    _fileQueueBusy = false;
+    _drainFileQueue();
   }
 }
 
@@ -651,7 +682,7 @@ $('#canvas-wrap')
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
       var files = e.originalEvent.dataTransfer.files;
-      for (var i = 0; i < files.length; i++) dispatchFile(files[i]);
+      for (var i = 0; i < files.length; i++) queueFile(files[i]);
     }
   });
 
@@ -659,7 +690,7 @@ $(document).on('paste', function(e) {
   var items = e.originalEvent.clipboardData.items;
   for (var i = 0; i < items.length; i++) {
     if (items[i].type.indexOf('image/') === 0) {
-      loadImg(items[i].getAsFile());
+      queueFile(items[i].getAsFile());
       return;
     }
   }
@@ -687,18 +718,40 @@ function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
     .appendTo('body');
 }
 
-// ---- New button ----
+// ---- New button (new project — clears all tabs) ----
+
+function doNewProject() {
+  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  cancelTool();
+
+  S.tabs.length = 0;
+  S.currentTabIdx = -1;
+  if (fn.createTab && fn.switchToTab) {
+    fn.switchToTab(fn.createTab('Untitled', null, null));
+  }
+  scheduleSave();
+}
 
 $('#btn-new').on('click', function() {
+  // Check live current-tab state plus every other tab's persisted data
   var hasContent = !!(S.img || S.shapes.length);
+  if (!hasContent) {
+    for (var i = 0; i < S.tabs.length; i++) {
+      if (i === S.currentTabIdx) continue;
+      var t = S.tabs[i];
+      if (t.img || t.imgDataUrl || (t.shapes && t.shapes.length)) { hasContent = true; break; }
+    }
+  }
+
   if (hasContent) {
     showConfirmModal(
-      '<strong>Clear this tab?</strong><br>The current image and all shapes will be removed.',
-      'Clear Tab',
-      function() { if (fn.newCurrentTab) fn.newCurrentTab(); }
+      '<strong>Start a new project?</strong><br>All tabs, images, and shapes will be cleared.',
+      'New Project',
+      doNewProject
     );
   } else {
-    if (fn.newCurrentTab) fn.newCurrentTab();
+    doNewProject();
   }
 });
 
@@ -708,7 +761,7 @@ $('#btn-open').on('click', function() {
 
 $('#file-input').on('change', function() {
   var files = this.files;
-  for (var i = 0; i < files.length; i++) dispatchFile(files[i]);
+  for (var i = 0; i < files.length; i++) queueFile(files[i]);
   this.value = '';
 });
 
