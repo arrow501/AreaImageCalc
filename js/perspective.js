@@ -1,4 +1,4 @@
-import { S, fn, worker, iCvs, oCvs } from './state.js';
+import { S, fn, worker, imgWorker, iCvs, oCvs } from './state.js';
 import { i2s, centroid } from './geometry.js';
 
 // Register manual perspective functions on fn
@@ -345,6 +345,23 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
     S.imageDirty = S.overlayDirty = true;
     fn.fitView();
     fn.updatePanel();
+
+    // Clear stale pre-transform WebP and re-encode the corrected image.
+    // Without this, serializeTab() would save the old WebP while shapes
+    // are already in post-transform coordinates, corrupting reloaded state.
+    var tab = S.tabs[S.currentTabIdx];
+    if (tab) {
+      tab.imgWebpUrl = null;
+      tab.webpPending = true;
+      if (typeof createImageBitmap === 'function') {
+        createImageBitmap(tmpCvs).then(function(bitmap) {
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+        }).catch(function() { tab.webpPending = false; });
+      } else {
+        tab.webpPending = false;
+      }
+    }
+
     fn.scheduleSave();
 
     if (onComplete) onComplete();

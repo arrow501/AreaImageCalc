@@ -1,15 +1,12 @@
-import { S, fn } from './state.js';
-
-var SOFT_LIMIT = 5 * 1024 * 1024;
-var HARD_LIMIT = 10 * 1024 * 1024;
+import { S, fn, STORAGE_STORAGE_SOFT_LIMIT, STORAGE_STORAGE_HARD_LIMIT } from './state.js';
 
 function updateBadge(bytes) {
   $('#btn-export-project')
-    .toggleClass('storage-warn', bytes >= SOFT_LIMIT && bytes < HARD_LIMIT)
-    .toggleClass('storage-full', bytes >= HARD_LIMIT)
-    .attr('title', bytes >= HARD_LIMIT
+    .toggleClass('storage-warn', bytes >= STORAGE_STORAGE_SOFT_LIMIT && bytes < STORAGE_STORAGE_HARD_LIMIT)
+    .toggleClass('storage-full', bytes >= STORAGE_STORAGE_HARD_LIMIT)
+    .attr('title', bytes >= STORAGE_STORAGE_HARD_LIMIT
       ? 'Auto-save FULL — save your project to a file!'
-      : bytes >= SOFT_LIMIT
+      : bytes >= STORAGE_SOFT_LIMIT
         ? 'Auto-save limited — some tab images not saved (project too large)'
         : 'Save project as .arcalc');
 }
@@ -39,5 +36,5 @@ function showHardLimitDialog() {
 // storage.js fires this event after every save attempt
 $(document).on('storage:update', function(e, bytes) {
   updateBadge(bytes);
-  if (bytes >= HARD_LIMIT) showHardLimitDialog();
+  if (bytes >= STORAGE_HARD_LIMIT) showHardLimitDialog();
 });

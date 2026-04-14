@@ -312,7 +312,6 @@ export function cancelTool() {
   S.touchId = null;
   S.touchIsPan = false;
   $('#scale-popup').hide();
-  $('#auto-persp-popup').hide();
   S.overlayDirty = true;
 }
 
@@ -543,6 +542,23 @@ export function rotateImage(angleDeg) {
     S.imageDirty = S.overlayDirty = true;
     fitView();
     updatePanel();
+
+    // Clear stale pre-rotation WebP and re-encode the rotated image.
+    // Without this, serializeTab() would save the old WebP while shapes
+    // are already in post-rotation coordinates, corrupting reloaded state.
+    var tab = S.tabs[S.currentTabIdx];
+    if (tab) {
+      tab.imgWebpUrl = null;
+      tab.webpPending = true;
+      if (typeof createImageBitmap === 'function') {
+        createImageBitmap(cvs).then(function(bitmap) {
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+        }).catch(function() { tab.webpPending = false; });
+      } else {
+        tab.webpPending = false;
+      }
+    }
+
     scheduleSave();
 
     var absDeg = Math.abs(angleDeg % 360);

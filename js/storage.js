@@ -1,8 +1,5 @@
-import { S, fn, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY } from './state.js';
+import { S, fn, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_STORAGE_SOFT_LIMIT, STORAGE_STORAGE_HARD_LIMIT } from './state.js';
 import { serializeTab } from './tabs.js';
-
-var SOFT_LIMIT = 5 * 1024 * 1024;
-var HARD_LIMIT = 10 * 1024 * 1024;
 
 export function scheduleSave() {
   if (S.saveTimer) clearTimeout(S.saveTimer);
@@ -33,19 +30,19 @@ export function doSave() {
   var json = buildState(false, false);
   var bytes = new Blob([json]).size;
 
-  if (bytes > SOFT_LIMIT) {
+  if (bytes > STORAGE_SOFT_LIMIT) {
     json = buildState(true, false);
     bytes = new Blob([json]).size;
   }
 
-  if (bytes > HARD_LIMIT) {
+  if (bytes > STORAGE_HARD_LIMIT) {
     json = buildState(false, true);
     bytes = new Blob([json]).size;
   }
 
-  if (bytes > HARD_LIMIT) {
+  if (bytes > STORAGE_HARD_LIMIT) {
     // Cannot save — shapes-only state still exceeds the hard limit (extremely unlikely)
-    $(document).trigger('storage:update', [HARD_LIMIT]);
+    $(document).trigger('storage:update', [STORAGE_HARD_LIMIT]);
     return;
   }
 
@@ -54,7 +51,7 @@ export function doSave() {
     $(document).trigger('storage:update', [bytes]);
   } catch (e) {
     console.warn('Auto-save failed:', e);
-    $(document).trigger('storage:update', [HARD_LIMIT]);
+    $(document).trigger('storage:update', [STORAGE_HARD_LIMIT]);
   }
 }
 
