@@ -1,4 +1,4 @@
-import { S, fn, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_STORAGE_SOFT_LIMIT, STORAGE_STORAGE_HARD_LIMIT } from './state.js';
+import { S, fn, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
 import { serializeTab } from './tabs.js';
 
 export function scheduleSave() {
