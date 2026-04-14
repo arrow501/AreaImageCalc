@@ -4,7 +4,7 @@ import { resize } from './render.js';
 import {
   setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
   loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, status, updateFilters
+  updatePanel, status, updateFilters, rotateImage
 } from './tools.js';
 import { scheduleSave } from './storage.js';
 
@@ -624,18 +624,49 @@ $(document).on('keyup', function(e) {
   }
 });
 
-// ---- File Dispatch ----
+// ---- Serial File Queue ----
+// PDFs need user interaction (page selector modal) before the next file
+// can safely be loaded. Images are dispatched immediately and load async.
 
-function dispatchFile(file) {
+var _fileQueue = [];
+var _fileQueueBusy = false;
+
+function queueFile(file) {
   if (!file) return;
+  _fileQueue.push(file);
+  _drainFileQueue();
+}
+
+function _drainFileQueue() {
+  if (_fileQueueBusy || _fileQueue.length === 0) return;
+  _fileQueueBusy = true;
+  var file = _fileQueue.shift();
   var name = file.name || '';
   var ext = name.split('.').pop().toLowerCase();
+
   if (ext === 'pdf' || file.type === 'application/pdf') {
-    if (fn.loadPdf) fn.loadPdf(file);
+    // PDF: pause the queue until the page-selector modal is dismissed
+    if (fn.loadPdf) {
+      fn.loadPdf(file, function() {
+        _fileQueueBusy = false;
+        _drainFileQueue();
+      });
+    } else {
+      _fileQueueBusy = false;
+      _drainFileQueue();
+    }
   } else if (ext === 'arcalc') {
     if (fn.importProject) fn.importProject(file);
+    _fileQueueBusy = false;
+    _drainFileQueue();
   } else if (file.type.indexOf('image/') === 0) {
+    // Images load async without blocking; advance the queue immediately
     loadImg(file);
+    _fileQueueBusy = false;
+    _drainFileQueue();
+  } else {
+    _fileQueueBusy = false;
+    _drainFileQueue();
   }
 }
 
@@ -650,8 +681,8 @@ $('#canvas-wrap')
     e.preventDefault();
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
-      var f = e.originalEvent.dataTransfer.files;
-      if (f.length) dispatchFile(f[0]);
+      var files = e.originalEvent.dataTransfer.files;
+      for (var i = 0; i < files.length; i++) queueFile(files[i]);
     }
   });
 
@@ -659,9 +690,68 @@ $(document).on('paste', function(e) {
   var items = e.originalEvent.clipboardData.items;
   for (var i = 0; i < items.length; i++) {
     if (items[i].type.indexOf('image/') === 0) {
-      loadImg(items[i].getAsFile());
+      queueFile(items[i].getAsFile());
       return;
     }
+  }
+});
+
+// ---- Shared confirm modal (same style as storage-modal) ----
+
+function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
+  var $overlay = $('<div class="storage-modal-overlay">')
+    .append(
+      $('<div class="storage-modal">')
+        .append($('<p>').html(htmlMessage))
+        .append(
+          $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
+            $overlay.remove();
+            onConfirm();
+          })
+        )
+        .append(
+          $('<button>').text('Cancel').on('click', function() {
+            $overlay.remove();
+          })
+        )
+    )
+    .appendTo('body');
+}
+
+// ---- New button (new project — clears all tabs) ----
+
+function doNewProject() {
+  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  cancelTool();
+
+  S.tabs.length = 0;
+  S.currentTabIdx = -1;
+  if (fn.createTab && fn.switchToTab) {
+    fn.switchToTab(fn.createTab('Untitled', null, null));
+  }
+  scheduleSave();
+}
+
+$('#btn-new').on('click', function() {
+  // Check live current-tab state plus every other tab's persisted data
+  var hasContent = !!(S.img || S.shapes.length);
+  if (!hasContent) {
+    for (var i = 0; i < S.tabs.length; i++) {
+      if (i === S.currentTabIdx) continue;
+      var t = S.tabs[i];
+      if (t.img || t.imgDataUrl || (t.shapes && t.shapes.length)) { hasContent = true; break; }
+    }
+  }
+
+  if (hasContent) {
+    showConfirmModal(
+      '<strong>Start a new project?</strong><br>All tabs, images, and shapes will be cleared.',
+      'New Project',
+      doNewProject
+    );
+  } else {
+    doNewProject();
   }
 });
 
@@ -670,7 +760,8 @@ $('#btn-open').on('click', function() {
 });
 
 $('#file-input').on('change', function() {
-  if (this.files.length) dispatchFile(this.files[0]);
+  var files = this.files;
+  for (var i = 0; i < files.length; i++) queueFile(files[i]);
   this.value = '';
 });
 
@@ -927,6 +1018,57 @@ $('#btn-export-project').on('click', function() {
 
 $('#btn-export-measurements').on('click', function() {
   if (fn.exportMeasurements) fn.exportMeasurements();
+});
+
+// ---- Rotate Buttons ----
+
+$('#btn-rotate-ccw').on('click', function() {
+  if (!S.img) return;
+  rotateImage(-90);
+});
+
+$('#btn-rotate-cw').on('click', function() {
+  if (!S.img) return;
+  rotateImage(90);
+});
+
+$('#btn-rotate-custom').on('click', function() {
+  if (!S.img) return;
+  $('#rotate-angle-input').val('');
+  $('#rotate-popup').show();
+  $('#rotate-angle-input').focus();
+  status('Enter rotation angle and press Apply');
+});
+
+function applyCustomRotate() {
+  var val = parseFloat($('#rotate-angle-input').val());
+  if (isNaN(val)) { status('Enter a valid angle'); return; }
+  if (val === 0) { $('#rotate-popup').hide(); return; }
+  $('#rotate-popup').hide();
+  rotateImage(val);
+}
+
+$('#rotate-apply').on('click', applyCustomRotate);
+
+$('#rotate-angle-input').on('keydown', function(e) {
+  if (e.key === 'Enter') applyCustomRotate();
+  if (e.key === 'Escape') { $('#rotate-popup').hide(); status('Rotation cancelled'); }
+});
+
+$('#rotate-cancel-btn').on('click', function() {
+  $('#rotate-popup').hide();
+  status('Rotation cancelled');
+});
+
+// Quick 90° buttons inside the popup
+$('#rotate-ccw-small').on('click', function() {
+  $('#rotate-popup').hide();
+  rotateImage(-90);
+});
+
+$('#rotate-cw-small').on('click', function() {
+  $('#rotate-popup').hide();
+  rotateImage(90);
 });
 
 // Initialize sliders

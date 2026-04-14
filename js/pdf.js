@@ -121,7 +121,7 @@ export function renderPdfTabPage(tabIdx) {
   });
 }
 
-export function loadPdf(file) {
+export function loadPdf(file, onDone) {
   ensurePdfJs(function() {
     var reader = new FileReader();
     reader.onload = function(e) {
@@ -134,10 +134,14 @@ export function loadPdf(file) {
 
         $('#pdf-modal-cancel').off('click').on('click', function() {
           $('#pdf-modal').hide();
+          if (onDone) onDone();
         });
 
         $('#pdf-modal-load').off('click').on('click', function() {
           $('#pdf-modal').hide();
+          // Advance the queue before rendering so the next file can start
+          if (onDone) onDone();
+
           var rangeStr = $('#pdf-page-range').val();
           var pages = parsePdfRange(rangeStr, numPages);
           if (!pages.length) { alert('No valid pages selected.'); return; }
@@ -160,6 +164,7 @@ export function loadPdf(file) {
       }).catch(function(err) {
         console.error('PDF load error:', err);
         alert('Failed to load PDF: ' + (err.message || err));
+        if (onDone) onDone();
       });
     };
     reader.readAsArrayBuffer(file);

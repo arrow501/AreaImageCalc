@@ -2,7 +2,7 @@ import { S, fn } from './state.js';
 import { resize, startRenderLoop } from './render.js';
 import { enableTools } from './tools.js';
 import { scheduleSave, doSave, restoreState } from './storage.js';
-import { createTab, switchToTab, closeTab, renderTabBar, snapshotCurrentTab } from './tabs.js';
+import { createTab, switchToTab, closeTab, renderTabBar, snapshotCurrentTab, newCurrentTab } from './tabs.js';
 import { loadPdf, renderPdfTabPage } from './pdf.js';
 import { exportProject, importProject, exportMeasurements } from './export.js';
 import './input.js';
@@ -15,6 +15,7 @@ fn.switchToTab = switchToTab;
 fn.closeTab = closeTab;
 fn.renderTabBar = renderTabBar;
 fn.snapshotCurrentTab = snapshotCurrentTab;
+fn.newCurrentTab = newCurrentTab;
 
 // Register PDF and export functions
 fn.loadPdf = loadPdf;

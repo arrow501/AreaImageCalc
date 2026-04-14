@@ -2,6 +2,9 @@ import { S, COLORS, fn, worker, imgWorker, iCvs, oCvs, $wrap } from './state.js'
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, distSeg, pip } from './geometry.js';
 import { scheduleSave } from './storage.js';
 
+// Register rotate function on fn so input.js can call it
+fn.rotateImage = rotateImage;
+
 // Register cross-module functions into fn so perspective.js and tabs.js can call them
 fn.setTool = setTool;
 fn.enableTools = enableTools;
@@ -227,7 +230,7 @@ export function setInteract() {
 }
 
 export function enableTools(on) {
-  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp');
+  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -476,6 +479,78 @@ export function selectAt(ip) {
 }
 
 // ---- Shapes Panel ----
+
+// ---- Image Rotation ----
+
+export function rotateImage(angleDeg) {
+  if (!S.img || angleDeg === 0) return;
+
+  var rad = angleDeg * Math.PI / 180;
+  var cos_t = Math.cos(rad);
+  var sin_t = Math.sin(rad);
+  var abs_cos = Math.abs(cos_t);
+  var abs_sin = Math.abs(sin_t);
+
+  var old_w = S.view.iw;
+  var old_h = S.view.ih;
+  var new_w = Math.round(old_w * abs_cos + old_h * abs_sin);
+  var new_h = Math.round(old_w * abs_sin + old_h * abs_cos);
+
+  // Draw the rotated image onto a new canvas
+  var cvs = document.createElement('canvas');
+  cvs.width = new_w;
+  cvs.height = new_h;
+  var ctx = cvs.getContext('2d');
+  ctx.translate(new_w / 2, new_h / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(S.img, -old_w / 2, -old_h / 2);
+
+  // Forward transform: old image coords → new image coords (matches canvas rendering)
+  function transformPt(p) {
+    var dx = p.x - old_w / 2;
+    var dy = p.y - old_h / 2;
+    return {
+      x: dx * cos_t - dy * sin_t + new_w / 2,
+      y: dx * sin_t + dy * cos_t + new_h / 2
+    };
+  }
+
+  // Transform all shape points
+  for (var si = 0; si < S.shapes.length; si++) {
+    var shape = S.shapes[si];
+    shape.points = shape.points.map(transformPt);
+    if (shape.closed) {
+      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
+    }
+  }
+
+  // Transform scale line (rotation preserves distances, so scalePPU stays the same)
+  if (S.scaleLine) {
+    S.scaleLine.p1 = transformPt(S.scaleLine.p1);
+    S.scaleLine.p2 = transformPt(S.scaleLine.p2);
+  }
+
+  // Load updated image
+  var dataUrl = cvs.toDataURL('image/png');
+  var newImg = new Image();
+  newImg.onload = function() {
+    S.img = newImg;
+    S.view.iw = new_w;
+    S.view.ih = new_h;
+    S.imgDataUrl = dataUrl;
+    S.FH_MIN_DIST = Math.max(1, Math.log2(new_w + new_h) - 8.5);
+
+    S.imageDirty = S.overlayDirty = true;
+    fitView();
+    updatePanel();
+    scheduleSave();
+
+    var absDeg = Math.abs(angleDeg % 360);
+    var dir = angleDeg > 0 ? 'CW' : 'CCW';
+    status('Rotated ' + absDeg + '\u00b0 ' + dir + ' (' + new_w + '\u00d7' + new_h + ')');
+  };
+  newImg.src = dataUrl;
+}
 
 export function updatePanel() {
   var $l = $('#shapes-list');

@@ -506,6 +506,49 @@
     #pdf-modal-load { background: #FF6B35; color: #fff; border: none; padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; }
     #pdf-modal-load:hover { background: #e55a20; }
 
+    /* ========== ROTATE POPUP ========== */
+    #rotate-popup {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a2a2a;
+      border: 1px solid #FF6B35;
+      border-radius: 4px;
+      padding: 10px 12px;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      white-space: nowrap;
+    }
+    #rotate-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #rotate-popup .rotate-row { display: flex; align-items: center; gap: 6px; }
+    #rotate-popup input[type=number] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px 8px;
+      width: 72px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      text-align: center;
+    }
+    #rotate-popup input:focus { outline: none; border-color: #FF6B35; }
+    #rotate-popup button {
+      border: none;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #rotate-apply { background: #FF6B35; color: #fff; font-size: 12px; }
+    #rotate-apply:hover { background: #e55a20; }
+    #rotate-cancel-btn { background: #444; color: #ccc; font-size: 12px; }
+    #rotate-cancel-btn:hover { background: #555; }
+    #rotate-ccw-small, #rotate-cw-small { background: #333; color: #ddd; }
+    #rotate-ccw-small:hover, #rotate-cw-small:hover { background: #444; color: #fff; }
+
     /* ========== MISC ========== */
     kbd {
       background: #333;
@@ -523,6 +566,7 @@
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
+    <button class="tb-btn" id="btn-new" title="New project — clears all tabs">New</button>
     <button class="tb-btn" id="btn-open" title="Open image, PDF, or project [Ctrl+O]">Open</button>
     <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc">Save</button>
     <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
@@ -537,6 +581,10 @@
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634; 90°</button>
+    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635; 90°</button>
+    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
 
@@ -596,6 +644,17 @@
         <button id="scale-confirm">Set</button>
       </div>
 
+      <div id="rotate-popup">
+        <label>Rotation angle (degrees, + = CW):</label>
+        <div class="rotate-row">
+          <button id="rotate-ccw-small" title="90° counter-clockwise">&#8634; 90°</button>
+          <input type="number" id="rotate-angle-input" step="any" placeholder="45">
+          <button id="rotate-cw-small" title="90° clockwise">&#8635; 90°</button>
+          <button id="rotate-apply">Apply</button>
+          <button id="rotate-cancel-btn">Cancel</button>
+        </div>
+      </div>
+
       <div id="persp-bar">
         <div class="persp-tabs">
           <button class="persp-tab active" data-persp-mode="manual">Manual</button>
@@ -647,7 +706,7 @@
   </div>
 </div>
 
-<input type="file" id="file-input" accept="image/*,.pdf,.arcalc" style="display:none">
+<input type="file" id="file-input" accept="image/*,.pdf,.arcalc" multiple style="display:none">
 
 <div id="pdf-modal">
   <div style="margin-bottom:10px">PDF loaded &mdash; <span id="pdf-page-count"></span></div>

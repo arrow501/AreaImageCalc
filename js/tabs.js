@@ -1,5 +1,25 @@
 import { S, fn } from './state.js';
 
+export function newCurrentTab() {
+  if (S.currentTabIdx < 0) return;
+  var idx = S.currentTabIdx;
+  var fresh = makeTabData();
+  fresh.tabId = S.tabs[idx].tabId;   // keep stable ID so tab bar position is preserved
+  Object.assign(S.tabs[idx], fresh);
+  S.currentTabIdx = -1;
+  applyTabToState(idx);
+  S.currentTabIdx = idx;
+  if (fn.setTool)        fn.setTool('idle');
+  if (fn.enableTools)    fn.enableTools(false);
+  if (fn.updateFilters)  fn.updateFilters();
+  if (fn.syncSliders)    fn.syncSliders();
+  if (fn.updatePanel)    fn.updatePanel();
+  if (fn.updateScaleDisp) fn.updateScaleDisp();
+  if (fn.status)         fn.status('Drop an image, click Open, or paste to start');
+  $('#dropzone').css('pointer-events', 'auto').find('.dz-content').show();
+  renderTabBar();
+}
+
 export function makeTabData() {
   return {
     label: 'Untitled',
