@@ -1,10 +1,10 @@
-import { S, fn, STORAGE_STORAGE_SOFT_LIMIT, STORAGE_STORAGE_HARD_LIMIT } from './state.js';
+import { S, fn, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
 
 function updateBadge(bytes) {
   $('#btn-export-project')
-    .toggleClass('storage-warn', bytes >= STORAGE_STORAGE_SOFT_LIMIT && bytes < STORAGE_STORAGE_HARD_LIMIT)
-    .toggleClass('storage-full', bytes >= STORAGE_STORAGE_HARD_LIMIT)
-    .attr('title', bytes >= STORAGE_STORAGE_HARD_LIMIT
+    .toggleClass('storage-warn', bytes >= STORAGE_SOFT_LIMIT && bytes < STORAGE_HARD_LIMIT)
+    .toggleClass('storage-full', bytes >= STORAGE_HARD_LIMIT)
+    .attr('title', bytes >= STORAGE_HARD_LIMIT
       ? 'Auto-save FULL — save your project to a file!'
       : bytes >= STORAGE_SOFT_LIMIT
         ? 'Auto-save limited — some tab images not saved (project too large)'
