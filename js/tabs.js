@@ -1,9 +1,32 @@
 import { S, fn } from './state.js';
 
+export function newCurrentTab() {
+  if (S.currentTabIdx < 0) return;
+  var idx = S.currentTabIdx;
+  var fresh = makeTabData();
+  fresh.tabId = S.tabs[idx].tabId;   // keep stable ID so tab bar position is preserved
+  Object.assign(S.tabs[idx], fresh);
+  S.currentTabIdx = -1;
+  applyTabToState(idx);
+  S.currentTabIdx = idx;
+  if (fn.setTool)        fn.setTool('idle');
+  if (fn.enableTools)    fn.enableTools(false);
+  if (fn.updateFilters)  fn.updateFilters();
+  if (fn.syncSliders)    fn.syncSliders();
+  if (fn.updatePanel)    fn.updatePanel();
+  if (fn.updateScaleDisp) fn.updateScaleDisp();
+  if (fn.status)         fn.status('Drop an image, click Open, or paste to start');
+  $('#dropzone').css('pointer-events', 'auto').find('.dz-content').show();
+  renderTabBar();
+}
+
 export function makeTabData() {
   return {
     label: 'Untitled',
+    tabId: 0,         // stable ID assigned at createTab time
     imgDataUrl: null,
+    imgWebpUrl: null, // set after background WebP encode completes
+    webpPending: false,
     img: null,
     view: { ox: 0, oy: 0, zoom: 1, fit: 1, iw: 0, ih: 0 },
     shapes: [],
@@ -39,7 +62,7 @@ export function applyTabToState(idx) {
   if (!tab) return;
 
   if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
-  if (S.autoPerspActive && fn.cancelAutoPerspective) fn.cancelAutoPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
 
   S.imgDataUrl = tab.imgDataUrl;
   S.img = tab.img;
@@ -78,13 +101,6 @@ export function applyTabToState(idx) {
   S.isPan = false;
   S.panSt = null;
   S.spaceHeld = false;
-  S.autoPerspActive = false;
-  S.autoPerspSamples = [];
-  S.autoPerspState = 0;
-  S.autoPerspP1 = null;
-  S.autoPerspP2 = null;
-  S.autoPerspPreviewH = null;
-  S.autoPerspPreviewInv = null;
   S.touchId = null;
   S.touchIsPan = false;
   S.FH_MIN_DIST = (S.view.iw && S.view.ih) ? Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5) : 0;
@@ -94,6 +110,7 @@ export function applyTabToState(idx) {
 
 export function createTab(label, imgDataUrl, imgElement) {
   var tab = makeTabData();
+  tab.tabId = S.tabN++;
   tab.label = label || 'Untitled';
   tab.imgDataUrl = imgDataUrl || null;
   tab.img = imgElement || null;
@@ -218,11 +235,12 @@ function _escHtml(s) {
 }
 
 // Serialise a tab snapshot to a plain JSON-safe object.
-// Used by both the auto-save (tools.js) and the explicit project export (export.js).
+// Used by both auto-save (storage.js) and explicit project export (export.js).
+// Always uses the WebP version if available — falls back to original.
 export function serializeTab(tab) {
   return {
     label: tab.label,
-    imgDataUrl: tab.imgDataUrl,
+    imgDataUrl: tab.imgWebpUrl || tab.imgDataUrl,
     view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
     shapes: tab.shapes.map(function(s) {
       return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };

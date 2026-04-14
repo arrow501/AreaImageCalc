@@ -76,14 +76,7 @@ export var S = {
   perspDragIdx: -1,
   perspDragOffset: null,
 
-  // Auto perspective correction
-  autoPerspActive: false,
-  autoPerspSamples: [],      // [{p1:{x,y}, p2:{x,y}, dist:Number, unit:String}]
-  autoPerspState: 0,          // 0=idle, 1=waiting for p2, 2=popup shown
-  autoPerspP1: null,
-  autoPerspP2: null,
-  autoPerspPreviewH: null,    // computed homography for preview
-  autoPerspPreviewInv: null,  // inverse for rendering
+  // (Square calibration uses S.tool === 'squarecal' + S.polyPts — no separate state)
 
   // Touch
   touchId: null,
@@ -95,7 +88,10 @@ export var S = {
   // Tabs
   tabs: [],          // array of tab state objects
   currentTabIdx: -1, // index of active tab
-  tabN: 0            // tab ID counter (monotonically increasing)
+  tabN: 0,           // tab ID counter (monotonically increasing)
+
+  // Storage UI state
+  hardLimitDialogShown: false
 };
 
 // Constants
@@ -103,6 +99,8 @@ export var COLORS = ['#FF6B35', '#4A9EFF', '#22D88E', '#FF4081', '#FFD740', '#7C
 export var SAVE_KEY = 'areaCalcState';
 export var SAVE_VER = 3;
 export var SAVE_VER_LEGACY = 2;
+export var STORAGE_SOFT_LIMIT = 5 * 1024 * 1024;   // 5 MB — drop background-tab images from save
+export var STORAGE_HARD_LIMIT = 10 * 1024 * 1024;  // 10 MB — drop all images; warn user
 
 // DOM references (module scripts are deferred, so DOM exists)
 export var $wrap = $('#canvas-wrap');
@@ -111,8 +109,9 @@ export var oCvs = document.getElementById('overlay-canvas');
 export var iCtx = iCvs.getContext('2d');
 export var oCtx = oCvs.getContext('2d');
 
-// Worker
+// Workers
 export var worker = new Worker('./js/worker.js');
+export var imgWorker = new Worker('./js/imageWorker.js');
 
 // Late-bound cross-module function references (breaks import cycles)
 export var fn = {};

@@ -4,8 +4,9 @@ import { resize } from './render.js';
 import {
   setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
   loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, scheduleSave, status, updateFilters
+  updatePanel, status, updateFilters, rotateImage
 } from './tools.js';
+import { scheduleSave } from './storage.js';
 
 // Expose slider sync for tabs.js to call on tab switch
 fn.syncSliders = function() {
@@ -68,14 +69,26 @@ $(oCvs).on('mousedown', function(e) {
     return;
   }
 
-  if (S.autoPerspActive) {
-    handleAutoPerspClick();
-    return;
-  }
-
   var ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
+    case 'squarecal':
+      if (S.polyPts.length === 4) {
+        // Click near an existing corner → start dragging it
+        var grabR = 12 / (S.view.zoom * S.view.fit);
+        S.dragIdx = -1;
+        for (var ci = 0; ci < 4; ci++) {
+          if (Math.hypot(S.mix - S.polyPts[ci].x, S.miy - S.polyPts[ci].y) <= grabR) {
+            S.dragIdx = ci; break;
+          }
+        }
+      } else {
+        S.polyPts.push(ip);
+        S.overlayDirty = true;
+        fn.onSqCalibPoint();
+      }
+      break;
+
     case 'scale':
       if (S.scaleState === 0) {
         S.scaleP1 = ip;
@@ -159,7 +172,18 @@ $(document).on('mousemove', function(e) {
     return;
   }
 
-  if (S.autoPerspActive && S.autoPerspState === 1) {
+  if (S.tool === 'squarecal') {
+    if (S.dragIdx >= 0 && S.dragIdx < S.polyPts.length) {
+      // Drag placed corner to fine-tune position
+      S.polyPts[S.dragIdx] = { x: S.mix, y: S.miy };
+    } else if (S.polyPts.length === 4) {
+      // Show grab cursor when hovering near a corner
+      var grabR2 = 12 / (S.view.zoom * S.view.fit);
+      var nearCorner = S.polyPts.some(function(p) {
+        return Math.hypot(S.mix - p.x, S.miy - p.y) <= grabR2;
+      });
+      oCvs.style.cursor = nearCorner ? 'grab' : '';
+    }
     S.overlayDirty = true;
     return;
   }
@@ -208,6 +232,12 @@ $(document).on('mouseup', function(e) {
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspDragIdx = -1;
     S.perspDragOffset = null;
+    S.overlayDirty = true;
+    return;
+  }
+
+  if (S.tool === 'squarecal' && S.dragIdx >= 0) {
+    S.dragIdx = -1;
     S.overlayDirty = true;
     return;
   }
@@ -310,14 +340,25 @@ oCvs.addEventListener('touchstart', function(e) {
     return;
   }
 
-  if (S.autoPerspActive) {
-    handleAutoPerspClick();
-    return;
-  }
-
   var ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
+    case 'squarecal':
+      if (S.polyPts.length === 4) {
+        var grabRT = 18 / (S.view.zoom * S.view.fit);
+        S.dragIdx = -1;
+        for (var cit = 0; cit < 4; cit++) {
+          if (Math.hypot(S.mix - S.polyPts[cit].x, S.miy - S.polyPts[cit].y) <= grabRT) {
+            S.dragIdx = cit; break;
+          }
+        }
+      } else {
+        S.polyPts.push(ip);
+        S.overlayDirty = true;
+        fn.onSqCalibPoint();
+      }
+      break;
+
     case 'scale':
       if (S.scaleState === 0) {
         S.scaleP1 = ip;
@@ -515,24 +556,8 @@ $(document).on('keydown', function(e) {
       break;
 
     case 'Escape':
-      if (S.autoPerspActive) {
-        if (S.autoPerspState === 2) {
-          // Cancel current sample popup
-          S.autoPerspP1 = null;
-          S.autoPerspP2 = null;
-          S.autoPerspState = 0;
-          $('#auto-persp-popup').hide();
-          S.overlayDirty = true;
-          status('Sample cancelled. Click to start a new measurement.');
-        } else if (S.autoPerspState === 1) {
-          // Cancel current point placement
-          S.autoPerspP1 = null;
-          S.autoPerspState = 0;
-          S.overlayDirty = true;
-          status('Click first point of a known measurement.');
-        } else {
-          fn.cancelAutoPerspective();
-        }
+      if (S.tool === 'squarecal') {
+        fn.cancelSqCalib();
       } else if (S.perspActive) {
         fn.cancelPerspective();
       } else if (S.tool !== 'idle') {
@@ -545,8 +570,8 @@ $(document).on('keydown', function(e) {
       break;
 
     case 'Enter':
-      if (S.autoPerspActive && S.autoPerspSamples.length >= 2 && S.autoPerspState === 0) {
-        fn.applyAutoPerspective();
+      if (S.tool === 'squarecal' && S.polyPts.length === 4) {
+        fn.applySqCalib();
         e.preventDefault();
       } else if (S.perspActive) {
         fn.applyPerspective();
@@ -556,16 +581,16 @@ $(document).on('keydown', function(e) {
 
     case 'Delete':
     case 'Backspace':
-      if (!S.perspActive && !S.autoPerspActive && S.selId) delShape(S.selId);
+      if (!S.perspActive && S.tool !== 'squarecal' && S.selId) delShape(S.selId);
       e.preventDefault();
       break;
 
-    case '1': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'scale' ? 'idle' : 'scale'); break;
-    case '2': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'polygon' ? 'idle' : 'polygon'); break;
-    case '3': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
-    case '4': if (S.img && !S.perspActive && !S.autoPerspActive) setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
+    case '1': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'scale' ? 'idle' : 'scale'); break;
+    case '2': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'polygon' ? 'idle' : 'polygon'); break;
+    case '3': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
+    case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
     case '5':
-      if (S.img && !S.perspActive && !S.autoPerspActive) fn.enterPerspective();
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') fn.enterPerspective();
       break;
 
     case '=':
@@ -599,18 +624,49 @@ $(document).on('keyup', function(e) {
   }
 });
 
-// ---- File Dispatch ----
+// ---- Serial File Queue ----
+// PDFs need user interaction (page selector modal) before the next file
+// can safely be loaded. Images are dispatched immediately and load async.
 
-function dispatchFile(file) {
+var _fileQueue = [];
+var _fileQueueBusy = false;
+
+function queueFile(file) {
   if (!file) return;
+  _fileQueue.push(file);
+  _drainFileQueue();
+}
+
+function _drainFileQueue() {
+  if (_fileQueueBusy || _fileQueue.length === 0) return;
+  _fileQueueBusy = true;
+  var file = _fileQueue.shift();
   var name = file.name || '';
   var ext = name.split('.').pop().toLowerCase();
+
   if (ext === 'pdf' || file.type === 'application/pdf') {
-    if (fn.loadPdf) fn.loadPdf(file);
+    // PDF: pause the queue until the page-selector modal is dismissed
+    if (fn.loadPdf) {
+      fn.loadPdf(file, function() {
+        _fileQueueBusy = false;
+        _drainFileQueue();
+      });
+    } else {
+      _fileQueueBusy = false;
+      _drainFileQueue();
+    }
   } else if (ext === 'arcalc') {
     if (fn.importProject) fn.importProject(file);
+    _fileQueueBusy = false;
+    _drainFileQueue();
   } else if (file.type.indexOf('image/') === 0) {
+    // Images load async without blocking; advance the queue immediately
     loadImg(file);
+    _fileQueueBusy = false;
+    _drainFileQueue();
+  } else {
+    _fileQueueBusy = false;
+    _drainFileQueue();
   }
 }
 
@@ -625,8 +681,8 @@ $('#canvas-wrap')
     e.preventDefault();
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
-      var f = e.originalEvent.dataTransfer.files;
-      if (f.length) dispatchFile(f[0]);
+      var files = e.originalEvent.dataTransfer.files;
+      for (var i = 0; i < files.length; i++) queueFile(files[i]);
     }
   });
 
@@ -634,9 +690,68 @@ $(document).on('paste', function(e) {
   var items = e.originalEvent.clipboardData.items;
   for (var i = 0; i < items.length; i++) {
     if (items[i].type.indexOf('image/') === 0) {
-      loadImg(items[i].getAsFile());
+      queueFile(items[i].getAsFile());
       return;
     }
+  }
+});
+
+// ---- Shared confirm modal (same style as storage-modal) ----
+
+function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
+  var $overlay = $('<div class="storage-modal-overlay">')
+    .append(
+      $('<div class="storage-modal">')
+        .append($('<p>').html(htmlMessage))
+        .append(
+          $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
+            $overlay.remove();
+            onConfirm();
+          })
+        )
+        .append(
+          $('<button>').text('Cancel').on('click', function() {
+            $overlay.remove();
+          })
+        )
+    )
+    .appendTo('body');
+}
+
+// ---- New button (new project — clears all tabs) ----
+
+function doNewProject() {
+  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  cancelTool();
+
+  S.tabs.length = 0;
+  S.currentTabIdx = -1;
+  if (fn.createTab && fn.switchToTab) {
+    fn.switchToTab(fn.createTab('Untitled', null, null));
+  }
+  scheduleSave();
+}
+
+$('#btn-new').on('click', function() {
+  // Check live current-tab state plus every other tab's persisted data
+  var hasContent = !!(S.img || S.shapes.length);
+  if (!hasContent) {
+    for (var i = 0; i < S.tabs.length; i++) {
+      if (i === S.currentTabIdx) continue;
+      var t = S.tabs[i];
+      if (t.img || t.imgDataUrl || (t.shapes && t.shapes.length)) { hasContent = true; break; }
+    }
+  }
+
+  if (hasContent) {
+    showConfirmModal(
+      '<strong>Start a new project?</strong><br>All tabs, images, and shapes will be cleared.',
+      'New Project',
+      doNewProject
+    );
+  } else {
+    doNewProject();
   }
 });
 
@@ -645,7 +760,8 @@ $('#btn-open').on('click', function() {
 });
 
 $('#file-input').on('change', function() {
-  if (this.files.length) dispatchFile(this.files[0]);
+  var files = this.files;
+  for (var i = 0; i < files.length; i++) queueFile(files[i]);
   this.value = '';
 });
 
@@ -712,44 +828,12 @@ $('#scale-value').on('keydown', function(e) {
   }
 });
 
-// ---- Auto Perspective Click Handler ----
-
-function handleAutoPerspClick() {
-  if (S.autoPerspState === 2) return; // popup is open
-
-  if (S.autoPerspState === 0) {
-    S.autoPerspP1 = { x: S.mix, y: S.miy };
-    S.autoPerspState = 1;
-    S.overlayDirty = true;
-    status('Click second point of measurement');
-    return;
-  }
-
-  if (S.autoPerspState === 1) {
-    S.autoPerspP2 = { x: S.mix, y: S.miy };
-    S.autoPerspState = 2;
-    showAutoPerspPopup();
-    S.overlayDirty = true;
-    return;
-  }
-}
-
-function showAutoPerspPopup() {
-  var mp = i2s((S.autoPerspP1.x + S.autoPerspP2.x) / 2, (S.autoPerspP1.y + S.autoPerspP2.y) / 2);
-  var l = Math.min(Math.max(mp.x + 12, 10), S.cw - 250);
-  var t = Math.min(Math.max(mp.y - 30, 10), S.ch - 60);
-
-  $('#auto-persp-popup').css({ left: l, top: t }).show();
-  $('#ap-dist-value').val('').focus();
-  status('Enter the real-world distance for this segment');
-}
-
 // ---- Perspective Buttons ----
 
 $('#btn-persp').on('click', function() {
   if (!S.img) return;
-  if (S.perspActive) { fn.cancelPerspective(); return; }
-  if (S.autoPerspActive) { fn.cancelAutoPerspective(); return; }
+  if (S.perspActive)          { fn.cancelPerspective(); return; }
+  if (S.tool === 'squarecal') { fn.cancelSqCalib();    return; }
   fn.enterPerspective();
 });
 $('#persp-apply').on('click', function() { fn.applyPerspective(); });
@@ -759,42 +843,7 @@ $('#persp-reset').on('click', function() { fn.resetPerspective(); });
 // ---- Perspective Mode Tabs ----
 
 $('.persp-tab').on('click', function() {
-  var mode = $(this).data('persp-mode');
-  fn.switchPerspMode(mode);
-});
-
-// ---- Auto Perspective Buttons ----
-
-$('#auto-persp-cancel').on('click', function() { fn.cancelAutoPerspective(); });
-$('#auto-persp-apply').on('click', function() { fn.applyAutoPerspective(); });
-
-$('#ap-dist-confirm').on('click', function() {
-  var val = parseFloat($('#ap-dist-value').val());
-  var unit = $('#ap-dist-unit').val();
-  if (!val || val <= 0) { status('Enter a valid distance > 0'); return; }
-  fn.addAutoPerspSample(val, unit);
-});
-
-$('#ap-dist-value').on('keydown', function(e) {
-  if (e.key === 'Enter') {
-    var val = parseFloat($('#ap-dist-value').val());
-    var unit = $('#ap-dist-unit').val();
-    if (!val || val <= 0) { status('Enter a valid distance > 0'); return; }
-    fn.addAutoPerspSample(val, unit);
-  }
-  if (e.key === 'Escape') {
-    S.autoPerspP1 = null;
-    S.autoPerspP2 = null;
-    S.autoPerspState = 0;
-    $('#auto-persp-popup').hide();
-    S.overlayDirty = true;
-    status('Sample cancelled. Click to start a new measurement.');
-  }
-});
-
-$('#ap-samples').on('click', '.ap-del', function(e) {
-  e.stopPropagation();
-  fn.removeAutoPerspSample($(this).data('idx'));
+  fn.switchPerspMode($(this).data('persp-mode'));
 });
 
 // ---- Shapes Panel Events ----
@@ -969,6 +1018,57 @@ $('#btn-export-project').on('click', function() {
 
 $('#btn-export-measurements').on('click', function() {
   if (fn.exportMeasurements) fn.exportMeasurements();
+});
+
+// ---- Rotate Buttons ----
+
+$('#btn-rotate-ccw').on('click', function() {
+  if (!S.img) return;
+  rotateImage(-90);
+});
+
+$('#btn-rotate-cw').on('click', function() {
+  if (!S.img) return;
+  rotateImage(90);
+});
+
+$('#btn-rotate-custom').on('click', function() {
+  if (!S.img) return;
+  $('#rotate-angle-input').val('');
+  $('#rotate-popup').show();
+  $('#rotate-angle-input').focus();
+  status('Enter rotation angle and press Apply');
+});
+
+function applyCustomRotate() {
+  var val = parseFloat($('#rotate-angle-input').val());
+  if (isNaN(val)) { status('Enter a valid angle'); return; }
+  if (val === 0) { $('#rotate-popup').hide(); return; }
+  $('#rotate-popup').hide();
+  rotateImage(val);
+}
+
+$('#rotate-apply').on('click', applyCustomRotate);
+
+$('#rotate-angle-input').on('keydown', function(e) {
+  if (e.key === 'Enter') applyCustomRotate();
+  if (e.key === 'Escape') { $('#rotate-popup').hide(); status('Rotation cancelled'); }
+});
+
+$('#rotate-cancel-btn').on('click', function() {
+  $('#rotate-popup').hide();
+  status('Rotation cancelled');
+});
+
+// Quick 90° buttons inside the popup
+$('#rotate-ccw-small').on('click', function() {
+  $('#rotate-popup').hide();
+  rotateImage(-90);
+});
+
+$('#rotate-cw-small').on('click', function() {
+  $('#rotate-popup').hide();
+  rotateImage(90);
 });
 
 // Initialize sliders

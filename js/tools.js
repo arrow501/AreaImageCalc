@@ -1,13 +1,15 @@
-import { S, COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, fn, worker, iCvs, oCvs, $wrap } from './state.js';
+import { S, COLORS, fn, worker, imgWorker, iCvs, oCvs, $wrap } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, distSeg, pip } from './geometry.js';
-import { serializeTab } from './tabs.js';
+import { scheduleSave } from './storage.js';
+
+// Register rotate function on fn so input.js can call it
+fn.rotateImage = rotateImage;
 
 // Register cross-module functions into fn so perspective.js and tabs.js can call them
 fn.setTool = setTool;
 fn.enableTools = enableTools;
 fn.status = status;
 fn.updatePanel = updatePanel;
-fn.scheduleSave = scheduleSave;
 fn.updateScaleDisp = updateScaleDisp;
 fn.updateZoomDisp = updateZoomDisp;
 fn.updateFilters = updateFilters;
@@ -56,129 +58,87 @@ worker.onmessage = function(e) {
   }
 };
 
-// ---- Persistence ----
+// ---- Image Worker (WebP encoding) ----
 
-export function scheduleSave() {
-  if (S.saveTimer) clearTimeout(S.saveTimer);
-  S.pendingSave = true;
-  S.saveTimer = setTimeout(doSave, 2000);
+function tabForId(id) {
+  return S.tabs.find(function(t) { return t.tabId === id; });
 }
 
-export function doSave() {
-  S.pendingSave = false;
+function bufferToDataUrl(buffer, mime) {
+  var bytes = new Uint8Array(buffer);
+  var chunks = [];
+  var CHUNK = 0x8000;
+  for (var i = 0; i < bytes.length; i += CHUNK) {
+    chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+  }
+  return 'data:' + mime + ';base64,' + btoa(chunks.join(''));
+}
 
-  if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
+imgWorker.onmessage = function(e) {
+  var d = e.data;
+  var tab = tabForId(d.id);
 
-  var hasAny = S.tabs.some(function(t) { return t.imgDataUrl; });
-  if (!hasAny && !S.imgDataUrl) return;
+  if (d.type === 'webpResult') {
+    if (!tab) return;
+    tab.imgWebpUrl = bufferToDataUrl(d.buffer, 'image/webp');
+    tab.webpPending = false;
+    scheduleSave();
 
-  try {
-    var state = {
-      v: SAVE_VER,
-      ts: Date.now(),
-      currentTabIdx: S.currentTabIdx,
-      tabs: S.tabs.map(serializeTab)
-    };
-    var json = JSON.stringify(state);
-    localStorage.setItem(SAVE_KEY, json);
-  } catch (e) {
-    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-      // Retry keeping only the current tab's image; background tabs lose their imgDataUrl in localStorage
-      // (they remain in memory; use Save Project to persist all tabs)
-      try {
-        var compact = {
-          v: SAVE_VER,
-          ts: Date.now(),
-          currentTabIdx: S.currentTabIdx,
-          tabs: S.tabs.map(function(tab, i) {
-            var s = serializeTab(tab);
-            if (i !== S.currentTabIdx) s.imgDataUrl = null;
-            return s;
-          })
-        };
-        localStorage.setItem(SAVE_KEY, JSON.stringify(compact));
-        console.warn('Auto-save: dropped background tab images to fit quota. Use Save Project to persist all tabs.');
-      } catch (e2) {
-        console.warn('Auto-save failed even with compact state:', e2);
+  } else if (d.type === 'webpError') {
+    if (!tab) return;
+    tab.webpPending = false;
+    // OffscreenCanvas not supported — fall back to main-thread canvas encode, only on this signal
+    if (d.fallback && tab.img) {
+      var fbCvs = document.createElement('canvas');
+      fbCvs.width = tab.img.naturalWidth;
+      fbCvs.height = tab.img.naturalHeight;
+      fbCvs.getContext('2d').drawImage(tab.img, 0, 0);
+      var webpUrl = fbCvs.toDataURL('image/webp', 0.35);
+      // Only store if the browser actually produced WebP (not a PNG fallback)
+      if (webpUrl.startsWith('data:image/webp')) {
+        tab.imgWebpUrl = webpUrl;
+        scheduleSave();
       }
-    } else {
-      console.warn('Auto-save failed:', e);
     }
   }
-}
-
-export function restoreState() {
-  try {
-    var raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-
-    var state = JSON.parse(raw);
-    if (!state) return false;
-
-    // Legacy v2 single-tab format
-    if (state.v === SAVE_VER_LEGACY && state.img) {
-      if (!fn.createTab || !fn.switchToTab) return false;
-      var idx = fn.createTab('Restored', state.img, null);
-      var tab = S.tabs[idx];
-      if (state.iw) tab.view.iw = state.iw;
-      if (state.ih) tab.view.ih = state.ih;
-      tab.shapes = state.shapes || [];
-      tab.colorIdx = state.colorIdx || 0;
-      tab.shapeN = state.shapeN || 0;
-      tab.scalePPU = state.scalePPU || 0;
-      tab.scaleUnit = state.scaleUnit || 'cm';
-      tab.scaleLine = state.scaleLine || null;
-      fn.switchToTab(idx);
-      return true;
-    }
-
-    // v3 multi-tab format
-    if (state.v !== SAVE_VER || !state.tabs || !state.tabs.length) return false;
-    if (!fn.createTab || !fn.switchToTab) return false;
-
-    for (var i = 0; i < state.tabs.length; i++) {
-      var td = state.tabs[i];
-      var tidx = fn.createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-      var t = S.tabs[tidx];
-      if (td.view) t.view = td.view;
-      t.shapes = td.shapes || [];
-      t.colorIdx = td.colorIdx || 0;
-      t.shapeN = td.shapeN || 0;
-      t.scalePPU = td.scalePPU || 0;
-      t.scaleUnit = td.scaleUnit || 'cm';
-      t.scaleLine = td.scaleLine || null;
-      t.brightness = td.brightness || 0;
-      t.contrast = td.contrast || 0;
-    }
-
-    var targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
-    fn.switchToTab(targetIdx);
-    return true;
-  } catch (e) {
-    console.warn('Restore failed:', e);
-    localStorage.removeItem(SAVE_KEY);
-    return false;
-  }
-}
+};
 
 // ---- Image Loading ----
 
 export function loadImg(file, skipConfirm) {
   if (!file || file.type.indexOf('image/') !== 0) return;
 
+  // Track B: start decoding the bitmap immediately (runs in parallel with FileReader)
+  var bitmapPromise = (typeof createImageBitmap === 'function')
+    ? createImageBitmap(file).catch(function() { return null; })
+    : Promise.resolve(null);
+
+  // Track A: load as data URL for immediate canvas display
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
     var ni = new Image();
 
     ni.onload = function() {
+      var tab;
       if (S.img && fn.createTab && fn.switchToTab) {
         // Current tab has an image — open in a new tab
         var idx = fn.createTab(file.name || 'Image', dataUrl, ni);
         fn.switchToTab(idx);
+        tab = S.tabs[idx];
       } else {
         // Load into current (blank) tab
         _loadIntoCurrentTab(ni, dataUrl, file.name);
+        tab = S.tabs[S.currentTabIdx];
+      }
+
+      // Kick off background WebP encode once we know which tab this image belongs to
+      if (tab) {
+        tab.webpPending = true;
+        bitmapPromise.then(function(bitmap) {
+          if (!bitmap) { tab.webpPending = false; return; }
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+        });
       }
     };
 
@@ -190,7 +150,7 @@ export function loadImg(file, skipConfirm) {
 
 function _loadIntoCurrentTab(ni, dataUrl, filename) {
   if (S.perspActive) fn.cancelPerspective();
-  if (S.autoPerspActive) fn.cancelAutoPerspective();
+  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
 
   S.img = ni;
   S.view.iw = ni.naturalWidth;
@@ -270,7 +230,7 @@ export function setInteract() {
 }
 
 export function enableTools(on) {
-  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp');
+  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -309,7 +269,7 @@ export function setTool(t) {
 
   $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing cursor-move');
 
-  if (t === 'scale' || t === 'polygon' || t === 'freehand') {
+  if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal') {
     $('body').addClass('cursor-crosshair');
   }
   if (t === 'edit') {
@@ -332,6 +292,9 @@ export function setTool(t) {
     case 'edit':
       status('Drag control points to edit shapes. ESC to exit.');
       break;
+    case 'squarecal':
+      status('Click 4 corners of a known square. Drag to adjust. Enter side length and Apply.');
+      break;
   }
 
   S.overlayDirty = true;
@@ -349,7 +312,6 @@ export function cancelTool() {
   S.touchId = null;
   S.touchIsPan = false;
   $('#scale-popup').hide();
-  $('#auto-persp-popup').hide();
   S.overlayDirty = true;
 }
 
@@ -516,6 +478,95 @@ export function selectAt(ip) {
 }
 
 // ---- Shapes Panel ----
+
+// ---- Image Rotation ----
+
+export function rotateImage(angleDeg) {
+  if (!S.img || angleDeg === 0) return;
+
+  var rad = angleDeg * Math.PI / 180;
+  var cos_t = Math.cos(rad);
+  var sin_t = Math.sin(rad);
+  var abs_cos = Math.abs(cos_t);
+  var abs_sin = Math.abs(sin_t);
+
+  var old_w = S.view.iw;
+  var old_h = S.view.ih;
+  var new_w = Math.round(old_w * abs_cos + old_h * abs_sin);
+  var new_h = Math.round(old_w * abs_sin + old_h * abs_cos);
+
+  // Draw the rotated image onto a new canvas
+  var cvs = document.createElement('canvas');
+  cvs.width = new_w;
+  cvs.height = new_h;
+  var ctx = cvs.getContext('2d');
+  ctx.translate(new_w / 2, new_h / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(S.img, -old_w / 2, -old_h / 2);
+
+  // Forward transform: old image coords → new image coords (matches canvas rendering)
+  function transformPt(p) {
+    var dx = p.x - old_w / 2;
+    var dy = p.y - old_h / 2;
+    return {
+      x: dx * cos_t - dy * sin_t + new_w / 2,
+      y: dx * sin_t + dy * cos_t + new_h / 2
+    };
+  }
+
+  // Transform all shape points
+  for (var si = 0; si < S.shapes.length; si++) {
+    var shape = S.shapes[si];
+    shape.points = shape.points.map(transformPt);
+    if (shape.closed) {
+      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
+    }
+  }
+
+  // Transform scale line (rotation preserves distances, so scalePPU stays the same)
+  if (S.scaleLine) {
+    S.scaleLine.p1 = transformPt(S.scaleLine.p1);
+    S.scaleLine.p2 = transformPt(S.scaleLine.p2);
+  }
+
+  // Load updated image
+  var dataUrl = cvs.toDataURL('image/png');
+  var newImg = new Image();
+  newImg.onload = function() {
+    S.img = newImg;
+    S.view.iw = new_w;
+    S.view.ih = new_h;
+    S.imgDataUrl = dataUrl;
+    S.FH_MIN_DIST = Math.max(1, Math.log2(new_w + new_h) - 8.5);
+
+    S.imageDirty = S.overlayDirty = true;
+    fitView();
+    updatePanel();
+
+    // Clear stale pre-rotation WebP and re-encode the rotated image.
+    // Without this, serializeTab() would save the old WebP while shapes
+    // are already in post-rotation coordinates, corrupting reloaded state.
+    var tab = S.tabs[S.currentTabIdx];
+    if (tab) {
+      tab.imgWebpUrl = null;
+      tab.webpPending = true;
+      if (typeof createImageBitmap === 'function') {
+        createImageBitmap(cvs).then(function(bitmap) {
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+        }).catch(function() { tab.webpPending = false; });
+      } else {
+        tab.webpPending = false;
+      }
+    }
+
+    scheduleSave();
+
+    var absDeg = Math.abs(angleDeg % 360);
+    var dir = angleDeg > 0 ? 'CW' : 'CCW';
+    status('Rotated ' + absDeg + '\u00b0 ' + dir + ' (' + new_w + '\u00d7' + new_h + ')');
+  };
+  newImg.src = dataUrl;
+}
 
 export function updatePanel() {
   var $l = $('#shapes-list');
