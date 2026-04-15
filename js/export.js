@@ -53,9 +53,9 @@ import { serializeTab, snapshotCurrentTab, createTab, switchToTab } from './tabs
 import { status } from './ui.js';
 
 function triggerDownload(content, filename, mime) {
-  var blob = new Blob([content], { type: mime || 'application/json' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
+  const blob = new Blob([content], { type: mime || 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
@@ -67,7 +67,7 @@ function triggerDownload(content, filename, mime) {
 export function exportProject() {
   snapshotCurrentTab();
 
-  var project = {
+  const project = {
     v: SAVE_VER,
     ts: Date.now(),
     currentTabIdx: S.currentTabIdx,
@@ -79,10 +79,10 @@ export function exportProject() {
 }
 
 export function importProject(file) {
-  var reader = new FileReader();
+  const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      var data = JSON.parse(e.target.result);
+      const data = JSON.parse(e.target.result);
       if (!data || !data.tabs || !data.tabs.length) {
         alert('Invalid or empty project file.');
         return;
@@ -91,10 +91,10 @@ export function importProject(file) {
       S.tabs = [];
       S.currentTabIdx = -1;
 
-      for (var i = 0; i < data.tabs.length; i++) {
-        var td = data.tabs[i];
-        var idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-        var tab = S.tabs[idx];
+      for (let i = 0; i < data.tabs.length; i++) {
+        const td = data.tabs[i];
+        const idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+        const tab = S.tabs[idx];
         if (td.view) tab.view = td.view;
         tab.shapes = td.shapes || [];
         tab.colorIdx = td.colorIdx || 0;
@@ -106,7 +106,7 @@ export function importProject(file) {
         tab.contrast = td.contrast || 0;
       }
 
-      var targetIdx = (data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length) ? data.currentTabIdx : 0;
+      const targetIdx = (data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length) ? data.currentTabIdx : 0;
       switchToTab(targetIdx);
       status('Project loaded: ' + data.tabs.length + ' tab(s).');
     } catch (ex) {
@@ -151,19 +151,19 @@ export function importProject(file) {
 export function exportMeasurements() {
   snapshotCurrentTab();
 
-  var result = {
+  const result = {
     version: '1.0',
     source: 'AreaImageCalc',
     exported: new Date().toISOString(),
     tabs: S.tabs.filter(function(t) { return t.shapes.length > 0; }).map(function(tab) {
-      var hasScale = tab.scalePPU > 0;
+      const hasScale = tab.scalePPU > 0;
       return {
         label: tab.label,
         scale: hasScale ? { ppu: tab.scalePPU, unit: tab.scaleUnit } : null,
         measurements: tab.shapes.map(function(s) {
-          var area_px2 = s.area || 0;
-          var perim_px = s.perimeter || 0;
-          var obj = {
+          const area_px2 = s.area || 0;
+          const perim_px = s.perimeter || 0;
+          const obj = {
             id: s.id,
             type: s.type,
             area_px2: area_px2,

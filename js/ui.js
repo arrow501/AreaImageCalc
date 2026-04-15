@@ -72,7 +72,7 @@ export function status(t) {
 // ---- Toolbar State ----
 
 export function enableTools(on) {
-  var btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
+  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -84,8 +84,8 @@ export function fitView() {
   S.view.fit = Math.min(S.cw / S.view.iw, S.ch / S.view.ih, 1);
   S.view.zoom = 1;
 
-  var dw = S.view.iw * S.view.fit;
-  var dh = S.view.ih * S.view.fit;
+  const dw = S.view.iw * S.view.fit;
+  const dh = S.view.ih * S.view.fit;
   S.view.ox = (S.cw - dw) / 2;
   S.view.oy = (S.ch - dh) / 2;
 
@@ -109,15 +109,15 @@ export function updateScaleDisp() {
 }
 
 export function updatePanel() {
-  var $l = $('#shapes-list');
+  const $l = $('#shapes-list');
   $l.empty();
 
-  var total = 0;
+  let total = 0;
 
-  for (var i = 0; i < S.shapes.length; i++) {
-    var s = S.shapes[i];
-    var aStr = s.area != null ? fmtArea(s.area) : '...';
-    var pStr = s.perimeter != null ? fmtPerim(s.perimeter) : '';
+  for (let i = 0; i < S.shapes.length; i++) {
+    const s = S.shapes[i];
+    const aStr = s.area != null ? fmtArea(s.area) : '...';
+    const pStr = s.perimeter != null ? fmtPerim(s.perimeter) : '';
 
     if (s.area != null) total += s.area;
 
@@ -133,7 +133,7 @@ export function updatePanel() {
     );
   }
 
-  var tStr = S.shapes.length
+  const tStr = S.shapes.length
     ? 'Total: ' + fmtArea(total) + ' (' + S.shapes.length + ')'
     : 'No shapes yet';
   $('#shapes-total').text(tStr);
@@ -142,8 +142,8 @@ export function updatePanel() {
 // ---- Image Adjustments ----
 
 export function updateFilters() {
-  var b = 1 + S.brightness / 100;
-  var c = 1 + S.contrast / 100;
+  const b = 1 + S.brightness / 100;
+  const c = 1 + S.contrast / 100;
   iCvs.style.filter = 'brightness(' + b + ') contrast(' + c + ')';
 }
 
@@ -158,12 +158,12 @@ export function setSlider(name, val) {
     S.contrast = val;
   }
 
-  var $grp = $('.sl-group [data-slider="' + name + '"]').closest('.sl-group');
-  var pct = (val + 100) / 200;
+  const $grp = $('.sl-group [data-slider="' + name + '"]').closest('.sl-group');
+  const pct = (val + 100) / 200;
 
   $grp.find('.sl-thumb').css('left', (pct * 100) + '%');
 
-  var $fill = $grp.find('.sl-fill');
+  const $fill = $grp.find('.sl-fill');
   if (val >= 0) {
     $fill.css({ left: '50%', width: (pct * 100 - 50) + '%' });
   } else {

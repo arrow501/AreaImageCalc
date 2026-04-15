@@ -3,8 +3,8 @@ import { setTool, enableTools, updateFilters, syncSliders, updatePanel, updateSc
 
 export function newCurrentTab() {
   if (S.currentTabIdx < 0) return;
-  var idx = S.currentTabIdx;
-  var fresh = makeTabData();
+  const idx = S.currentTabIdx;
+  const fresh = makeTabData();
   fresh.tabId = S.tabs[idx].tabId;   // keep stable ID so tab bar position is preserved
   Object.assign(S.tabs[idx], fresh);
   S.currentTabIdx = -1;
@@ -44,7 +44,7 @@ export function makeTabData() {
 
 export function snapshotCurrentTab() {
   if (S.currentTabIdx < 0 || !S.tabs[S.currentTabIdx]) return;
-  var tab = S.tabs[S.currentTabIdx];
+  const tab = S.tabs[S.currentTabIdx];
   tab.imgDataUrl = S.imgDataUrl;
   tab.img = S.img;
   tab.view = { ox: S.view.ox, oy: S.view.oy, zoom: S.view.zoom, fit: S.view.fit, iw: S.view.iw, ih: S.view.ih };
@@ -59,7 +59,7 @@ export function snapshotCurrentTab() {
 }
 
 export function applyTabToState(idx) {
-  var tab = S.tabs[idx];
+  const tab = S.tabs[idx];
   if (!tab) return;
 
   // Notify perspective.js and squareCalib.js to cancel their active tools
@@ -110,7 +110,7 @@ export function applyTabToState(idx) {
 }
 
 export function createTab(label, imgDataUrl, imgElement) {
-  var tab = makeTabData();
+  const tab = makeTabData();
   tab.tabId = S.tabN++;
   tab.label = label || 'Untitled';
   tab.imgDataUrl = imgDataUrl || null;
@@ -130,7 +130,7 @@ export function switchToTab(idx) {
   applyTabToState(idx);
   S.currentTabIdx = idx;
 
-  var tab = S.tabs[idx];
+  const tab = S.tabs[idx];
 
   // Reset toolbar tool visuals without triggering status flicker on every switch
   setTool('idle');
@@ -145,8 +145,8 @@ export function switchToTab(idx) {
     $(document).trigger('tab:renderPdf', [idx]);
   } else if (tab.imgDataUrl) {
     // Parked tab — reload the image element on demand
-    var ni = new Image();
-    var capturedIdx = idx;
+    const ni = new Image();
+    const capturedIdx = idx;
     ni.onload = function() {
       S.tabs[capturedIdx].img = ni;
       S.tabs[capturedIdx].view.iw = ni.naturalWidth;
@@ -180,7 +180,7 @@ export function switchToTab(idx) {
 
 export function closeTab(idx) {
   if (S.tabs.length <= 1) {
-    var fresh = makeTabData();
+    const fresh = makeTabData();
     Object.assign(S.tabs[0], fresh);
     S.currentTabIdx = -1;
     applyTabToState(0);
@@ -200,7 +200,7 @@ export function closeTab(idx) {
   if (idx === S.currentTabIdx) snapshotCurrentTab();
   S.tabs.splice(idx, 1);
 
-  var newIdx = S.currentTabIdx;
+  let newIdx = S.currentTabIdx;
   if (idx < newIdx) newIdx--;
   else if (idx === newIdx) newIdx = Math.max(0, newIdx - 1);
   if (newIdx >= S.tabs.length) newIdx = S.tabs.length - 1;
@@ -210,15 +210,15 @@ export function closeTab(idx) {
 }
 
 export function renderTabBar() {
-  var $bar = $('#tab-bar');
+  const $bar = $('#tab-bar');
   if (!$bar.length) return;
   $bar.empty();
 
-  for (var i = 0; i < S.tabs.length; i++) {
-    var tab = S.tabs[i];
-    var isActive = i === S.currentTabIdx;
-    var label = tab.label || 'Untitled';
-    var displayLabel = label.length > 18 ? label.substring(0, 16) + '\u2026' : label;
+  for (let i = 0; i < S.tabs.length; i++) {
+    const tab = S.tabs[i];
+    const isActive = i === S.currentTabIdx;
+    const label = tab.label || 'Untitled';
+    const displayLabel = label.length > 18 ? label.substring(0, 16) + '\u2026' : label;
 
     $bar.append(
       '<div class="tab-item' + (isActive ? ' active' : '') + '" data-idx="' + i + '">' +

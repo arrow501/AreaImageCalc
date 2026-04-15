@@ -8,14 +8,15 @@ import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, upda
 
 // Worker message handler
 worker.onmessage = function(e) {
-  var d = e.data, shape;
+  const d = e.data;
+  let shape;
 
   if (d.type === 'areaResult') {
     if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
       // Result for a background tab — store directly
-      var tab = S.tabs[d.tabIdx];
+      const tab = S.tabs[d.tabIdx];
       if (tab) {
-        var bgShape = tab.shapes.find(function(s) { return s.id === d.id; });
+        const bgShape = tab.shapes.find(function(s) { return s.id === d.id; });
         if (bgShape) { bgShape.area = d.area; bgShape.perimeter = d.perimeter; }
       }
       return;
@@ -30,9 +31,9 @@ worker.onmessage = function(e) {
   }
   else if (d.type === 'simplifyResult') {
     if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
-      var tab2 = S.tabs[d.tabIdx];
+      const tab2 = S.tabs[d.tabIdx];
       if (tab2) {
-        var bgShape2 = tab2.shapes.find(function(s) { return s.id === d.id; });
+        const bgShape2 = tab2.shapes.find(function(s) { return s.id === d.id; });
         if (bgShape2) {
           bgShape2.points = d.points;
           worker.postMessage({ type: 'calcArea', id: bgShape2.id, points: bgShape2.points, tabIdx: d.tabIdx });
@@ -56,18 +57,18 @@ function tabForId(id) {
 }
 
 function bufferToDataUrl(buffer, mime) {
-  var bytes = new Uint8Array(buffer);
-  var chunks = [];
-  var CHUNK = 0x8000;
-  for (var i = 0; i < bytes.length; i += CHUNK) {
+  const bytes = new Uint8Array(buffer);
+  const chunks = [];
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
     chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
   }
   return 'data:' + mime + ';base64,' + btoa(chunks.join(''));
 }
 
 imgWorker.onmessage = function(e) {
-  var d = e.data;
-  var tab = tabForId(d.id);
+  const d = e.data;
+  const tab = tabForId(d.id);
 
   if (d.type === 'webpResult') {
     if (!tab) return;
@@ -80,11 +81,11 @@ imgWorker.onmessage = function(e) {
     tab.webpPending = false;
     // OffscreenCanvas not supported — fall back to main-thread canvas encode, only on this signal
     if (d.fallback && tab.img) {
-      var fbCvs = document.createElement('canvas');
+      const fbCvs = document.createElement('canvas');
       fbCvs.width = tab.img.naturalWidth;
       fbCvs.height = tab.img.naturalHeight;
       fbCvs.getContext('2d').drawImage(tab.img, 0, 0);
-      var webpUrl = fbCvs.toDataURL('image/webp', 0.35);
+      const webpUrl = fbCvs.toDataURL('image/webp', 0.35);
       // Only store if the browser actually produced WebP (not a PNG fallback)
       if (webpUrl.startsWith('data:image/webp')) {
         tab.imgWebpUrl = webpUrl;
@@ -100,21 +101,21 @@ export function loadImg(file, skipConfirm) {
   if (!file || file.type.indexOf('image/') !== 0) return;
 
   // Track B: start decoding the bitmap immediately (runs in parallel with FileReader)
-  var bitmapPromise = (typeof createImageBitmap === 'function')
+  const bitmapPromise = (typeof createImageBitmap === 'function')
     ? createImageBitmap(file).catch(function() { return null; })
     : Promise.resolve(null);
 
   // Track A: load as data URL for immediate canvas display
-  var reader = new FileReader();
+  const reader = new FileReader();
   reader.onload = function(e) {
-    var dataUrl = e.target.result;
-    var ni = new Image();
+    const dataUrl = e.target.result;
+    const ni = new Image();
 
     ni.onload = function() {
-      var tab;
+      let tab;
       if (S.img) {
         // Current tab has an image — open in a new tab
-        var idx = createTab(file.name || 'Image', dataUrl, ni);
+        const idx = createTab(file.name || 'Image', dataUrl, ni);
         switchToTab(idx);
         tab = S.tabs[idx];
       } else {
@@ -179,13 +180,13 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
 // ---- View Control ----
 
 export function zoomAt(factor, sx, sy) {
-  var ip = s2i(sx, sy);
-  var oz = S.view.zoom;
+  const ip = s2i(sx, sy);
+  const oz = S.view.zoom;
 
   S.view.zoom = Math.max(0.05, Math.min(50, S.view.zoom * factor));
   if (S.view.zoom === oz) return;
 
-  var ns = i2s(ip.x, ip.y);
+  const ns = i2s(ip.x, ip.y);
   S.view.ox += sx - ns.x;
   S.view.oy += sy - ns.y;
 
@@ -207,9 +208,9 @@ export function setInteract() {
 // ---- Scale Popup ----
 
 export function showScalePopup() {
-  var mp = i2s((S.scaleP1.x + S.scaleP2.x) / 2, (S.scaleP1.y + S.scaleP2.y) / 2);
-  var l = Math.min(Math.max(mp.x + 12, 10), S.cw - 250);
-  var t = Math.min(Math.max(mp.y - 30, 10), S.ch - 60);
+  const mp = i2s((S.scaleP1.x + S.scaleP2.x) / 2, (S.scaleP1.y + S.scaleP2.y) / 2);
+  const l = Math.min(Math.max(mp.x + 12, 10), S.cw - 250);
+  const t = Math.min(Math.max(mp.y - 30, 10), S.ch - 60);
 
   $('#scale-popup').css({ left: l, top: t }).show();
   $('#scale-value').val('').focus();
@@ -217,17 +218,17 @@ export function showScalePopup() {
 }
 
 export function confirmScale() {
-  var val = parseFloat($('#scale-value').val());
-  var unit = $('#scale-unit').val();
+  const val = parseFloat($('#scale-value').val());
+  const unit = $('#scale-unit').val();
 
   if (!val || val <= 0) {
     status('Enter a valid distance > 0');
     return;
   }
 
-  var dx = S.scaleP2.x - S.scaleP1.x;
-  var dy = S.scaleP2.y - S.scaleP1.y;
-  var px = Math.sqrt(dx * dx + dy * dy);
+  const dx = S.scaleP2.x - S.scaleP1.x;
+  const dy = S.scaleP2.y - S.scaleP1.y;
+  const px = Math.sqrt(dx * dx + dy * dy);
 
   if (px < 1) {
     status('Points too close');
@@ -247,7 +248,7 @@ export function confirmScale() {
   setTool('idle');
   updateScaleDisp();
 
-  for (var i = 0; i < S.shapes.length; i++) {
+  for (let i = 0; i < S.shapes.length; i++) {
     if (S.shapes[i].closed) {
       worker.postMessage({ type: 'calcArea', id: S.shapes[i].id, points: S.shapes[i].points, tabIdx: S.currentTabIdx });
     }
@@ -264,7 +265,7 @@ export function confirmScale() {
 export function closePoly() {
   if (S.polyPts.length < 3) return;
 
-  var id = 's' + (++S.shapeN);
+  const id = 's' + (++S.shapeN);
   S.shapes.push({
     id: id,
     type: 'polygon',
@@ -286,8 +287,8 @@ export function closePoly() {
 }
 
 export function finishFH() {
-  var id = 's' + (++S.shapeN);
-  var pts = S.fhPts.slice();
+  const id = 's' + (++S.shapeN);
+  const pts = S.fhPts.slice();
   S.fhPts = [];
 
   S.shapes.push({
@@ -302,7 +303,7 @@ export function finishFH() {
 
   S.selId = id;
 
-  var eps = 2 / (S.view.zoom * S.view.fit);
+  const eps = 2 / (S.view.zoom * S.view.fit);
   worker.postMessage({ type: 'simplify', id: id, points: pts, epsilon: eps, tabIdx: S.currentTabIdx });
 
   S.overlayDirty = true;
@@ -322,9 +323,9 @@ export function delShape(id) {
 }
 
 export function selectAt(ip) {
-  var found = null;
+  let found = null;
 
-  for (var i = S.shapes.length - 1; i >= 0; i--) {
+  for (let i = S.shapes.length - 1; i >= 0; i--) {
     if (S.shapes[i].closed && pip(ip, S.shapes[i].points)) {
       found = S.shapes[i].id;
       break;
@@ -332,16 +333,16 @@ export function selectAt(ip) {
   }
 
   if (!found) {
-    var best = Infinity;
-    var thr = 15 / (S.view.zoom * S.view.fit);
+    let best = Infinity;
+    const thr = 15 / (S.view.zoom * S.view.fit);
 
-    for (var i = 0; i < S.shapes.length; i++) {
-      var sh = S.shapes[i];
+    for (let i = 0; i < S.shapes.length; i++) {
+      const sh = S.shapes[i];
       if (!sh.closed) continue;
 
-      for (var j = 0; j < sh.points.length; j++) {
-        var k = (j + 1) % sh.points.length;
-        var d = distSeg(ip, sh.points[j], sh.points[k]);
+      for (let j = 0; j < sh.points.length; j++) {
+        const k = (j + 1) % sh.points.length;
+        const d = distSeg(ip, sh.points[j], sh.points[k]);
         if (d < best) {
           best = d;
           found = sh.id;
@@ -357,7 +358,7 @@ export function selectAt(ip) {
   updatePanel();
 
   if (found) {
-    var sh = findShape(found);
+    const sh = findShape(found);
     if (sh && sh.area != null) {
       status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
     }
@@ -371,30 +372,30 @@ export function selectAt(ip) {
 export function rotateImage(angleDeg) {
   if (!S.img || angleDeg === 0) return;
 
-  var rad = angleDeg * Math.PI / 180;
-  var cos_t = Math.cos(rad);
-  var sin_t = Math.sin(rad);
-  var abs_cos = Math.abs(cos_t);
-  var abs_sin = Math.abs(sin_t);
+  const rad = angleDeg * Math.PI / 180;
+  const cos_t = Math.cos(rad);
+  const sin_t = Math.sin(rad);
+  const abs_cos = Math.abs(cos_t);
+  const abs_sin = Math.abs(sin_t);
 
-  var old_w = S.view.iw;
-  var old_h = S.view.ih;
-  var new_w = Math.round(old_w * abs_cos + old_h * abs_sin);
-  var new_h = Math.round(old_w * abs_sin + old_h * abs_cos);
+  const old_w = S.view.iw;
+  const old_h = S.view.ih;
+  const new_w = Math.round(old_w * abs_cos + old_h * abs_sin);
+  const new_h = Math.round(old_w * abs_sin + old_h * abs_cos);
 
   // Draw the rotated image onto a new canvas
-  var cvs = document.createElement('canvas');
+  const cvs = document.createElement('canvas');
   cvs.width = new_w;
   cvs.height = new_h;
-  var ctx = cvs.getContext('2d');
+  const ctx = cvs.getContext('2d');
   ctx.translate(new_w / 2, new_h / 2);
   ctx.rotate(rad);
   ctx.drawImage(S.img, -old_w / 2, -old_h / 2);
 
   // Forward transform: old image coords → new image coords (matches canvas rendering)
   function transformPt(p) {
-    var dx = p.x - old_w / 2;
-    var dy = p.y - old_h / 2;
+    const dx = p.x - old_w / 2;
+    const dy = p.y - old_h / 2;
     return {
       x: dx * cos_t - dy * sin_t + new_w / 2,
       y: dx * sin_t + dy * cos_t + new_h / 2
@@ -402,8 +403,8 @@ export function rotateImage(angleDeg) {
   }
 
   // Transform all shape points
-  for (var si = 0; si < S.shapes.length; si++) {
-    var shape = S.shapes[si];
+  for (let si = 0; si < S.shapes.length; si++) {
+    const shape = S.shapes[si];
     shape.points = shape.points.map(transformPt);
     if (shape.closed) {
       worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
@@ -417,8 +418,8 @@ export function rotateImage(angleDeg) {
   }
 
   // Load updated image
-  var dataUrl = cvs.toDataURL('image/png');
-  var newImg = new Image();
+  const dataUrl = cvs.toDataURL('image/png');
+  const newImg = new Image();
   newImg.onload = function() {
     S.img = newImg;
     S.view.iw = new_w;
@@ -433,7 +434,7 @@ export function rotateImage(angleDeg) {
     // Clear stale pre-rotation WebP and re-encode the rotated image.
     // Without this, serializeTab() would save the old WebP while shapes
     // are already in post-rotation coordinates, corrupting reloaded state.
-    var tab = S.tabs[S.currentTabIdx];
+    const tab = S.tabs[S.currentTabIdx];
     if (tab) {
       tab.imgWebpUrl = null;
       tab.webpPending = true;
@@ -448,8 +449,8 @@ export function rotateImage(angleDeg) {
 
     scheduleSave();
 
-    var absDeg = Math.abs(angleDeg % 360);
-    var dir = angleDeg > 0 ? 'CW' : 'CCW';
+    const absDeg = Math.abs(angleDeg % 360);
+    const dir = angleDeg > 0 ? 'CW' : 'CCW';
     status('Rotated ' + absDeg + '\u00b0 ' + dir + ' (' + new_w + '\u00d7' + new_h + ')');
   };
   newImg.src = dataUrl;

@@ -13,7 +13,7 @@ function buildState(dropNonActive, dropAll) {
     ts: Date.now(),
     currentTabIdx: S.currentTabIdx,
     tabs: S.tabs.map(function(tab, i) {
-      var s = serializeTab(tab);
+      const s = serializeTab(tab);
       if (dropAll || (dropNonActive && i !== S.currentTabIdx)) s.imgDataUrl = null;
       return s;
     })
@@ -24,11 +24,11 @@ export function doSave() {
   S.pendingSave = false;
   snapshotCurrentTab();
 
-  var hasAny = S.tabs.some(function(t) { return t.imgDataUrl || t.imgWebpUrl; });
+  const hasAny = S.tabs.some(function(t) { return t.imgDataUrl || t.imgWebpUrl; });
   if (!hasAny && !S.imgDataUrl) return;
 
-  var json = buildState(false, false);
-  var bytes = new Blob([json]).size;
+  let json = buildState(false, false);
+  let bytes = new Blob([json]).size;
 
   if (bytes > STORAGE_SOFT_LIMIT) {
     json = buildState(true, false);
@@ -57,16 +57,16 @@ export function doSave() {
 
 export function restoreState() {
   try {
-    var raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
 
-    var state = JSON.parse(raw);
+    const state = JSON.parse(raw);
     if (!state) return false;
 
     // Legacy v2 single-tab format
     if (state.v === SAVE_VER_LEGACY && state.img) {
-      var idx = createTab('Restored', state.img, null);
-      var tab = S.tabs[idx];
+      const idx = createTab('Restored', state.img, null);
+      const tab = S.tabs[idx];
       if (state.iw) tab.view.iw = state.iw;
       if (state.ih) tab.view.ih = state.ih;
       tab.shapes = state.shapes || [];
@@ -82,10 +82,10 @@ export function restoreState() {
     // v3 multi-tab format
     if (state.v !== SAVE_VER || !state.tabs || !state.tabs.length) return false;
 
-    for (var i = 0; i < state.tabs.length; i++) {
-      var td = state.tabs[i];
-      var tidx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-      var t = S.tabs[tidx];
+    for (let i = 0; i < state.tabs.length; i++) {
+      const td = state.tabs[i];
+      const tidx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+      const t = S.tabs[tidx];
       if (td.view) t.view = td.view;
       t.shapes = td.shapes || [];
       t.colorIdx = td.colorIdx || 0;
@@ -97,7 +97,7 @@ export function restoreState() {
       t.contrast = td.contrast || 0;
     }
 
-    var targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
+    const targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
     switchToTab(targetIdx);
     return true;
   } catch (e) {

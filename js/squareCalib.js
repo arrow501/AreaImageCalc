@@ -75,10 +75,10 @@ export function onSqCalibPoint() {
 }
 
 function updateHint() {
-  var n = S.polyPts.length;
-  var msg = n === 0 ? 'Click 4 corners of a real-world square (any order).' :
-            n <  4 ? n + '/4 corners placed.' :
-                     '4 corners placed. Enter side length and Apply.';
+  const n = S.polyPts.length;
+  const msg = n === 0 ? 'Click 4 corners of a real-world square (any order).' :
+              n <  4 ? n + '/4 corners placed.' :
+                       '4 corners placed. Enter side length and Apply.';
   $('#sq-hint').text(msg);
   $('#sq-calib-apply').toggleClass('disabled', n < 4);
 }
@@ -88,8 +88,8 @@ function updateHint() {
 export function applySqCalib() {
   if (S.tool !== 'squarecal' || S.polyPts.length !== 4) return;
 
-  var sideLen = parseFloat($('#sq-side-value').val());
-  var unit    = $('#sq-side-unit').val();
+  const sideLen = parseFloat($('#sq-side-value').val());
+  const unit    = $('#sq-side-unit').val();
   if (!sideLen || sideLen <= 0) {
     status('Enter a valid side length > 0.');
     return;
@@ -97,51 +97,51 @@ export function applySqCalib() {
 
   // Order the 4 clicked points into [TL, TR, BR, BL] by image-axis position:
   //   TL = min(x+y),  BR = max(x+y),  TR = min(y-x),  BL = max(y-x)
-  var pts = S.polyPts.slice();
+  const pts = S.polyPts.slice();
   pts.sort(function(a, b) { return (a.x + a.y) - (b.x + b.y); });
-  var tl = pts[0], br = pts[3];
-  var mid = [pts[1], pts[2]];
+  const tl = pts[0], br = pts[3];
+  const mid = [pts[1], pts[2]];
   mid.sort(function(a, b) { return (a.y - a.x) - (b.y - b.x); });
-  var tr = mid[0], bl = mid[1];
+  const tr = mid[0], bl = mid[1];
 
   // Target pixel side = average of the 4 sides
-  var d = (Math.hypot(tr.x - tl.x, tr.y - tl.y) +
-           Math.hypot(br.x - tr.x, br.y - tr.y) +
-           Math.hypot(bl.x - br.x, bl.y - br.y) +
-           Math.hypot(tl.x - bl.x, tl.y - bl.y)) / 4;
+  const d = (Math.hypot(tr.x - tl.x, tr.y - tl.y) +
+             Math.hypot(br.x - tr.x, br.y - tr.y) +
+             Math.hypot(bl.x - br.x, bl.y - br.y) +
+             Math.hypot(tl.x - bl.x, tl.y - bl.y)) / 4;
   if (d < 4) { status('Square too small — click further apart.'); return; }
 
   // Output square centred at the centroid of the input quad
-  var cx = (tl.x + tr.x + br.x + bl.x) / 4;
-  var cy = (tl.y + tr.y + br.y + bl.y) / 4;
-  var src = [tl, tr, br, bl];
-  var dst = [
+  const cx = (tl.x + tr.x + br.x + bl.x) / 4;
+  const cy = (tl.y + tr.y + br.y + bl.y) / 4;
+  const src = [tl, tr, br, bl];
+  const dst = [
     { x: cx - d / 2, y: cy - d / 2 },   // TL
     { x: cx + d / 2, y: cy - d / 2 },   // TR
     { x: cx + d / 2, y: cy + d / 2 },   // BR
     { x: cx - d / 2, y: cy + d / 2 }    // BL
   ];
 
-  var H    = computeHomography(src, dst);
+  const H    = computeHomography(src, dst);
   if (!H)    { status('Could not compute perspective transform.'); return; }
-  var Hinv = invertH(H);
+  const Hinv = invertH(H);
   if (!Hinv) { status('Could not invert transform.'); return; }
 
   // Pre-compute bounding-box offset (mirrors applyHomographyToImage internals)
   // so we can place the scale line in the new image coordinate space.
-  var iw = S.view.iw, ih = S.view.ih;
-  var imgCors = [
+  const iw = S.view.iw, ih = S.view.ih;
+  const imgCors = [
     applyHomography(H, 0,  0 ), applyHomography(H, iw, 0 ),
     applyHomography(H, iw, ih), applyHomography(H, 0,  ih)
   ];
-  var minX = Infinity, minY = Infinity;
-  for (var i = 0; i < 4; i++) {
+  let minX = Infinity, minY = Infinity;
+  for (let i = 0; i < 4; i++) {
     if (imgCors[i].x < minX) minX = imgCors[i].x;
     if (imgCors[i].y < minY) minY = imgCors[i].y;
   }
   minX = Math.max(minX, -Math.max(iw, ih) * 4);
   minY = Math.max(minY, -Math.max(iw, ih) * 4);
-  var offX = Math.floor(minX), offY = Math.floor(minY);
+  const offX = Math.floor(minX), offY = Math.floor(minY);
 
   status('Applying square calibration…');
   setTool('idle');   // clears polyPts before the async image op
