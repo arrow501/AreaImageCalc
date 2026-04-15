@@ -48,8 +48,9 @@
  * See exportMeasurements() below for its schema documentation.
  */
 
-import { S, fn, SAVE_VER } from './state.js';
-import { serializeTab } from './tabs.js';
+import { S, SAVE_VER } from './state.js';
+import { serializeTab, snapshotCurrentTab, createTab, switchToTab } from './tabs.js';
+import { status } from './ui.js';
 
 function triggerDownload(content, filename, mime) {
   var blob = new Blob([content], { type: mime || 'application/json' });
@@ -64,7 +65,7 @@ function triggerDownload(content, filename, mime) {
 }
 
 export function exportProject() {
-  if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
+  snapshotCurrentTab();
 
   var project = {
     v: SAVE_VER,
@@ -74,7 +75,7 @@ export function exportProject() {
   };
 
   triggerDownload(JSON.stringify(project), 'project.arcalc', 'application/json');
-  if (fn.status) fn.status('Project exported.');
+  status('Project exported.');
 }
 
 export function importProject(file) {
@@ -92,7 +93,7 @@ export function importProject(file) {
 
       for (var i = 0; i < data.tabs.length; i++) {
         var td = data.tabs[i];
-        var idx = fn.createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+        var idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
         var tab = S.tabs[idx];
         if (td.view) tab.view = td.view;
         tab.shapes = td.shapes || [];
@@ -106,8 +107,8 @@ export function importProject(file) {
       }
 
       var targetIdx = (data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length) ? data.currentTabIdx : 0;
-      if (fn.switchToTab) fn.switchToTab(targetIdx);
-      if (fn.status) fn.status('Project loaded: ' + data.tabs.length + ' tab(s).');
+      switchToTab(targetIdx);
+      status('Project loaded: ' + data.tabs.length + ' tab(s).');
     } catch (ex) {
       console.error('Import failed:', ex);
       alert('Failed to load project file.');
@@ -148,7 +149,7 @@ export function importProject(file) {
  * }
  */
 export function exportMeasurements() {
-  if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
+  snapshotCurrentTab();
 
   var result = {
     version: '1.0',
@@ -182,5 +183,5 @@ export function exportMeasurements() {
   };
 
   triggerDownload(JSON.stringify(result, null, 2), 'measurements.json', 'application/json');
-  if (fn.status) fn.status('Measurements exported.');
+  status('Measurements exported.');
 }

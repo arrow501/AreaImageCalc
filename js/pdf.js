@@ -1,4 +1,9 @@
-import { S, fn, imgWorker } from './state.js';
+import { S, imgWorker } from './state.js';
+import { createTab, switchToTab, renderTabBar } from './tabs.js';
+import { fitView, updateScaleDisp, updateFilters, enableTools, updatePanel, status } from './ui.js';
+
+// Lazy PDF page render triggered by tabs.js when switching to an unrendered PDF tab
+$(document).on('tab:renderPdf', function(e, idx) { renderPdfTabPage(idx); });
 
 var PDFJS_VERSION = '3.11.174';
 var PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/';
@@ -105,18 +110,18 @@ export function renderPdfTabPage(tabIdx) {
         S.view.ih = ni.naturalHeight;
         S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
 
-        if (fn.fitView) fn.fitView();
-        if (fn.updateScaleDisp) fn.updateScaleDisp();
-        if (fn.updateFilters) fn.updateFilters();
-        if (fn.enableTools) fn.enableTools(true);
-        if (fn.updatePanel) fn.updatePanel();
+        fitView();
+        updateScaleDisp();
+        updateFilters();
+        enableTools(true);
+        updatePanel();
         $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
-        if (fn.status) fn.status('Page ' + src.pageNum + ' loaded (' + ni.naturalWidth + '\u00d7' + ni.naturalHeight + ').');
+        status('Page ' + src.pageNum + ' loaded (' + ni.naturalWidth + '\u00d7' + ni.naturalHeight + ').');
       };
       ni.src = dataUrl;
     }).catch(function(err) {
       console.error('PDF page render error:', err);
-      if (fn.status) fn.status('Failed to render PDF page ' + src.pageNum);
+      status('Failed to render PDF page ' + src.pageNum);
     });
   });
 }
@@ -152,14 +157,14 @@ export function loadPdf(file, onDone) {
           for (var pi = 0; pi < pages.length; pi++) {
             var pageNum = pages[pi];
             var label = pages.length === 1 ? baseName : (baseName + ' p' + pageNum);
-            var idx = fn.createTab(label, null, null);
+            var idx = createTab(label, null, null);
             S.tabs[idx].pdfSource = { pdfDoc: pdfDoc, pageNum: pageNum };
             if (firstIdx < 0) firstIdx = idx;
           }
 
-          if (firstIdx >= 0 && fn.switchToTab) fn.switchToTab(firstIdx);
-          if (fn.renderTabBar) fn.renderTabBar();
-          if (fn.status) fn.status('Loading ' + pages.length + ' PDF page(s)...');
+          if (firstIdx >= 0) switchToTab(firstIdx);
+          renderTabBar();
+          status('Loading ' + pages.length + ' PDF page(s)...');
         });
       }).catch(function(err) {
         console.error('PDF load error:', err);

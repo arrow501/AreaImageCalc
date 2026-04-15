@@ -1,3 +1,5 @@
+export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+
 // Shared mutable state — every module imports S and reads/writes S.xxx
 export var S = {
   // Color palette
@@ -94,14 +96,6 @@ export var S = {
   hardLimitDialogShown: false
 };
 
-// Constants
-export var COLORS = ['#FF6B35', '#4A9EFF', '#22D88E', '#FF4081', '#FFD740', '#7C4DFF'];
-export var SAVE_KEY = 'areaCalcState';
-export var SAVE_VER = 3;
-export var SAVE_VER_LEGACY = 2;
-export var STORAGE_SOFT_LIMIT = 5 * 1024 * 1024;   // 5 MB — drop background-tab images from save
-export var STORAGE_HARD_LIMIT = 10 * 1024 * 1024;  // 10 MB — drop all images; warn user
-
 // DOM references (module scripts are deferred, so DOM exists)
 export var $wrap = $('#canvas-wrap');
 export var iCvs = document.getElementById('image-canvas');
@@ -112,6 +106,3 @@ export var oCtx = oCvs.getContext('2d');
 // Workers
 export var worker = new Worker('./js/worker.js');
 export var imgWorker = new Worker('./js/imageWorker.js');
-
-// Late-bound cross-module function references (breaks import cycles)
-export var fn = {};

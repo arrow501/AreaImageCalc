@@ -1,4 +1,5 @@
-import { S, fn } from './state.js';
+import { S } from './state.js';
+import { setTool, enableTools, updateFilters, syncSliders, updatePanel, updateScaleDisp, updateZoomDisp, status, fitView } from './ui.js';
 
 export function newCurrentTab() {
   if (S.currentTabIdx < 0) return;
@@ -9,13 +10,13 @@ export function newCurrentTab() {
   S.currentTabIdx = -1;
   applyTabToState(idx);
   S.currentTabIdx = idx;
-  if (fn.setTool)        fn.setTool('idle');
-  if (fn.enableTools)    fn.enableTools(false);
-  if (fn.updateFilters)  fn.updateFilters();
-  if (fn.syncSliders)    fn.syncSliders();
-  if (fn.updatePanel)    fn.updatePanel();
-  if (fn.updateScaleDisp) fn.updateScaleDisp();
-  if (fn.status)         fn.status('Drop an image, click Open, or paste to start');
+  setTool('idle');
+  enableTools(false);
+  updateFilters();
+  syncSliders();
+  updatePanel();
+  updateScaleDisp();
+  status('Drop an image, click Open, or paste to start');
   $('#dropzone').css('pointer-events', 'auto').find('.dz-content').show();
   renderTabBar();
 }
@@ -61,8 +62,8 @@ export function applyTabToState(idx) {
   var tab = S.tabs[idx];
   if (!tab) return;
 
-  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
-  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  // Notify perspective.js and squareCalib.js to cancel their active tools
+  $(document).trigger('tab:switch');
 
   S.imgDataUrl = tab.imgDataUrl;
   S.img = tab.img;
@@ -132,16 +133,16 @@ export function switchToTab(idx) {
   var tab = S.tabs[idx];
 
   // Reset toolbar tool visuals without triggering status flicker on every switch
-  if (fn.setTool) fn.setTool('idle');
+  setTool('idle');
 
   if (tab.img) {
-    if (fn.fitView) fn.fitView();
-    if (fn.enableTools) fn.enableTools(true);
-    if (fn.updateFilters) fn.updateFilters();
-    if (fn.syncSliders) fn.syncSliders();
+    fitView();
+    enableTools(true);
+    updateFilters();
+    syncSliders();
     $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
   } else if (tab.pdfSource) {
-    if (fn.renderPdfTabPage) fn.renderPdfTabPage(idx);
+    $(document).trigger('tab:renderPdf', [idx]);
   } else if (tab.imgDataUrl) {
     // Parked tab — reload the image element on demand
     var ni = new Image();
@@ -155,26 +156,26 @@ export function switchToTab(idx) {
       S.view.iw = ni.naturalWidth;
       S.view.ih = ni.naturalHeight;
       S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
-      if (fn.fitView) fn.fitView();
-      if (fn.updateFilters) fn.updateFilters();
-      if (fn.syncSliders) fn.syncSliders();
-      if (fn.enableTools) fn.enableTools(true);
-      if (fn.updatePanel) fn.updatePanel();
-      if (fn.updateScaleDisp) fn.updateScaleDisp();
+      fitView();
+      updateFilters();
+      syncSliders();
+      enableTools(true);
+      updatePanel();
+      updateScaleDisp();
       $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
     };
     ni.src = tab.imgDataUrl;
   } else {
-    if (fn.enableTools) fn.enableTools(false);
-    if (fn.updateFilters) fn.updateFilters();
-    if (fn.syncSliders) fn.syncSliders();
+    enableTools(false);
+    updateFilters();
+    syncSliders();
     $('#dropzone').css('pointer-events', 'auto').find('.dz-content').show();
   }
 
   renderTabBar();
-  if (fn.updatePanel) fn.updatePanel();
-  if (fn.updateScaleDisp) fn.updateScaleDisp();  // single call covers all branches
-  if (fn.updateZoomDisp) fn.updateZoomDisp();
+  updatePanel();
+  updateScaleDisp();
+  updateZoomDisp();
 }
 
 export function closeTab(idx) {
@@ -184,13 +185,13 @@ export function closeTab(idx) {
     S.currentTabIdx = -1;
     applyTabToState(0);
     S.currentTabIdx = 0;
-    if (fn.setTool) fn.setTool('idle');
-    if (fn.enableTools) fn.enableTools(false);
-    if (fn.updateFilters) fn.updateFilters();
-    if (fn.syncSliders) fn.syncSliders();
-    if (fn.updatePanel) fn.updatePanel();
-    if (fn.updateScaleDisp) fn.updateScaleDisp();
-    if (fn.status) fn.status('Drop an image, click Open, or paste to start');
+    setTool('idle');
+    enableTools(false);
+    updateFilters();
+    syncSliders();
+    updatePanel();
+    updateScaleDisp();
+    status('Drop an image, click Open, or paste to start');
     $('#dropzone').css('pointer-events', 'auto').find('.dz-content').show();
     renderTabBar();
     return;

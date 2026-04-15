@@ -1,18 +1,21 @@
-import { S, fn, worker, oCvs } from './state.js';
+import { S, worker, oCvs } from './state.js';
 import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim } from './geometry.js';
 import { resize } from './render.js';
 import {
-  setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
-  loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, status, updateFilters, rotateImage
+  closePoly, finishFH, delShape, selectAt,
+  loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
+  rotateImage
 } from './tools.js';
+import {
+  setTool, cancelTool, fitView, updatePanel, status, updateFilters,
+  setSlider
+} from './ui.js';
 import { scheduleSave } from './storage.js';
-
-// Expose slider sync for tabs.js to call on tab switch
-fn.syncSliders = function() {
-  setSlider('bright', S.brightness);
-  setSlider('contrast', S.contrast);
-};
+import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
+import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
+import { createTab, switchToTab, closeTab } from './tabs.js';
+import { loadPdf } from './pdf.js';
+import { exportProject, importProject, exportMeasurements } from './export.js';
 
 // ---- Coordinate Helpers ----
 
@@ -57,7 +60,7 @@ $(oCvs).on('mousedown', function(e) {
   if (e.button !== 0 || !S.img) return;
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    var hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
       S.perspDragIdx = hi;
       S.perspDragOffset = {
@@ -85,7 +88,7 @@ $(oCvs).on('mousedown', function(e) {
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
-        fn.onSqCalibPoint();
+        onSqCalibPoint();
       }
       break;
 
@@ -148,20 +151,20 @@ $(document).on('mousemove', function(e) {
     S.view.ox = S.panSt.ox + (e.clientX - S.panSt.x);
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) fn.updatePerspPreview();
+    if (S.perspActive) $(document).trigger('view:change');
     setInteract();
     return;
   }
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    fn.updatePerspPreview();
+    $(document).trigger('view:change');
     S.overlayDirty = true;
     return;
   }
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    var hi = findPerspHandle(S.mx, S.my);
     $('body').removeClass('cursor-move cursor-crosshair cursor-grab');
     if (hi >= 0) {
       oCvs.style.cursor = 'grab';
@@ -328,7 +331,7 @@ oCvs.addEventListener('touchstart', function(e) {
   if (!S.img) return;
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    var hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
       S.perspDragIdx = hi;
       S.perspDragOffset = {
@@ -355,7 +358,7 @@ oCvs.addEventListener('touchstart', function(e) {
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
-        fn.onSqCalibPoint();
+        onSqCalibPoint();
       }
       break;
 
@@ -440,7 +443,7 @@ oCvs.addEventListener('touchmove', function(e) {
     S.touchPanSt.oy = S.view.oy;
 
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) fn.updatePerspPreview();
+    if (S.perspActive) $(document).trigger('view:change');
     setInteract();
     return;
   }
@@ -453,7 +456,7 @@ oCvs.addEventListener('touchmove', function(e) {
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    fn.updatePerspPreview();
+    $(document).trigger('view:change');
     S.overlayDirty = true;
     return;
   }
@@ -557,9 +560,9 @@ $(document).on('keydown', function(e) {
 
     case 'Escape':
       if (S.tool === 'squarecal') {
-        fn.cancelSqCalib();
+        cancelSqCalib();
       } else if (S.perspActive) {
-        fn.cancelPerspective();
+        cancelPerspective();
       } else if (S.tool !== 'idle') {
         setTool('idle');
       } else {
@@ -571,10 +574,10 @@ $(document).on('keydown', function(e) {
 
     case 'Enter':
       if (S.tool === 'squarecal' && S.polyPts.length === 4) {
-        fn.applySqCalib();
+        applySqCalib();
         e.preventDefault();
       } else if (S.perspActive) {
-        fn.applyPerspective();
+        applyPerspective();
         e.preventDefault();
       }
       break;
@@ -590,7 +593,7 @@ $(document).on('keydown', function(e) {
     case '3': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
     case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
     case '5':
-      if (S.img && !S.perspActive && S.tool !== 'squarecal') fn.enterPerspective();
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') enterPerspective();
       break;
 
     case '=':
@@ -646,17 +649,12 @@ function _drainFileQueue() {
 
   if (ext === 'pdf' || file.type === 'application/pdf') {
     // PDF: pause the queue until the page-selector modal is dismissed
-    if (fn.loadPdf) {
-      fn.loadPdf(file, function() {
-        _fileQueueBusy = false;
-        _drainFileQueue();
-      });
-    } else {
+    loadPdf(file, function() {
       _fileQueueBusy = false;
       _drainFileQueue();
-    }
+    });
   } else if (ext === 'arcalc') {
-    if (fn.importProject) fn.importProject(file);
+    importProject(file);
     _fileQueueBusy = false;
     _drainFileQueue();
   } else if (file.type.indexOf('image/') === 0) {
@@ -721,15 +719,13 @@ function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
 // ---- New button (new project — clears all tabs) ----
 
 function doNewProject() {
-  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
-  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  if (S.perspActive) cancelPerspective();
+  if (S.tool === 'squarecal') cancelSqCalib();
   cancelTool();
 
   S.tabs.length = 0;
   S.currentTabIdx = -1;
-  if (fn.createTab && fn.switchToTab) {
-    fn.switchToTab(fn.createTab('Untitled', null, null));
-  }
+  switchToTab(createTab('Untitled', null, null));
   scheduleSave();
 }
 
@@ -832,18 +828,18 @@ $('#scale-value').on('keydown', function(e) {
 
 $('#btn-persp').on('click', function() {
   if (!S.img) return;
-  if (S.perspActive)          { fn.cancelPerspective(); return; }
-  if (S.tool === 'squarecal') { fn.cancelSqCalib();    return; }
-  fn.enterPerspective();
+  if (S.perspActive)          { cancelPerspective(); return; }
+  if (S.tool === 'squarecal') { cancelSqCalib();    return; }
+  enterPerspective();
 });
-$('#persp-apply').on('click', function() { fn.applyPerspective(); });
-$('#persp-cancel').on('click', function() { fn.cancelPerspective(); });
-$('#persp-reset').on('click', function() { fn.resetPerspective(); });
+$('#persp-apply').on('click', function() { applyPerspective(); });
+$('#persp-cancel').on('click', function() { cancelPerspective(); });
+$('#persp-reset').on('click', function() { resetPerspective(); });
 
 // ---- Perspective Mode Tabs ----
 
 $('.persp-tab').on('click', function() {
-  fn.switchPerspMode($(this).data('persp-mode'));
+  switchPerspMode($(this).data('persp-mode'));
 });
 
 // ---- Shapes Panel Events ----
@@ -871,36 +867,10 @@ $('#shapes-list').on('click', '.shape-del', function(e) {
 $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
-  if (S.perspActive) fn.updatePerspPreview();
+  if (S.perspActive) $(document).trigger('view:change');
 });
 
 // ---- Brightness / Contrast Sliders ----
-
-function setSlider(name, val) {
-  val = Math.max(-100, Math.min(100, Math.round(val)));
-
-  if (name === 'bright') {
-    S.brightness = val;
-  } else {
-    S.contrast = val;
-  }
-
-  var $grp = $('.sl-group [data-slider="' + name + '"]').closest('.sl-group');
-  var pct = (val + 100) / 200;
-
-  $grp.find('.sl-thumb').css('left', (pct * 100) + '%');
-
-  var $fill = $grp.find('.sl-fill');
-  if (val >= 0) {
-    $fill.css({ left: '50%', width: (pct * 100 - 50) + '%' });
-  } else {
-    $fill.css({ left: (pct * 100) + '%', width: (50 - pct * 100) + '%' });
-  }
-
-  $grp.find('.sl-val').val(val);
-
-  updateFilters();
-}
 
 $('.sl-track').each(function() {
   var $track = $(this);
@@ -994,30 +964,28 @@ $('.sl-val').each(function() {
 $(document).on('click', '.tab-item', function(e) {
   if ($(e.target).hasClass('tab-close') || $(e.target).closest('.tab-close').length) return;
   var idx = parseInt($(this).data('idx'), 10);
-  if (idx !== S.currentTabIdx && fn.switchToTab) fn.switchToTab(idx);
+  if (idx !== S.currentTabIdx) switchToTab(idx);
 });
 
 $(document).on('click', '.tab-close', function(e) {
   e.stopPropagation();
   var idx = parseInt($(this).data('idx'), 10);
-  if (fn.closeTab) fn.closeTab(idx);
+  closeTab(idx);
 });
 
 $(document).on('click', '#btn-new-tab', function() {
-  if (fn.createTab && fn.switchToTab) {
-    var idx = fn.createTab('Untitled', null, null);
-    fn.switchToTab(idx);
-  }
+  var idx = createTab('Untitled', null, null);
+  switchToTab(idx);
 });
 
 // ---- Export Buttons ----
 
 $('#btn-export-project').on('click', function() {
-  if (fn.exportProject) fn.exportProject();
+  exportProject();
 });
 
 $('#btn-export-measurements').on('click', function() {
-  if (fn.exportMeasurements) fn.exportMeasurements();
+  exportMeasurements();
 });
 
 // ---- Rotate Buttons ----

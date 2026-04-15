@@ -1,7 +1,7 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, findNearestPt, dot, roundRect } from './geometry.js';
 import { drawPerspOverlay } from './perspective.js';
-import './squareCalib.js';   // registers fn.enterSqCalib / switchPerspMode etc.
+import './squareCalib.js';   // ensures squarecal event listeners are registered
 
 export function resize() {
   var w = $wrap.width(), h = $wrap.height();

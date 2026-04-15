@@ -1,4 +1,5 @@
-import { S, fn, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
+import { S, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
+import { exportProject } from './export.js';
 
 function updateBadge(bytes) {
   $('#btn-export-project')
@@ -20,7 +21,7 @@ function showHardLimitDialog() {
         .append('<p><strong>Auto-save is full.</strong><br>Your work is no longer being saved to this browser — the images are too large for local storage.</p>')
         .append(
           $('<button class="btn-primary">').text('Save Project File').on('click', function() {
-            if (fn.exportProject) fn.exportProject();
+            exportProject();
             $(this).closest('.storage-modal-overlay').remove();
           })
         )

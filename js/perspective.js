@@ -1,14 +1,15 @@
-import { S, fn, worker, imgWorker, iCvs, oCvs } from './state.js';
+import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
 import { i2s, centroid } from './geometry.js';
+import { setTool, enableTools, status, updateScaleDisp, fitView, updatePanel } from './ui.js';
+import { scheduleSave } from './storage.js';
 
-// Register manual perspective functions on fn
-fn.cancelPerspective  = cancelPerspective;
-fn.enterPerspective   = enterPerspective;
-fn.applyPerspective   = applyPerspective;
-fn.resetPerspective   = resetPerspective;
-fn.updatePerspPreview = updatePerspPreview;
-fn.findPerspHandle    = findPerspHandle;
-// fn.switchPerspMode is registered by squareCalib.js (loaded after us)
+// View-change event: fired by fitView/zoomAt to update live CSS preview
+$(document).on('view:change', updatePerspPreview);
+
+// Tab-switch event: cancel perspective when user switches away from this tab
+$(document).on('tab:switch', function() {
+  if (S.perspActive) cancelPerspective();
+});
 
 function solveLinear8(A) {
   var n = 8;
@@ -75,14 +76,14 @@ function computeCSS3dMatrix(w, h, dst) {
 
 export function enterPerspective() {
   if (!S.img || S.perspActive) return;
-  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
-  fn.setTool('idle');
+  if (S.tool === 'squarecal') $(document).trigger('squarecal:cancel');
+  setTool('idle');
   S.perspActive = true;
   var iw = S.view.iw, ih = S.view.ih;
   S.perspSrcCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
   S.perspCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
   S.perspDragIdx = -1;
-  fn.enableTools(false);
+  enableTools(false);
   $('#btn-persp').addClass('active').removeClass('disabled');
   $('#persp-bar').addClass('visible');
   $('.persp-tab').removeClass('active');
@@ -92,7 +93,7 @@ export function enterPerspective() {
   iCvs.style.opacity = '0.6';
   iCvs.style.transformOrigin = '0 0';
   S.overlayDirty = true;
-  fn.status('Drag corner handles to correct perspective. Apply when done.');
+  status('Drag corner handles to correct perspective. Apply when done.');
 }
 
 export function cancelPerspective() {
@@ -103,11 +104,11 @@ export function cancelPerspective() {
   iCvs.style.transform = '';
   iCvs.style.transformOrigin = '';
   oCvs.style.cursor = '';
-  fn.enableTools(true);
+  enableTools(true);
   $('#btn-persp').removeClass('active');
   $('#persp-bar').removeClass('visible');
   S.overlayDirty = true; S.imageDirty = true;
-  fn.status('Perspective correction cancelled.');
+  status('Perspective correction cancelled.');
 }
 
 export function resetPerspective() {
@@ -116,7 +117,7 @@ export function resetPerspective() {
   S.perspCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
   iCvs.style.transform = '';
   S.overlayDirty = true;
-  fn.status('Corners reset. Drag to adjust.');
+  status('Corners reset. Drag to adjust.');
 }
 
 export function updatePerspPreview() {
@@ -148,21 +149,21 @@ export function applyPerspective() {
         Math.abs(S.perspCorners[i].y - S.perspSrcCorners[i].y) > 0.5) { moved = true; break; }
   }
   if (!moved) { cancelPerspective(); return; }
-  fn.status('Applying perspective correction...');
+  status('Applying perspective correction...');
 
   var Hfwd = computeHomography(S.perspSrcCorners, S.perspCorners);
-  if (!Hfwd) { fn.status('Failed to compute perspective transform.'); return; }
+  if (!Hfwd) { status('Failed to compute perspective transform.'); return; }
   var Hinv = invertH(Hfwd);
-  if (!Hinv) { fn.status('Failed to invert perspective transform.'); return; }
+  if (!Hinv) { status('Failed to invert perspective transform.'); return; }
 
   applyHomographyToImage(Hfwd, Hinv, function() {
     S.perspActive = false; S.perspCorners = null; S.perspSrcCorners = null; S.perspDragIdx = -1;
     iCvs.style.opacity = ''; iCvs.style.transform = ''; iCvs.style.transformOrigin = '';
     oCvs.style.cursor = '';
-    fn.enableTools(true);
+    enableTools(true);
     $('#btn-persp').removeClass('active');
     $('#persp-bar').removeClass('visible');
-    fn.status('Perspective correction applied.');
+    status('Perspective correction applied.');
   });
 }
 
@@ -329,7 +330,7 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
     if (S.scalePPU > 0 && oldScalePxLen > 0) {
       var realDist = oldScalePxLen / S.scalePPU;
       S.scalePPU = Math.hypot(np2.x - np1.x, np2.y - np1.y) / realDist;
-      fn.updateScaleDisp();
+      updateScaleDisp();
     }
   }
 
@@ -343,8 +344,8 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
     S.imgDataUrl = dataUrl;
 
     S.imageDirty = S.overlayDirty = true;
-    fn.fitView();
-    fn.updatePanel();
+    fitView();
+    updatePanel();
 
     // Clear stale pre-transform WebP and re-encode the corrected image.
     // Without this, serializeTab() would save the old WebP while shapes
@@ -362,7 +363,7 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
       }
     }
 
-    fn.scheduleSave();
+    scheduleSave();
 
     if (onComplete) onComplete();
   };

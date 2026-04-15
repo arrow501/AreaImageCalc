@@ -1,5 +1,5 @@
-import { S, fn, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
-import { serializeTab } from './tabs.js';
+import { S, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
+import { serializeTab, snapshotCurrentTab, createTab, switchToTab } from './tabs.js';
 
 export function scheduleSave() {
   if (S.saveTimer) clearTimeout(S.saveTimer);
@@ -22,7 +22,7 @@ function buildState(dropNonActive, dropAll) {
 
 export function doSave() {
   S.pendingSave = false;
-  if (fn.snapshotCurrentTab) fn.snapshotCurrentTab();
+  snapshotCurrentTab();
 
   var hasAny = S.tabs.some(function(t) { return t.imgDataUrl || t.imgWebpUrl; });
   if (!hasAny && !S.imgDataUrl) return;
@@ -65,8 +65,7 @@ export function restoreState() {
 
     // Legacy v2 single-tab format
     if (state.v === SAVE_VER_LEGACY && state.img) {
-      if (!fn.createTab || !fn.switchToTab) return false;
-      var idx = fn.createTab('Restored', state.img, null);
+      var idx = createTab('Restored', state.img, null);
       var tab = S.tabs[idx];
       if (state.iw) tab.view.iw = state.iw;
       if (state.ih) tab.view.ih = state.ih;
@@ -76,17 +75,16 @@ export function restoreState() {
       tab.scalePPU = state.scalePPU || 0;
       tab.scaleUnit = state.scaleUnit || 'cm';
       tab.scaleLine = state.scaleLine || null;
-      fn.switchToTab(idx);
+      switchToTab(idx);
       return true;
     }
 
     // v3 multi-tab format
     if (state.v !== SAVE_VER || !state.tabs || !state.tabs.length) return false;
-    if (!fn.createTab || !fn.switchToTab) return false;
 
     for (var i = 0; i < state.tabs.length; i++) {
       var td = state.tabs[i];
-      var tidx = fn.createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+      var tidx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
       var t = S.tabs[tidx];
       if (td.view) t.view = td.view;
       t.shapes = td.shapes || [];
@@ -100,7 +98,7 @@ export function restoreState() {
     }
 
     var targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
-    fn.switchToTab(targetIdx);
+    switchToTab(targetIdx);
     return true;
   } catch (e) {
     console.warn('Restore failed:', e);
