@@ -1,41 +1,44 @@
-import { S, fn, worker, oCvs } from './state.js';
+import { S, worker, oCvs } from './state.js';
 import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim } from './geometry.js';
 import { resize } from './render.js';
 import {
-  setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
-  loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, status, updateFilters, rotateImage
+  closePoly, finishFH, delShape, selectAt,
+  loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
+  rotateImage
 } from './tools.js';
+import {
+  setTool, cancelTool, fitView, updatePanel, status, updateFilters,
+  setSlider
+} from './ui.js';
 import { scheduleSave } from './storage.js';
-
-// Expose slider sync for tabs.js to call on tab switch
-fn.syncSliders = function() {
-  setSlider('bright', S.brightness);
-  setSlider('contrast', S.contrast);
-};
+import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
+import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
+import { createTab, switchToTab, closeTab } from './tabs.js';
+import { loadPdf } from './pdf.js';
+import { exportProject, importProject, exportMeasurements } from './export.js';
 
 // ---- Coordinate Helpers ----
 
 function canvasXY(e) {
-  var r = oCvs.getBoundingClientRect();
+  const r = oCvs.getBoundingClientRect();
   S.mx = e.clientX - r.left;
   S.my = e.clientY - r.top;
-  var ip = s2i(S.mx, S.my);
+  const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
 }
 
 function touchXY(touch) {
-  var r = oCvs.getBoundingClientRect();
+  const r = oCvs.getBoundingClientRect();
   S.mx = touch.clientX - r.left;
   S.my = touch.clientY - r.top;
-  var ip = s2i(S.mx, S.my);
+  const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
 }
 
 function findTouch(touches, id) {
-  for (var i = 0; i < touches.length; i++) {
+  for (let i = 0; i < touches.length; i++) {
     if (touches[i].identifier === id) return touches[i];
   }
   return null;
@@ -57,7 +60,7 @@ $(oCvs).on('mousedown', function(e) {
   if (e.button !== 0 || !S.img) return;
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    const hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
       S.perspDragIdx = hi;
       S.perspDragOffset = {
@@ -69,15 +72,15 @@ $(oCvs).on('mousedown', function(e) {
     return;
   }
 
-  var ip = { x: S.mix, y: S.miy };
+  const ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
     case 'squarecal':
       if (S.polyPts.length === 4) {
         // Click near an existing corner → start dragging it
-        var grabR = 12 / (S.view.zoom * S.view.fit);
+        const grabR = 12 / (S.view.zoom * S.view.fit);
         S.dragIdx = -1;
-        for (var ci = 0; ci < 4; ci++) {
+        for (let ci = 0; ci < 4; ci++) {
           if (Math.hypot(S.mix - S.polyPts[ci].x, S.miy - S.polyPts[ci].y) <= grabR) {
             S.dragIdx = ci; break;
           }
@@ -85,7 +88,7 @@ $(oCvs).on('mousedown', function(e) {
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
-        fn.onSqCalibPoint();
+        onSqCalibPoint();
       }
       break;
 
@@ -104,7 +107,7 @@ $(oCvs).on('mousedown', function(e) {
 
     case 'polygon':
       if (S.polyPts.length >= 3) {
-        var fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
+        const fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
         if (Math.hypot(S.mx - fp.x, S.my - fp.y) < 15) {
           closePoly();
           return;
@@ -121,9 +124,9 @@ $(oCvs).on('mousedown', function(e) {
       S.overlayDirty = true;
       break;
 
-    case 'edit':
-      var thr = 10 / (S.view.zoom * S.view.fit);
-      var hp = findNearestPt(ip, thr);
+    case 'edit': {
+      const thr = 10 / (S.view.zoom * S.view.fit);
+      const hp = findNearestPt(ip, thr);
       if (hp) {
         S.dragShape = hp.shape;
         S.dragIdx = hp.idx;
@@ -134,6 +137,7 @@ $(oCvs).on('mousedown', function(e) {
         status('Drag to move point');
       }
       break;
+    }
 
     case 'idle':
       selectAt(ip);
@@ -148,20 +152,20 @@ $(document).on('mousemove', function(e) {
     S.view.ox = S.panSt.ox + (e.clientX - S.panSt.x);
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) fn.updatePerspPreview();
+    if (S.perspActive) $(document).trigger('view:change');
     setInteract();
     return;
   }
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    fn.updatePerspPreview();
+    $(document).trigger('view:change');
     S.overlayDirty = true;
     return;
   }
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    const hi = findPerspHandle(S.mx, S.my);
     $('body').removeClass('cursor-move cursor-crosshair cursor-grab');
     if (hi >= 0) {
       oCvs.style.cursor = 'grab';
@@ -178,8 +182,8 @@ $(document).on('mousemove', function(e) {
       S.polyPts[S.dragIdx] = { x: S.mix, y: S.miy };
     } else if (S.polyPts.length === 4) {
       // Show grab cursor when hovering near a corner
-      var grabR2 = 12 / (S.view.zoom * S.view.fit);
-      var nearCorner = S.polyPts.some(function(p) {
+      const grabR2 = 12 / (S.view.zoom * S.view.fit);
+      const nearCorner = S.polyPts.some(function(p) {
         return Math.hypot(S.mix - p.x, S.miy - p.y) <= grabR2;
       });
       oCvs.style.cursor = nearCorner ? 'grab' : '';
@@ -189,16 +193,16 @@ $(document).on('mousemove', function(e) {
   }
 
   if (S.isFH) {
-    var last = S.fhPts[S.fhPts.length - 1];
-    var dx = S.mix - last.x, dy = S.miy - last.y;
-    var dist = Math.sqrt(dx * dx + dy * dy);
+    const last = S.fhPts[S.fhPts.length - 1];
+    const dx = S.mix - last.x, dy = S.miy - last.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    var now = Date.now();
-    var dt = (now - S.fhLastTime) / 1000;
-    var speed = dt > 0 ? dist / dt : 0;
+    const now = Date.now();
+    const dt = (now - S.fhLastTime) / 1000;
+    const speed = dt > 0 ? dist / dt : 0;
 
-    var t = Math.min(speed / 2000, 1);
-    var threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
+    const t = Math.min(speed / 2000, 1);
+    const threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
 
     if (dist >= threshold) {
       S.fhPts.push({ x: S.mix, y: S.miy });
@@ -276,10 +280,10 @@ oCvs.addEventListener('wheel', function(e) {
   e.preventDefault();
   if (!S.img) return;
 
-  var r = oCvs.getBoundingClientRect();
-  var sx = e.clientX - r.left;
-  var sy = e.clientY - r.top;
-  var d = e.ctrlKey ? -e.deltaY * 3 : -e.deltaY;
+  const r = oCvs.getBoundingClientRect();
+  const sx = e.clientX - r.left;
+  const sy = e.clientY - r.top;
+  const d = e.ctrlKey ? -e.deltaY * 3 : -e.deltaY;
 
   zoomAt(d > 0 ? 1.1 : 1 / 1.1, sx, sy);
 }, { passive: false });
@@ -297,7 +301,7 @@ $(oCvs).on('contextmenu', function(e) {
 oCvs.addEventListener('touchstart', function(e) {
   e.preventDefault();
 
-  var touches = e.touches;
+  const touches = e.touches;
 
   if (touches.length >= 2) {
     if (S.isFH) { S.isFH = false; S.fhPts = []; S.overlayDirty = true; }
@@ -308,10 +312,10 @@ oCvs.addEventListener('touchstart', function(e) {
     S.touchId = null;
     S.touchIsPan = true;
 
-    var t0 = touches[0], t1 = touches[1];
-    var r = oCvs.getBoundingClientRect();
-    var mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
-    var mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
+    const t0 = touches[0], t1 = touches[1];
+    const r = oCvs.getBoundingClientRect();
+    const mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
+    const mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
 
     S.touchPinchDist = Math.hypot(mx1 - mx0, my1 - my0);
     S.touchPinchMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
@@ -321,14 +325,14 @@ oCvs.addEventListener('touchstart', function(e) {
 
   if (S.touchId !== null) return;
 
-  var touch = touches[0];
+  const touch = touches[0];
   S.touchId = touch.identifier;
   touchXY(touch);
 
   if (!S.img) return;
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    const hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
       S.perspDragIdx = hi;
       S.perspDragOffset = {
@@ -340,14 +344,14 @@ oCvs.addEventListener('touchstart', function(e) {
     return;
   }
 
-  var ip = { x: S.mix, y: S.miy };
+  const ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
     case 'squarecal':
       if (S.polyPts.length === 4) {
-        var grabRT = 18 / (S.view.zoom * S.view.fit);
+        const grabRT = 18 / (S.view.zoom * S.view.fit);
         S.dragIdx = -1;
-        for (var cit = 0; cit < 4; cit++) {
+        for (let cit = 0; cit < 4; cit++) {
           if (Math.hypot(S.mix - S.polyPts[cit].x, S.miy - S.polyPts[cit].y) <= grabRT) {
             S.dragIdx = cit; break;
           }
@@ -355,7 +359,7 @@ oCvs.addEventListener('touchstart', function(e) {
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
-        fn.onSqCalibPoint();
+        onSqCalibPoint();
       }
       break;
 
@@ -374,7 +378,7 @@ oCvs.addEventListener('touchstart', function(e) {
 
     case 'polygon':
       if (S.polyPts.length >= 3) {
-        var fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
+        const fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
         if (Math.hypot(S.mx - fp.x, S.my - fp.y) < 25) {
           closePoly();
           return;
@@ -391,9 +395,9 @@ oCvs.addEventListener('touchstart', function(e) {
       S.overlayDirty = true;
       break;
 
-    case 'edit':
-      var thrScreen = 20 / (S.view.zoom * S.view.fit);
-      var hp = findNearestPt(ip, thrScreen);
+    case 'edit': {
+      const thrScreen = 20 / (S.view.zoom * S.view.fit);
+      const hp = findNearestPt(ip, thrScreen);
       if (hp) {
         S.dragShape = hp.shape;
         S.dragIdx = hp.idx;
@@ -404,6 +408,7 @@ oCvs.addEventListener('touchstart', function(e) {
         status('Drag to move point');
       }
       break;
+    }
 
     case 'idle':
       selectAt(ip);
@@ -414,19 +419,19 @@ oCvs.addEventListener('touchstart', function(e) {
 oCvs.addEventListener('touchmove', function(e) {
   e.preventDefault();
 
-  var touches = e.touches;
+  const touches = e.touches;
 
   if (S.touchIsPan && touches.length >= 2) {
-    var t0 = touches[0], t1 = touches[1];
-    var r = oCvs.getBoundingClientRect();
-    var mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
-    var mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
+    const t0 = touches[0], t1 = touches[1];
+    const r = oCvs.getBoundingClientRect();
+    const mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
+    const mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
 
-    var newDist = Math.hypot(mx1 - mx0, my1 - my0);
-    var newMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
+    const newDist = Math.hypot(mx1 - mx0, my1 - my0);
+    const newMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
 
     if (S.touchPinchDist > 0) {
-      var factor = newDist / S.touchPinchDist;
+      const factor = newDist / S.touchPinchDist;
       zoomAt(factor, S.touchPinchMid.x, S.touchPinchMid.y);
       S.touchPinchDist = newDist;
       S.touchPinchMid = newMid;
@@ -440,35 +445,35 @@ oCvs.addEventListener('touchmove', function(e) {
     S.touchPanSt.oy = S.view.oy;
 
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) fn.updatePerspPreview();
+    if (S.perspActive) $(document).trigger('view:change');
     setInteract();
     return;
   }
 
   if (S.touchId === null) return;
-  var touch = findTouch(touches, S.touchId);
+  const touch = findTouch(touches, S.touchId);
   if (!touch) return;
 
   touchXY(touch);
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    fn.updatePerspPreview();
+    $(document).trigger('view:change');
     S.overlayDirty = true;
     return;
   }
 
   if (S.isFH) {
-    var last = S.fhPts[S.fhPts.length - 1];
-    var dx = S.mix - last.x, dy = S.miy - last.y;
-    var dist = Math.sqrt(dx * dx + dy * dy);
+    const last = S.fhPts[S.fhPts.length - 1];
+    const dx = S.mix - last.x, dy = S.miy - last.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    var now = Date.now();
-    var dt = (now - S.fhLastTime) / 1000;
-    var speed = dt > 0 ? dist / dt : 0;
+    const now = Date.now();
+    const dt = (now - S.fhLastTime) / 1000;
+    const speed = dt > 0 ? dist / dt : 0;
 
-    var t = Math.min(speed / 2000, 1);
-    var threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
+    const t = Math.min(speed / 2000, 1);
+    const threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
 
     if (dist >= threshold) {
       S.fhPts.push({ x: S.mix, y: S.miy });
@@ -503,7 +508,7 @@ function touchEnd(e) {
   }
 
   if (S.touchId === null) return;
-  var found = findTouch(e.touches, S.touchId);
+  const found = findTouch(e.touches, S.touchId);
   if (found) return;
 
   S.touchId = null;
@@ -557,9 +562,9 @@ $(document).on('keydown', function(e) {
 
     case 'Escape':
       if (S.tool === 'squarecal') {
-        fn.cancelSqCalib();
+        cancelSqCalib();
       } else if (S.perspActive) {
-        fn.cancelPerspective();
+        cancelPerspective();
       } else if (S.tool !== 'idle') {
         setTool('idle');
       } else {
@@ -571,10 +576,10 @@ $(document).on('keydown', function(e) {
 
     case 'Enter':
       if (S.tool === 'squarecal' && S.polyPts.length === 4) {
-        fn.applySqCalib();
+        applySqCalib();
         e.preventDefault();
       } else if (S.perspActive) {
-        fn.applyPerspective();
+        applyPerspective();
         e.preventDefault();
       }
       break;
@@ -590,7 +595,7 @@ $(document).on('keydown', function(e) {
     case '3': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
     case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
     case '5':
-      if (S.img && !S.perspActive && S.tool !== 'squarecal') fn.enterPerspective();
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') enterPerspective();
       break;
 
     case '=':
@@ -628,8 +633,8 @@ $(document).on('keyup', function(e) {
 // PDFs need user interaction (page selector modal) before the next file
 // can safely be loaded. Images are dispatched immediately and load async.
 
-var _fileQueue = [];
-var _fileQueueBusy = false;
+const _fileQueue = [];
+let _fileQueueBusy = false;
 
 function queueFile(file) {
   if (!file) return;
@@ -640,23 +645,18 @@ function queueFile(file) {
 function _drainFileQueue() {
   if (_fileQueueBusy || _fileQueue.length === 0) return;
   _fileQueueBusy = true;
-  var file = _fileQueue.shift();
-  var name = file.name || '';
-  var ext = name.split('.').pop().toLowerCase();
+  const file = _fileQueue.shift();
+  const name = file.name || '';
+  const ext = name.split('.').pop().toLowerCase();
 
   if (ext === 'pdf' || file.type === 'application/pdf') {
     // PDF: pause the queue until the page-selector modal is dismissed
-    if (fn.loadPdf) {
-      fn.loadPdf(file, function() {
-        _fileQueueBusy = false;
-        _drainFileQueue();
-      });
-    } else {
+    loadPdf(file, function() {
       _fileQueueBusy = false;
       _drainFileQueue();
-    }
+    });
   } else if (ext === 'arcalc') {
-    if (fn.importProject) fn.importProject(file);
+    importProject(file);
     _fileQueueBusy = false;
     _drainFileQueue();
   } else if (file.type.indexOf('image/') === 0) {
@@ -681,14 +681,14 @@ $('#canvas-wrap')
     e.preventDefault();
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
-      var files = e.originalEvent.dataTransfer.files;
-      for (var i = 0; i < files.length; i++) queueFile(files[i]);
+      const files = e.originalEvent.dataTransfer.files;
+      for (let i = 0; i < files.length; i++) queueFile(files[i]);
     }
   });
 
 $(document).on('paste', function(e) {
-  var items = e.originalEvent.clipboardData.items;
-  for (var i = 0; i < items.length; i++) {
+  const items = e.originalEvent.clipboardData.items;
+  for (let i = 0; i < items.length; i++) {
     if (items[i].type.indexOf('image/') === 0) {
       queueFile(items[i].getAsFile());
       return;
@@ -699,7 +699,7 @@ $(document).on('paste', function(e) {
 // ---- Shared confirm modal (same style as storage-modal) ----
 
 function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
-  var $overlay = $('<div class="storage-modal-overlay">')
+  const $overlay = $('<div class="storage-modal-overlay">')
     .append(
       $('<div class="storage-modal">')
         .append($('<p>').html(htmlMessage))
@@ -721,25 +721,23 @@ function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
 // ---- New button (new project — clears all tabs) ----
 
 function doNewProject() {
-  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
-  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  if (S.perspActive) cancelPerspective();
+  if (S.tool === 'squarecal') cancelSqCalib();
   cancelTool();
 
   S.tabs.length = 0;
   S.currentTabIdx = -1;
-  if (fn.createTab && fn.switchToTab) {
-    fn.switchToTab(fn.createTab('Untitled', null, null));
-  }
+  switchToTab(createTab('Untitled', null, null));
   scheduleSave();
 }
 
 $('#btn-new').on('click', function() {
   // Check live current-tab state plus every other tab's persisted data
-  var hasContent = !!(S.img || S.shapes.length);
+  let hasContent = !!(S.img || S.shapes.length);
   if (!hasContent) {
-    for (var i = 0; i < S.tabs.length; i++) {
+    for (let i = 0; i < S.tabs.length; i++) {
       if (i === S.currentTabIdx) continue;
-      var t = S.tabs[i];
+      const t = S.tabs[i];
       if (t.img || t.imgDataUrl || (t.shapes && t.shapes.length)) { hasContent = true; break; }
     }
   }
@@ -760,8 +758,8 @@ $('#btn-open').on('click', function() {
 });
 
 $('#file-input').on('change', function() {
-  var files = this.files;
-  for (var i = 0; i < files.length; i++) queueFile(files[i]);
+  const files = this.files;
+  for (let i = 0; i < files.length; i++) queueFile(files[i]);
   this.value = '';
 });
 
@@ -773,7 +771,7 @@ $(document).on('dragover drop', function(e) {
 
 $('.tb-btn[data-tool]').on('click', function() {
   if (!S.img) return;
-  var t = $(this).data('tool');
+  const t = $(this).data('tool');
   setTool(S.tool === t ? 'idle' : t);
 });
 
@@ -802,7 +800,7 @@ $('#btn-fit').on('click', function() {
 // ---- Panel Toggles (shared logic) ----
 
 function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
-  var $p = $(panelSel);
+  const $p = $(panelSel);
   $p.toggleClass('collapsed');
   $btn.html($p.hasClass('collapsed') ? expandHtml : collapseHtml);
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
@@ -832,18 +830,18 @@ $('#scale-value').on('keydown', function(e) {
 
 $('#btn-persp').on('click', function() {
   if (!S.img) return;
-  if (S.perspActive)          { fn.cancelPerspective(); return; }
-  if (S.tool === 'squarecal') { fn.cancelSqCalib();    return; }
-  fn.enterPerspective();
+  if (S.perspActive)          { cancelPerspective(); return; }
+  if (S.tool === 'squarecal') { cancelSqCalib();    return; }
+  enterPerspective();
 });
-$('#persp-apply').on('click', function() { fn.applyPerspective(); });
-$('#persp-cancel').on('click', function() { fn.cancelPerspective(); });
-$('#persp-reset').on('click', function() { fn.resetPerspective(); });
+$('#persp-apply').on('click', function() { applyPerspective(); });
+$('#persp-cancel').on('click', function() { cancelPerspective(); });
+$('#persp-reset').on('click', function() { resetPerspective(); });
 
 // ---- Perspective Mode Tabs ----
 
 $('.persp-tab').on('click', function() {
-  fn.switchPerspMode($(this).data('persp-mode'));
+  switchPerspMode($(this).data('persp-mode'));
 });
 
 // ---- Shapes Panel Events ----
@@ -855,7 +853,7 @@ $('#shapes-list').on('click', '.shape-item', function(e) {
   S.overlayDirty = true;
   updatePanel();
 
-  var sh = findShape(S.selId);
+  const sh = findShape(S.selId);
   if (sh && sh.area != null) {
     status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
   }
@@ -871,46 +869,20 @@ $('#shapes-list').on('click', '.shape-del', function(e) {
 $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
-  if (S.perspActive) fn.updatePerspPreview();
+  if (S.perspActive) $(document).trigger('view:change');
 });
 
 // ---- Brightness / Contrast Sliders ----
 
-function setSlider(name, val) {
-  val = Math.max(-100, Math.min(100, Math.round(val)));
-
-  if (name === 'bright') {
-    S.brightness = val;
-  } else {
-    S.contrast = val;
-  }
-
-  var $grp = $('.sl-group [data-slider="' + name + '"]').closest('.sl-group');
-  var pct = (val + 100) / 200;
-
-  $grp.find('.sl-thumb').css('left', (pct * 100) + '%');
-
-  var $fill = $grp.find('.sl-fill');
-  if (val >= 0) {
-    $fill.css({ left: '50%', width: (pct * 100 - 50) + '%' });
-  } else {
-    $fill.css({ left: (pct * 100) + '%', width: (50 - pct * 100) + '%' });
-  }
-
-  $grp.find('.sl-val').val(val);
-
-  updateFilters();
-}
-
 $('.sl-track').each(function() {
-  var $track = $(this);
-  var name = $track.data('slider');
-  var dragging = false;
+  const $track = $(this);
+  const name = $track.data('slider');
+  let dragging = false;
 
   function update(e) {
-    var r = $track[0].getBoundingClientRect();
-    var pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-    var val = Math.round(pct * 200 - 100);
+    const r = $track[0].getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    let val = Math.round(pct * 200 - 100);
 
     if (Math.abs(val) < 6) val = 0;
 
@@ -937,9 +909,9 @@ $('.sl-track').each(function() {
 });
 
 $('.sl-val').each(function() {
-  var $inp = $(this);
-  var name = $inp.data('slider');
-  var startY = 0, startVal = 0, dragging = false, hasMoved = false;
+  const $inp = $(this);
+  const name = $inp.data('slider');
+  let startY = 0, startVal = 0, dragging = false, hasMoved = false;
 
   $inp.on('change', function() {
     setSlider(name, +this.value);
@@ -958,7 +930,7 @@ $('.sl-val').each(function() {
   $(document).on('mousemove', function(e) {
     if (!dragging) return;
 
-    var dy = startY - e.clientY;
+    const dy = startY - e.clientY;
 
     if (!hasMoved && Math.abs(dy) > 4) {
       hasMoved = true;
@@ -966,7 +938,7 @@ $('.sl-val').each(function() {
     }
 
     if (hasMoved) {
-      var delta = Math.round(dy / 2);
+      const delta = Math.round(dy / 2);
       setSlider(name, startVal + delta);
     }
   });
@@ -993,31 +965,29 @@ $('.sl-val').each(function() {
 
 $(document).on('click', '.tab-item', function(e) {
   if ($(e.target).hasClass('tab-close') || $(e.target).closest('.tab-close').length) return;
-  var idx = parseInt($(this).data('idx'), 10);
-  if (idx !== S.currentTabIdx && fn.switchToTab) fn.switchToTab(idx);
+  const idx = parseInt($(this).data('idx'), 10);
+  if (idx !== S.currentTabIdx) switchToTab(idx);
 });
 
 $(document).on('click', '.tab-close', function(e) {
   e.stopPropagation();
-  var idx = parseInt($(this).data('idx'), 10);
-  if (fn.closeTab) fn.closeTab(idx);
+  const idx = parseInt($(this).data('idx'), 10);
+  closeTab(idx);
 });
 
 $(document).on('click', '#btn-new-tab', function() {
-  if (fn.createTab && fn.switchToTab) {
-    var idx = fn.createTab('Untitled', null, null);
-    fn.switchToTab(idx);
-  }
+  const idx = createTab('Untitled', null, null);
+  switchToTab(idx);
 });
 
 // ---- Export Buttons ----
 
 $('#btn-export-project').on('click', function() {
-  if (fn.exportProject) fn.exportProject();
+  exportProject();
 });
 
 $('#btn-export-measurements').on('click', function() {
-  if (fn.exportMeasurements) fn.exportMeasurements();
+  exportMeasurements();
 });
 
 // ---- Rotate Buttons ----
@@ -1041,7 +1011,7 @@ $('#btn-rotate-custom').on('click', function() {
 });
 
 function applyCustomRotate() {
-  var val = parseFloat($('#rotate-angle-input').val());
+  const val = parseFloat($('#rotate-angle-input').val());
   if (isNaN(val)) { status('Enter a valid angle'); return; }
   if (val === 0) { $('#rotate-popup').hide(); return; }
   $('#rotate-popup').hide();

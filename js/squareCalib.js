@@ -7,43 +7,46 @@
 // simultaneously calibrating the scale.
 //
 // Dependencies:
-//   state.js      – S, fn
-//   geometry.js   – i2s  (only needed for nothing here; kept for parity)
+//   state.js      – S
 //   perspective.js – computeHomography, applyHomography, invertH,
-//                    applyHomographyToImage
+//                    applyHomographyToImage, enterPerspective, cancelPerspective
 
-import { S, fn } from './state.js';
+import { S } from './state.js';
 import {
   computeHomography,
   applyHomography,
   invertH,
-  applyHomographyToImage
+  applyHomographyToImage,
+  enterPerspective,
+  cancelPerspective
 } from './perspective.js';
+import { setTool, enableTools, status, updateScaleDisp } from './ui.js';
+import { scheduleSave } from './storage.js';
 
-// ── Register on fn ───────────────────────────────────────────────────────────
-fn.enterSqCalib   = enterSqCalib;
-fn.cancelSqCalib  = cancelSqCalib;
-fn.applySqCalib   = applySqCalib;
-fn.onSqCalibPoint = onSqCalibPoint;   // called by input.js after each corner
+// Tab-switch: cancel when switching tabs; squarecal:cancel: cancel when entering manual perspective mode
+$(document).on('tab:switch squarecal:cancel', function() {
+  if (S.tool === 'squarecal') cancelSqCalib();
+});
 
-// Override the mode-switch registered (stub) in perspective.js
-fn.switchPerspMode = function(mode) {
+// ── Mode switching (called directly by input.js) ──────────────────────────────
+
+export function switchPerspMode(mode) {
   if (mode === 'auto') {
-    if (S.perspActive) fn.cancelPerspective();
+    if (S.perspActive) cancelPerspective();
     enterSqCalib();
   } else {
     if (S.tool === 'squarecal') cancelSqCalib();
-    fn.enterPerspective();
+    enterPerspective();
   }
-};
+}
 
 // ── Enter / Cancel ────────────────────────────────────────────────────────────
 
-function enterSqCalib() {
+export function enterSqCalib() {
   if (!S.img) return;
-  fn.setTool('squarecal');   // clears polyPts, sets cursor, updates status
+  setTool('squarecal');   // clears polyPts, sets cursor, updates status
 
-  fn.enableTools(false);
+  enableTools(false);
   $('#btn-persp').addClass('active').removeClass('disabled');
   $('#persp-bar').addClass('visible');
   $('.persp-tab').removeClass('active');
@@ -53,95 +56,95 @@ function enterSqCalib() {
   updateHint();
 }
 
-function cancelSqCalib() {
-  fn.setTool('idle');
-  fn.enableTools(true);
+export function cancelSqCalib() {
+  setTool('idle');
+  enableTools(true);
   $('#btn-persp').removeClass('active');
   $('#persp-bar').removeClass('visible');
-  fn.status('Square calibration cancelled.');
+  status('Square calibration cancelled.');
 }
 
 // ── Called by input.js after each corner click ────────────────────────────────
 
-function onSqCalibPoint() {
+export function onSqCalibPoint() {
   updateHint();
   if (S.polyPts.length === 4) {
     $('#sq-side-value').focus();
-    fn.status('4 corners placed — enter side length and click Apply.');
+    status('4 corners placed — enter side length and click Apply.');
   }
 }
 
 function updateHint() {
-  var n = S.polyPts.length;
-  var msg = n === 0 ? 'Click 4 corners of a real-world square (any order).' :
-            n <  4 ? n + '/4 corners placed.' :
-                     '4 corners placed. Enter side length and Apply.';
+  const n = S.polyPts.length;
+  const msg = n === 0 ? 'Click 4 corners of a real-world square (any order).' :
+              n <  4 ? n + '/4 corners placed.' :
+                       '4 corners placed. Enter side length and Apply.';
   $('#sq-hint').text(msg);
   $('#sq-calib-apply').toggleClass('disabled', n < 4);
 }
 
 // ── Apply ─────────────────────────────────────────────────────────────────────
 
-function applySqCalib() {
+export function applySqCalib() {
   if (S.tool !== 'squarecal' || S.polyPts.length !== 4) return;
 
-  var sideLen = parseFloat($('#sq-side-value').val());
-  var unit    = $('#sq-side-unit').val();
+  const sideLen = parseFloat($('#sq-side-value').val());
+  const unit    = $('#sq-side-unit').val();
   if (!sideLen || sideLen <= 0) {
-    fn.status('Enter a valid side length > 0.');
+    status('Enter a valid side length > 0.');
     return;
   }
 
   // Order the 4 clicked points into [TL, TR, BR, BL] by image-axis position:
   //   TL = min(x+y),  BR = max(x+y),  TR = min(y-x),  BL = max(y-x)
-  var pts = S.polyPts.slice();
+  const pts = S.polyPts.slice();
   pts.sort(function(a, b) { return (a.x + a.y) - (b.x + b.y); });
-  var tl = pts[0], br = pts[3];
-  var mid = [pts[1], pts[2]];
+  const tl = pts[0], br = pts[3];
+  const mid = [pts[1], pts[2]];
   mid.sort(function(a, b) { return (a.y - a.x) - (b.y - b.x); });
-  var tr = mid[0], bl = mid[1];
+  const tr = mid[0], bl = mid[1];
 
   // Target pixel side = average of the 4 sides
-  var d = (Math.hypot(tr.x - tl.x, tr.y - tl.y) +
-           Math.hypot(br.x - tr.x, br.y - tr.y) +
-           Math.hypot(bl.x - br.x, bl.y - br.y) +
-           Math.hypot(tl.x - bl.x, tl.y - bl.y)) / 4;
-  if (d < 4) { fn.status('Square too small — click further apart.'); return; }
+  const d = (Math.hypot(tr.x - tl.x, tr.y - tl.y) +
+             Math.hypot(br.x - tr.x, br.y - tr.y) +
+             Math.hypot(bl.x - br.x, bl.y - br.y) +
+             Math.hypot(tl.x - bl.x, tl.y - bl.y)) / 4;
+  if (d < 4) { status('Square too small — click further apart.'); return; }
 
   // Output square centred at the centroid of the input quad
-  var cx = (tl.x + tr.x + br.x + bl.x) / 4;
-  var cy = (tl.y + tr.y + br.y + bl.y) / 4;
-  var src = [tl, tr, br, bl];
-  var dst = [
+  const cx = (tl.x + tr.x + br.x + bl.x) / 4;
+  const cy = (tl.y + tr.y + br.y + bl.y) / 4;
+  const src = [tl, tr, br, bl];
+  const dst = [
     { x: cx - d / 2, y: cy - d / 2 },   // TL
     { x: cx + d / 2, y: cy - d / 2 },   // TR
     { x: cx + d / 2, y: cy + d / 2 },   // BR
     { x: cx - d / 2, y: cy + d / 2 }    // BL
   ];
 
-  var H    = computeHomography(src, dst);
-  if (!H)    { fn.status('Could not compute perspective transform.'); return; }
-  var Hinv = invertH(H);
-  if (!Hinv) { fn.status('Could not invert transform.'); return; }
+  const H    = computeHomography(src, dst);
+  if (!H)    { status('Could not compute perspective transform.'); return; }
+  const Hinv = invertH(H);
+  if (!Hinv) { status('Could not invert transform.'); return; }
 
   // Pre-compute bounding-box offset (mirrors applyHomographyToImage internals)
   // so we can place the scale line in the new image coordinate space.
-  var iw = S.view.iw, ih = S.view.ih;
-  var imgCors = [
+  const iw = S.view.iw, ih = S.view.ih;
+  const imgCors = [
     applyHomography(H, 0,  0 ), applyHomography(H, iw, 0 ),
     applyHomography(H, iw, ih), applyHomography(H, 0,  ih)
   ];
-  var minX = Infinity, minY = Infinity;
-  for (var i = 0; i < 4; i++) {
+  let minX = Infinity, minY = Infinity;
+  for (let i = 0; i < 4; i++) {
     if (imgCors[i].x < minX) minX = imgCors[i].x;
     if (imgCors[i].y < minY) minY = imgCors[i].y;
   }
   minX = Math.max(minX, -Math.max(iw, ih) * 4);
   minY = Math.max(minY, -Math.max(iw, ih) * 4);
-  var offX = Math.floor(minX), offY = Math.floor(minY);
+  const offX = Math.floor(minX), offY = Math.floor(minY);
 
-  fn.status('Applying square calibration…');
-  fn.setTool('idle');   // clears polyPts before the async image op
+  status('Applying square calibration…');
+  setTool('idle');   // clears polyPts before the async image op
 
   applyHomographyToImage(H, Hinv, function() {
     // Scale: pixel side d corresponds to sideLen real-world units
@@ -152,15 +155,15 @@ function applySqCalib() {
       p1: { x: dst[0].x - offX, y: dst[0].y - offY },
       p2: { x: dst[1].x - offX, y: dst[1].y - offY }
     };
-    fn.updateScaleDisp();
+    updateScaleDisp();
 
-    fn.enableTools(true);
+    enableTools(true);
     $('#btn-persp').removeClass('active');
     $('#persp-bar').removeClass('visible');
     S.overlayDirty = true;
-    fn.status('Perspective corrected. Scale: 1 px = ' +
+    status('Perspective corrected. Scale: 1 px = ' +
               (1 / S.scalePPU).toFixed(3) + ' ' + unit + '.');
-    fn.scheduleSave();
+    scheduleSave();
   });
 }
 

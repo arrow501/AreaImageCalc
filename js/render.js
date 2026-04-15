@@ -1,10 +1,10 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, findNearestPt, dot, roundRect } from './geometry.js';
 import { drawPerspOverlay } from './perspective.js';
-import './squareCalib.js';   // registers fn.enterSqCalib / switchPerspMode etc.
+import './squareCalib.js';   // ensures squarecal event listeners are registered
 
 export function resize() {
-  var w = $wrap.width(), h = $wrap.height();
+  const w = $wrap.width(), h = $wrap.height();
   if (w === S.cw && h === S.ch) return;
 
   S.cw = w;
@@ -23,8 +23,8 @@ export function resize() {
 function drawImage() {
   S.imageDirty = false;
 
-  var ctx = iCtx;
-  var w = S.cw * S.dpr, h = S.ch * S.dpr;
+  const ctx = iCtx;
+  const w = S.cw * S.dpr, h = S.ch * S.dpr;
 
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = '#2a2a2a';
@@ -37,7 +37,7 @@ function drawImage() {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = S.interacting ? 'low' : 'high';
 
-  var s = S.view.zoom * S.view.fit;
+  const s = S.view.zoom * S.view.fit;
   ctx.translate(S.view.ox, S.view.oy);
   ctx.scale(s, s);
   ctx.drawImage(S.img, 0, 0);
@@ -48,14 +48,14 @@ function drawImage() {
 function drawOverlay() {
   S.overlayDirty = false;
 
-  var ctx = oCtx;
-  var w = S.cw * S.dpr, h = S.ch * S.dpr;
+  const ctx = oCtx;
+  const w = S.cw * S.dpr, h = S.ch * S.dpr;
 
   ctx.clearRect(0, 0, w, h);
   if (!S.img) return;
 
-  var s = S.view.zoom * S.view.fit;
-  var inv = 1 / s;
+  const s = S.view.zoom * S.view.fit;
+  const inv = 1 / s;
 
   ctx.save();
   ctx.scale(S.dpr, S.dpr);
@@ -94,16 +94,16 @@ function drawOverlay() {
   }
 
   // Closed shapes
-  for (var si = 0; si < S.shapes.length; si++) {
-    var sh = S.shapes[si];
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
     if (!sh.closed || sh.points.length < 3) continue;
 
-    var pts = sh.points;
-    var sel = sh.id === S.selId;
+    const pts = sh.points;
+    const sel = sh.id === S.selId;
 
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
-    for (var pi = 1; pi < pts.length; pi++) {
+    for (let pi = 1; pi < pts.length; pi++) {
       ctx.lineTo(pts[pi].x, pts[pi].y);
     }
     ctx.closePath();
@@ -114,8 +114,8 @@ function drawOverlay() {
     ctx.stroke();
 
     if (pts.length <= 80 || sel) {
-      var hr = (sel ? 4 : 2.5) * inv;
-      for (var pi = 0; pi < pts.length; pi++) {
+      const hr = (sel ? 4 : 2.5) * inv;
+      for (let pi = 0; pi < pts.length; pi++) {
         dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
       }
     }
@@ -123,14 +123,14 @@ function drawOverlay() {
 
   // Active polygon drawing (also used by squarecal tool)
   if ((S.tool === 'polygon' || S.tool === 'squarecal') && S.polyPts.length > 0) {
-    var isSqCal = S.tool === 'squarecal';
-    var c = isSqCal ? '#22D88E' : COLORS[S.colorIdx % COLORS.length];
-    var pts = S.polyPts;
-    var done = isSqCal && pts.length === 4;  // quad complete — draw closed
+    const isSqCal = S.tool === 'squarecal';
+    const c = isSqCal ? '#22D88E' : COLORS[S.colorIdx % COLORS.length];
+    const pts = S.polyPts;
+    const done = isSqCal && pts.length === 4;  // quad complete — draw closed
 
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
-    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     if (done) {
       ctx.closePath();
     } else {
@@ -143,8 +143,8 @@ function drawOverlay() {
     ctx.setLineDash([]);
 
     // Corner dots — numbered for squarecal, plain for polygon
-    var dotR = isSqCal ? 6 * inv : 4 * inv;
-    for (var i = 0; i < pts.length; i++) {
+    const dotR = isSqCal ? 6 * inv : 4 * inv;
+    for (let i = 0; i < pts.length; i++) {
       ctx.beginPath();
       ctx.arc(pts[i].x, pts[i].y, dotR, 0, Math.PI * 2);
       ctx.fillStyle = c;
@@ -163,8 +163,8 @@ function drawOverlay() {
 
     // Polygon: show close-hint when hovering near first point
     if (!isSqCal && pts.length >= 3) {
-      var fp = i2s(pts[0].x, pts[0].y);
-      var d = Math.hypot(S.mx - fp.x, S.my - fp.y);
+      const fp = i2s(pts[0].x, pts[0].y);
+      const d = Math.hypot(S.mx - fp.x, S.my - fp.y);
       if (d < 15) {
         dot(ctx, pts[0].x, pts[0].y, 7 * inv, c);
         ctx.beginPath();
@@ -181,8 +181,8 @@ function drawOverlay() {
 
   // Edit mode: highlight hovered point
   if (S.tool === 'edit' && !S.dragPt) {
-    var thr = 10 * inv;
-    var hp = findNearestPt({ x: S.mix, y: S.miy }, thr);
+    const thr = 10 * inv;
+    const hp = findNearestPt({ x: S.mix, y: S.miy }, thr);
     if (hp) {
       ctx.beginPath();
       ctx.arc(hp.shape.points[hp.idx].x, hp.shape.points[hp.idx].y, 6 * inv, 0, Math.PI * 2);
@@ -201,7 +201,7 @@ function drawOverlay() {
   if (S.tool === 'freehand' && S.fhPts.length > 1) {
     ctx.beginPath();
     ctx.moveTo(S.fhPts[0].x, S.fhPts[0].y);
-    for (var i = 1; i < S.fhPts.length; i++) {
+    for (let i = 1; i < S.fhPts.length; i++) {
       ctx.lineTo(S.fhPts[i].x, S.fhPts[i].y);
     }
     ctx.strokeStyle = COLORS[S.colorIdx % COLORS.length];
@@ -214,8 +214,8 @@ function drawOverlay() {
   // ========== SCREEN-SPACE DRAWING ==========
 
   // ---- Label collision detection with nudging ----
-  var LABEL_PAD = 3;
-  var labelBoxes = [];
+  const LABEL_PAD = 3;
+  const labelBoxes = [];
 
   function rectsOverlap(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x &&
@@ -223,9 +223,9 @@ function drawOverlay() {
   }
 
   function canPlace(box) {
-    var padded = { x: box.x - LABEL_PAD, y: box.y - LABEL_PAD,
-                   w: box.w + LABEL_PAD * 2, h: box.h + LABEL_PAD * 2 };
-    for (var i = 0; i < labelBoxes.length; i++) {
+    const padded = { x: box.x - LABEL_PAD, y: box.y - LABEL_PAD,
+                     w: box.w + LABEL_PAD * 2, h: box.h + LABEL_PAD * 2 };
+    for (let i = 0; i < labelBoxes.length; i++) {
       if (rectsOverlap(padded, labelBoxes[i])) return false;
     }
     return true;
@@ -233,12 +233,12 @@ function drawOverlay() {
 
   function tryPlace(box, maxNudge) {
     if (canPlace(box)) { labelBoxes.push(box); return box; }
-    var dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
-                {x:-0.7,y:-0.7},{x:0.7,y:-0.7},{x:-0.7,y:0.7},{x:0.7,y:0.7}];
-    for (var step = LABEL_PAD + 2; step <= maxNudge; step += LABEL_PAD + 2) {
-      for (var d = 0; d < dirs.length; d++) {
-        var nb = { x: box.x + dirs[d].x * step, y: box.y + dirs[d].y * step,
-                   w: box.w, h: box.h };
+    const dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
+                  {x:-0.7,y:-0.7},{x:0.7,y:-0.7},{x:-0.7,y:0.7},{x:0.7,y:0.7}];
+    for (let step = LABEL_PAD + 2; step <= maxNudge; step += LABEL_PAD + 2) {
+      for (let d = 0; d < dirs.length; d++) {
+        const nb = { x: box.x + dirs[d].x * step, y: box.y + dirs[d].y * step,
+                     w: box.w, h: box.h };
         if (canPlace(nb)) { labelBoxes.push(nb); return nb; }
       }
     }
@@ -247,27 +247,27 @@ function drawOverlay() {
 
   // Side length labels for active polygon (no collision)
   if (S.tool === 'polygon' && S.polyPts.length > 0) {
-    var pts = S.polyPts;
-    var c = COLORS[S.colorIdx % COLORS.length];
-    var tempPts = pts.concat([{ x: S.mix, y: S.miy }]);
-    var cp = centroid(tempPts);
-    var off = 12 / (S.view.zoom * S.view.fit);
+    const pts = S.polyPts;
+    const c = COLORS[S.colorIdx % COLORS.length];
+    const tempPts = pts.concat([{ x: S.mix, y: S.miy }]);
+    const cp = centroid(tempPts);
+    const off = 12 / (S.view.zoom * S.view.fit);
 
     ctx.font = '600 10px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    for (var i = 0; i < pts.length - 1; i++) {
-      var p1 = pts[i], p2 = pts[i + 1];
-      var len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      var midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
-      var toCx = cp.x - midX, toCy = cp.y - midY;
-      var dist = Math.hypot(toCx, toCy);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      let midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+      const toCx = cp.x - midX, toCy = cp.y - midY;
+      const dist = Math.hypot(toCx, toCy);
       if (dist > 0) { midX += toCx / dist * off; midY += toCy / dist * off; }
 
-      var mid = i2s(midX, midY);
-      var txt = fmtLen(len);
-      var tw = ctx.measureText(txt).width + 6;
+      const mid = i2s(midX, midY);
+      const txt = fmtLen(len);
+      const tw = ctx.measureText(txt).width + 6;
 
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       roundRect(ctx, mid.x - tw / 2, mid.y - 8, tw, 14, 2);
@@ -276,16 +276,16 @@ function drawOverlay() {
       ctx.fillText(txt, mid.x, mid.y);
     }
 
-    var last = pts[pts.length - 1];
-    var len2 = Math.hypot(S.mix - last.x, S.miy - last.y);
-    var midX2 = (last.x + S.mix) / 2, midY2 = (last.y + S.miy) / 2;
-    var toCx2 = cp.x - midX2, toCy2 = cp.y - midY2;
-    var dist2 = Math.hypot(toCx2, toCy2);
+    const last = pts[pts.length - 1];
+    const len2 = Math.hypot(S.mix - last.x, S.miy - last.y);
+    let midX2 = (last.x + S.mix) / 2, midY2 = (last.y + S.miy) / 2;
+    const toCx2 = cp.x - midX2, toCy2 = cp.y - midY2;
+    const dist2 = Math.hypot(toCx2, toCy2);
     if (dist2 > 0) { midX2 += toCx2 / dist2 * off; midY2 += toCy2 / dist2 * off; }
 
-    var mid2 = i2s(midX2, midY2);
-    var txt2 = fmtLen(len2);
-    var tw2 = ctx.measureText(txt2).width + 6;
+    const mid2 = i2s(midX2, midY2);
+    const txt2 = fmtLen(len2);
+    const tw2 = ctx.measureText(txt2).width + 6;
 
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
     roundRect(ctx, mid2.x - tw2 / 2, mid2.y - 8, tw2, 14, 2);
@@ -295,21 +295,21 @@ function drawOverlay() {
   }
 
   // ---- Pass 1: Area labels (highest priority) ----
-  for (var si = 0; si < S.shapes.length; si++) {
-    var sh = S.shapes[si];
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
     if (!sh.closed || sh.area == null) continue;
 
-    var cp = centroid(sh.points);
-    var sp = i2s(cp.x, cp.y);
-    var txt = fmtArea(sh.area);
-    var fs = Math.min(Math.max(11, 13 * S.view.zoom), 22);
+    const cp = centroid(sh.points);
+    const sp = i2s(cp.x, cp.y);
+    const txt = fmtArea(sh.area);
+    const fs = Math.min(Math.max(11, 13 * S.view.zoom), 22);
 
     ctx.font = '600 ' + fs + 'px "JetBrains Mono", monospace';
-    var tw = ctx.measureText(txt).width + 10;
-    var th = fs + 6;
+    const tw = ctx.measureText(txt).width + 10;
+    const th = fs + 6;
 
-    var box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
-    var placed = tryPlace(box, 40);
+    const box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
+    const placed = tryPlace(box, 40);
     if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -322,32 +322,32 @@ function drawOverlay() {
   }
 
   // ---- Pass 2: Side length labels (sorted by edge length) ----
-  var sideLabelCandidates = [];
-  var fs2 = Math.min(Math.max(9, 10 * S.view.zoom), 14);
+  const sideLabelCandidates = [];
+  const fs2 = Math.min(Math.max(9, 10 * S.view.zoom), 14);
   ctx.font = '600 ' + fs2 + 'px "JetBrains Mono", monospace';
 
-  for (var si = 0; si < S.shapes.length; si++) {
-    var sh = S.shapes[si];
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
     if (!sh.closed || sh.points.length < 3) continue;
 
-    var pts = sh.points;
-    var cp = centroid(pts);
-    var off = 12 / (S.view.zoom * S.view.fit);
+    const pts = sh.points;
+    const cp = centroid(pts);
+    const off = 12 / (S.view.zoom * S.view.fit);
 
-    for (var i = 0; i < pts.length; i++) {
-      var p1 = pts[i], p2 = pts[(i + 1) % pts.length];
-      var len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    for (let i = 0; i < pts.length; i++) {
+      const p1 = pts[i], p2 = pts[(i + 1) % pts.length];
+      const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
       if (len * S.view.zoom * S.view.fit < 30) continue;
-      var midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+      let midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
 
-      var toCx = cp.x - midX, toCy = cp.y - midY;
-      var dist = Math.hypot(toCx, toCy);
+      const toCx = cp.x - midX, toCy = cp.y - midY;
+      const dist = Math.hypot(toCx, toCy);
       if (dist > 0) { midX += toCx / dist * off; midY += toCy / dist * off; }
 
-      var sp = i2s(midX, midY);
-      var txt = fmtLen(len);
-      var tw = ctx.measureText(txt).width + 4;
-      var th2 = 12;
+      const sp = i2s(midX, midY);
+      const txt = fmtLen(len);
+      const tw = ctx.measureText(txt).width + 4;
+      const th2 = 12;
 
       sideLabelCandidates.push({
         x: sp.x, y: sp.y, tw: tw, th: th2, txt: txt,
@@ -363,10 +363,10 @@ function drawOverlay() {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  for (var i = 0; i < sideLabelCandidates.length; i++) {
-    var sl = sideLabelCandidates[i];
-    var box = { x: sl.x - sl.tw / 2, y: sl.boxY, w: sl.tw, h: sl.th };
-    var placed = tryPlace(box, 24);
+  for (let i = 0; i < sideLabelCandidates.length; i++) {
+    const sl = sideLabelCandidates[i];
+    const box = { x: sl.x - sl.tw / 2, y: sl.boxY, w: sl.tw, h: sl.th };
+    const placed = tryPlace(box, 24);
     if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
