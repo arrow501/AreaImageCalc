@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { distSeg, pip, centroid } from '../../js/math.js';
+import { distSeg, pip, centroid, segmentLength, nearestPoint } from '../../js/math.js';
 
 // ─── distSeg ────────────────────────────────────────────────────────────────
 
@@ -149,5 +149,83 @@ describe('centroid', () => {
     const c = centroid(pts);
     expect(c.x).toBeCloseTo(5, 5);
     expect(c.y).toBeCloseTo(5, 5);
+  });
+});
+
+// ─── segmentLength ──────────────────────────────────────────────────────────
+
+describe('segmentLength', () => {
+  test('empty array returns 0', () => {
+    expect(segmentLength([])).toBe(0);
+  });
+
+  test('single point returns 0', () => {
+    expect(segmentLength([{ x: 3, y: 4 }])).toBe(0);
+  });
+
+  test('two points returns hypot', () => {
+    expect(segmentLength([{ x: 0, y: 0 }, { x: 3, y: 4 }])).toBeCloseTo(5);
+  });
+
+  test('axis-aligned polyline sums lengths', () => {
+    expect(segmentLength([
+      { x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 4 },
+    ])).toBeCloseTo(7);
+  });
+
+  test('L-shape returns sum of each leg', () => {
+    expect(segmentLength([
+      { x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 2 }, { x: 2, y: 2 },
+    ])).toBeCloseTo(4 + 2 + 2);
+  });
+});
+
+// ─── nearestPoint ───────────────────────────────────────────────────────────
+
+describe('nearestPoint', () => {
+  const closed = (id, pts) => ({ id, closed: true, points: pts, hidden: false });
+  const seg    = (id, pts) => ({ id, type: 'segment', points: pts, hidden: false });
+
+  test('empty shapes → null', () => {
+    expect(nearestPoint({ x: 0, y: 0 }, [], 10)).toBeNull();
+  });
+
+  test('no shape within threshold → null', () => {
+    const s = closed('a', [{ x: 100, y: 100 }, { x: 110, y: 100 }, { x: 100, y: 110 }]);
+    expect(nearestPoint({ x: 0, y: 0 }, [s], 5)).toBeNull();
+  });
+
+  test('returns nearest vertex with shape ref and idx', () => {
+    const s = closed('a', [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 5 }]);
+    const hit = nearestPoint({ x: 9, y: 0 }, [s], 5);
+    expect(hit).not.toBeNull();
+    expect(hit.shape.id).toBe('a');
+    expect(hit.idx).toBe(1);
+    expect(hit.dist).toBeCloseTo(1);
+  });
+
+  test('open non-segment shapes are skipped', () => {
+    const open = { id: 'o', closed: false, points: [{ x: 0, y: 0 }], hidden: false };
+    expect(nearestPoint({ x: 0, y: 0 }, [open], 5)).toBeNull();
+  });
+
+  test('open segment shapes are hit-testable', () => {
+    const s = seg('s', [{ x: 0, y: 0 }, { x: 10, y: 0 }]);
+    const hit = nearestPoint({ x: 0, y: 1 }, [s], 5);
+    expect(hit).not.toBeNull();
+    expect(hit.shape.id).toBe('s');
+    expect(hit.idx).toBe(0);
+  });
+
+  test('hidden shapes are skipped', () => {
+    const hidden = { id: 'h', closed: true, points: [{ x: 0, y: 0 }], hidden: true };
+    expect(nearestPoint({ x: 0, y: 0 }, [hidden], 5)).toBeNull();
+  });
+
+  test('chooses nearest across multiple shapes', () => {
+    const a = closed('a', [{ x: 0, y: 0 }]);
+    const b = closed('b', [{ x: 10, y: 0 }]);
+    const hit = nearestPoint({ x: 9, y: 0 }, [a, b], 5);
+    expect(hit.shape.id).toBe('b');
   });
 });

@@ -2,12 +2,14 @@ import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
 import { i2s, centroid } from './geometry.js';
 import { setTool, enableTools, status, updateScaleDisp, fitView, updatePanel } from './ui.js';
 import { scheduleSave } from './storage.js';
+import { getActiveTab } from './tabs.js';
+import { EVT, emit, on } from './events.js';
 
 // View-change event: fired by fitView/zoomAt to update live CSS preview
-$(document).on('view:change', updatePerspPreview);
+on(EVT.VIEW_CHANGE, updatePerspPreview);
 
 // Tab-switch event: cancel perspective when user switches away from this tab
-$(document).on('tab:switch', function() {
+on(EVT.TAB_SWITCH, function() {
   if (S.perspActive) cancelPerspective();
 });
 
@@ -76,7 +78,7 @@ function computeCSS3dMatrix(w, h, dst) {
 
 export function enterPerspective() {
   if (!S.img || S.perspActive) return;
-  if (S.tool === 'squarecal') $(document).trigger('squarecal:cancel');
+  if (S.tool === 'squarecal') emit(EVT.SQCAL_CANCEL);
   setTool('idle');
   S.perspActive = true;
   const iw = S.view.iw, ih = S.view.ih;
@@ -350,7 +352,7 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
     // Clear stale pre-transform WebP and re-encode the corrected image.
     // Without this, serializeTab() would save the old WebP while shapes
     // are already in post-transform coordinates, corrupting reloaded state.
-    const tab = S.tabs[S.currentTabIdx];
+    const tab = getActiveTab();
     if (tab) {
       tab.imgWebpUrl = null;
       tab.webpPending = true;

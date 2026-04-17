@@ -1,52 +1,43 @@
 import { S, worker, imgWorker } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
 import { scheduleSave } from './storage.js';
-import { createTab, switchToTab, renderTabBar } from './tabs.js';
+import { createTab, switchToTab, renderTabBar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
+import { EVT, emit } from './events.js';
 
-// Worker message handler
+// Routes a worker shape result to either the active tab (shown) or a background
+// tab (silent update). `apply(shape, isBg)` performs the actual mutation.
+function routeShapeResult(d, apply) {
+  const isBg = d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx;
+  const tab = isBg ? S.tabs[d.tabIdx] : null;
+  const shape = isBg
+    ? (tab ? tab.shapes.find(function(s) { return s.id === d.id; }) : null)
+    : findShape(d.id);
+  if (shape) apply(shape, isBg);
+}
+
 worker.onmessage = function(e) {
   const d = e.data;
-  let shape;
 
   if (d.type === 'areaResult') {
-    if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
-      // Result for a background tab — store directly
-      const tab = S.tabs[d.tabIdx];
-      if (tab) {
-        const bgShape = tab.shapes.find(function(s) { return s.id === d.id; });
-        if (bgShape) { bgShape.area = d.area; bgShape.perimeter = d.perimeter; }
-      }
-      return;
-    }
-    shape = findShape(d.id);
-    if (shape) {
+    routeShapeResult(d, function(shape, isBg) {
       shape.area = d.area;
       shape.perimeter = d.perimeter;
-      S.overlayDirty = true;
-      updatePanel();
-    }
+      if (!isBg) {
+        S.overlayDirty = true;
+        updatePanel();
+      }
+    });
   }
   else if (d.type === 'simplifyResult') {
-    if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
-      const tab2 = S.tabs[d.tabIdx];
-      if (tab2) {
-        const bgShape2 = tab2.shapes.find(function(s) { return s.id === d.id; });
-        if (bgShape2) {
-          bgShape2.points = d.points;
-          worker.postMessage({ type: 'calcArea', id: bgShape2.id, points: bgShape2.points, tabIdx: d.tabIdx });
-        }
-      }
-      return;
-    }
-    shape = findShape(d.id);
-    if (shape) {
+    routeShapeResult(d, function(shape, isBg) {
       shape.points = d.points;
-      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
-      S.overlayDirty = true;
-    }
+      shape._centroid = null;
+      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: d.tabIdx });
+      if (!isBg) S.overlayDirty = true;
+    });
   }
 };
 
@@ -121,7 +112,7 @@ export function loadImg(file, skipConfirm) {
       } else {
         // Load into current (blank) tab
         _loadIntoCurrentTab(ni, dataUrl, file.name);
-        tab = S.tabs[S.currentTabIdx];
+        tab = getActiveTab();
       }
 
       // Kick off background WebP encode once we know which tab this image belongs to
@@ -151,10 +142,11 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   S.imgDataUrl = dataUrl;
 
   // Update current tab metadata
-  if (S.currentTabIdx >= 0 && S.tabs[S.currentTabIdx]) {
-    S.tabs[S.currentTabIdx].label = filename || 'Image';
-    S.tabs[S.currentTabIdx].img = ni;
-    S.tabs[S.currentTabIdx].imgDataUrl = dataUrl;
+  const curTab = getActiveTab();
+  if (curTab) {
+    curTab.label = filename || 'Image';
+    curTab.img = ni;
+    curTab.imgDataUrl = dataUrl;
   }
 
   fitView();
@@ -192,7 +184,7 @@ export function zoomAt(factor, sx, sy) {
 
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
-  if (S.perspActive) $(document).trigger('view:change');
+  if (S.perspActive) emit(EVT.VIEW_CHANGE);
   setInteract();
 }
 
@@ -523,7 +515,7 @@ export function rotateImage(angleDeg) {
     // Clear stale pre-rotation WebP and re-encode the rotated image.
     // Without this, serializeTab() would save the old WebP while shapes
     // are already in post-rotation coordinates, corrupting reloaded state.
-    const tab = S.tabs[S.currentTabIdx];
+    const tab = getActiveTab();
     if (tab) {
       tab.imgWebpUrl = null;
       tab.webpPending = true;

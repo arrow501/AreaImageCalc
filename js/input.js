@@ -1,6 +1,6 @@
 import { S, worker, oCvs } from './state.js';
 import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip } from './geometry.js';
-import { resize } from './render.js';
+import { resize, refreshCanvasRect } from './render.js';
 import {
   closePoly, closeSegment, finishFH, delShape, selectAt,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
@@ -17,22 +17,21 @@ import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspM
 import { createTab, switchToTab, closeTab } from './tabs.js';
 import { loadPdf } from './pdf.js';
 import { exportProject, importProject, exportMeasurements } from './export.js';
+import { EVT, emit } from './events.js';
 
 // ---- Coordinate Helpers ----
 
 function canvasXY(e) {
-  const r = oCvs.getBoundingClientRect();
-  S.mx = e.clientX - r.left;
-  S.my = e.clientY - r.top;
+  S.mx = e.clientX - S.canvasRect.left;
+  S.my = e.clientY - S.canvasRect.top;
   const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
 }
 
 function touchXY(touch) {
-  const r = oCvs.getBoundingClientRect();
-  S.mx = touch.clientX - r.left;
-  S.my = touch.clientY - r.top;
+  S.mx = touch.clientX - S.canvasRect.left;
+  S.my = touch.clientY - S.canvasRect.top;
   const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
@@ -184,14 +183,14 @@ $(document).on('mousemove', function(e) {
     S.view.ox = S.panSt.ox + (e.clientX - S.panSt.x);
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) $(document).trigger('view:change');
+    if (S.perspActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    $(document).trigger('view:change');
+    emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
   }
@@ -294,6 +293,7 @@ $(document).on('mouseup', function(e) {
     if (S.dragShape.type === 'segment') {
       S.dragShape.length = segmentLength(S.dragShape.points);
     } else {
+      S.dragShape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     }
     S.dragPt = null;
@@ -491,7 +491,7 @@ oCvs.addEventListener('touchmove', function(e) {
     S.touchPanSt.oy = S.view.oy;
 
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) $(document).trigger('view:change');
+    if (S.perspActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
@@ -504,7 +504,7 @@ oCvs.addEventListener('touchmove', function(e) {
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    $(document).trigger('view:change');
+    emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
   }
@@ -582,6 +582,7 @@ function touchEnd(e) {
     if (S.dragShape.type === 'segment') {
       S.dragShape.length = segmentLength(S.dragShape.points);
     } else {
+      S.dragShape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     }
     S.dragPt = null;
@@ -700,7 +701,37 @@ $(document).on('keydown', function(e) {
         fitView();
       }
       break;
+
+    case '?':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        toggleShortcutsModal();
+        e.preventDefault();
+      }
+      break;
   }
+});
+
+let _releaseShortcutsFocus = null;
+function toggleShortcutsModal() {
+  const $m = $('#shortcuts-modal');
+  if ($m.hasClass('open')) closeShortcutsModal();
+  else openShortcutsModal();
+}
+function openShortcutsModal() {
+  const $m = $('#shortcuts-modal').addClass('open');
+  _releaseShortcutsFocus = trapFocus($m);
+}
+function closeShortcutsModal() {
+  $('#shortcuts-modal').removeClass('open');
+  if (_releaseShortcutsFocus) { _releaseShortcutsFocus(); _releaseShortcutsFocus = null; }
+}
+
+$('#btn-shortcuts').on('click', openShortcutsModal);
+$('#shortcuts-modal').on('click', function(e) {
+  if (e.target === this || $(e.target).hasClass('sc-close')) closeShortcutsModal();
+});
+$(document).on('keydown', function(e) {
+  if (e.key === 'Escape' && $('#shortcuts-modal').hasClass('open')) closeShortcutsModal();
 });
 
 $(document).on('keyup', function(e) {
@@ -752,6 +783,7 @@ function _drainFileQueue() {
     _fileQueueBusy = false;
     _drainFileQueue();
   } else {
+    status('Unsupported file: ' + (name || file.type || 'unknown'));
     _fileQueueBusy = false;
     _drainFileQueue();
   }
@@ -776,8 +808,11 @@ $('#canvas-wrap')
 $(document).on('paste', function(e) {
   const items = e.originalEvent.clipboardData.items;
   for (let i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image/') === 0) {
-      queueFile(items[i].getAsFile());
+    const it = items[i];
+    if (it.kind !== 'file') continue;
+    if (it.type.indexOf('image/') === 0 || it.type === 'application/pdf') {
+      const f = it.getAsFile();
+      if (f) queueFile(f);
       return;
     }
   }
@@ -792,26 +827,59 @@ $('#label-value').on('keydown', function(e) {
   if (e.key === 'Escape') { S.labelShapeId = null; $('#label-popup').hide(); }
 });
 
+// ---- Focus trap: cycle Tab within a modal, restore focus on close ----
+
+const FOCUSABLE_SEL = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function trapFocus($modal) {
+  const prev = document.activeElement;
+  const $focusable = $modal.find(FOCUSABLE_SEL).filter(':visible');
+  if ($focusable.length) $focusable.first().focus();
+
+  function onKey(e) {
+    if (e.key !== 'Tab') return;
+    const items = $modal.find(FOCUSABLE_SEL).filter(':visible').toArray();
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+    else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+  }
+  $modal.on('keydown.trap', onKey);
+
+  return function release() {
+    $modal.off('keydown.trap');
+    if (prev && typeof prev.focus === 'function') prev.focus();
+  };
+}
+
 // ---- Shared confirm modal (same style as storage-modal) ----
 
-function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
-  const $overlay = $('<div class="storage-modal-overlay">')
+// message: string (treated as text) or jQuery node (appended as-is).
+function showConfirmModal(message, confirmLabel, onConfirm) {
+  const $p = $('<p>');
+  if (typeof message === 'string') $p.text(message);
+  else $p.append(message);
+
+  const $overlay = $('<div class="storage-modal-overlay" role="dialog" aria-modal="true">')
     .append(
       $('<div class="storage-modal">')
-        .append($('<p>').html(htmlMessage))
+        .append($p)
         .append(
           $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
+            release();
             $overlay.remove();
             onConfirm();
           })
         )
         .append(
           $('<button>').text('Cancel').on('click', function() {
+            release();
             $overlay.remove();
           })
         )
     )
     .appendTo('body');
+  const release = trapFocus($overlay);
 }
 
 // ---- New button (new project — clears all tabs) ----
@@ -842,7 +910,9 @@ $('#btn-new').on('click', function() {
 
   if (hasContent) {
     showConfirmModal(
-      '<strong>Start a new project?</strong><br>All tabs, images, and shapes will be cleared.',
+      $('<span>').append($('<strong>').text('Start a new project?'))
+        .append('<br>')
+        .append(document.createTextNode('All tabs, images, and shapes will be cleared.')),
       'New Project',
       doNewProject
     );
@@ -976,7 +1046,7 @@ $('#shapes-list').on('click', '.shape-del', function(e) {
 $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
-  if (S.perspActive) $(document).trigger('view:change');
+  if (S.perspActive) emit(EVT.VIEW_CHANGE);
 });
 
 // ---- Brightness / Contrast Sliders ----
@@ -1164,7 +1234,7 @@ $('#shapes-list').on('click', '.shape-eye', function(e) {
 // ---- Refresh protection ----
 
 window.addEventListener('beforeunload', function(e) {
-  if (S.storageFull) {
+  if (S.storageFull || S.saveErrored) {
     e.preventDefault();
     e.returnValue = '';
   }
