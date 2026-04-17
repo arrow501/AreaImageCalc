@@ -783,6 +783,7 @@ function _drainFileQueue() {
     _fileQueueBusy = false;
     _drainFileQueue();
   } else {
+    status('Unsupported file: ' + (name || file.type || 'unknown'));
     _fileQueueBusy = false;
     _drainFileQueue();
   }
@@ -807,8 +808,11 @@ $('#canvas-wrap')
 $(document).on('paste', function(e) {
   const items = e.originalEvent.clipboardData.items;
   for (let i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image/') === 0) {
-      queueFile(items[i].getAsFile());
+    const it = items[i];
+    if (it.kind !== 'file') continue;
+    if (it.type.indexOf('image/') === 0 || it.type === 'application/pdf') {
+      const f = it.getAsFile();
+      if (f) queueFile(f);
       return;
     }
   }
