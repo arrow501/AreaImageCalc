@@ -3,6 +3,52 @@ import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, findNearestPt, dot,
 import { drawPerspOverlay } from './perspective.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
 
+// ---- Font memoization ----
+const FONT_FAM = '"JetBrains Mono", monospace';
+const fontCache = {};
+function font(px) {
+  return fontCache[px] || (fontCache[px] = '600 ' + px + 'px ' + FONT_FAM);
+}
+const FONT_RUN = font(11);                                              // running segment readout
+const FONT_POLY_SIDE = font(10);                                        // active polygon side labels
+function areaFont(zoom) { return font(Math.round(Math.min(Math.max(11, 13 * zoom), 22))); }
+function sideFont(zoom) { return font(Math.round(Math.min(Math.max(9,  10 * zoom), 14))); }
+
+// ---- Label collision helpers (module-scope; take boxes as param) ----
+const LABEL_PAD = 3;
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function canPlace(boxes, box) {
+  const padded = { x: box.x - LABEL_PAD, y: box.y - LABEL_PAD,
+                   w: box.w + LABEL_PAD * 2, h: box.h + LABEL_PAD * 2 };
+  for (let i = 0; i < boxes.length; i++) {
+    if (rectsOverlap(padded, boxes[i])) return false;
+  }
+  return true;
+}
+
+const NUDGE_DIRS = [
+  {x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
+  {x:-0.7,y:-0.7},{x:0.7,y:-0.7},{x:-0.7,y:0.7},{x:0.7,y:0.7}
+];
+
+function tryPlace(boxes, box, maxNudge) {
+  if (canPlace(boxes, box)) { boxes.push(box); return box; }
+  for (let step = LABEL_PAD + 2; step <= maxNudge; step += LABEL_PAD + 2) {
+    for (let d = 0; d < NUDGE_DIRS.length; d++) {
+      const nb = { x: box.x + NUDGE_DIRS[d].x * step, y: box.y + NUDGE_DIRS[d].y * step,
+                   w: box.w, h: box.h };
+      if (canPlace(boxes, nb)) { boxes.push(nb); return nb; }
+    }
+  }
+  return null;
+}
+
+// ---- Resize / canvas rect ----
 export function refreshCanvasRect() {
   const r = oCvs.getBoundingClientRect();
   S.canvasRect.left = r.left;
@@ -52,6 +98,7 @@ function drawImage() {
   ctx.restore();
 }
 
+// ---- Primitives ----
 function _drawSegment(ctx, sh, sel, inv) {
   const pts = sh.points;
   if (pts.length < 2) return;
@@ -83,26 +130,9 @@ function _drawClosedShape(ctx, sh, sel, inv) {
   }
 }
 
-function drawOverlay() {
-  S.overlayDirty = false;
+// ---- Image-space passes ----
 
-  const ctx = oCtx;
-  const w = S.cw * S.dpr, h = S.ch * S.dpr;
-
-  ctx.clearRect(0, 0, w, h);
-  if (!S.img) return;
-
-  const s = S.view.zoom * S.view.fit;
-  const inv = 1 / s;
-
-  ctx.save();
-  ctx.scale(S.dpr, S.dpr);
-
-  // ========== IMAGE-SPACE DRAWING ==========
-  ctx.save();
-  ctx.translate(S.view.ox, S.view.oy);
-  ctx.scale(s, s);
-
+function drawShapes(ctx, inv) {
   // Scale reference line
   if (S.scaleLine) {
     ctx.beginPath();
@@ -142,13 +172,15 @@ function drawOverlay() {
       _drawClosedShape(ctx, sh, sel, inv);
     }
   }
+}
 
+function drawActiveTool(ctx, inv) {
   // Active polygon drawing (also used by squarecal tool)
   if ((S.tool === 'polygon' || S.tool === 'squarecal') && S.polyPts.length > 0) {
     const isSqCal = S.tool === 'squarecal';
     const c = isSqCal ? '#22D88E' : COLORS[S.colorIdx % COLORS.length];
     const pts = S.polyPts;
-    const done = isSqCal && pts.length === 4;  // quad complete — draw closed
+    const done = isSqCal && pts.length === 4;
 
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -164,7 +196,6 @@ function drawOverlay() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Corner dots — numbered for squarecal, plain for polygon
     const dotR = isSqCal ? 6 * inv : 4 * inv;
     for (let i = 0; i < pts.length; i++) {
       ctx.beginPath();
@@ -175,7 +206,7 @@ function drawOverlay() {
       ctx.lineWidth = 1.5 * inv;
       ctx.stroke();
       if (isSqCal) {
-        ctx.font = '600 ' + (9 * inv) + 'px "JetBrains Mono", monospace';
+        ctx.font = font(Math.max(1, Math.round(9 * inv)));
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#1a1a1a';
@@ -183,7 +214,6 @@ function drawOverlay() {
       }
     }
 
-    // Polygon: show close-hint when hovering near first point
     if (!isSqCal && pts.length >= 3) {
       const fp = i2s(pts[0].x, pts[0].y);
       const d = Math.hypot(S.mx - fp.x, S.my - fp.y);
@@ -215,7 +245,7 @@ function drawOverlay() {
     for (let i = 0; i < pts.length; i++) dot(ctx, pts[i].x, pts[i].y, 4 * inv, c);
   }
 
-  // Edit mode: highlight hovered point
+  // Edit mode: hovered point highlight
   if (S.tool === 'edit' && !S.dragPt) {
     const thr = 10 * inv;
     const hp = findNearestPt({ x: S.mix, y: S.miy }, thr);
@@ -228,7 +258,6 @@ function drawOverlay() {
     }
   }
 
-  // Edit mode: highlight dragging point
   if (S.dragPt && S.dragShape) {
     dot(ctx, S.dragPt.x, S.dragPt.y, 6 * inv, '#fff');
   }
@@ -244,108 +273,77 @@ function drawOverlay() {
     ctx.lineWidth = 1.5 * inv;
     ctx.stroke();
   }
+}
 
-  ctx.restore(); // Back to screen space
+// ---- Screen-space passes ----
 
-  // ========== SCREEN-SPACE DRAWING ==========
+function drawRunningReadout(ctx) {
+  if (S.tool !== 'segment' || S.polyPts.length === 0) return;
+  const runLen = segmentLength(S.polyPts) + Math.hypot(S.mix - S.polyPts[S.polyPts.length - 1].x, S.miy - S.polyPts[S.polyPts.length - 1].y);
+  const txt = fmtLen(runLen);
+  ctx.font = FONT_RUN;
+  const tw = ctx.measureText(txt).width + 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  roundRect(ctx, S.mx + 12, S.my - 16, tw, 16, 2);
+  ctx.fill();
+  ctx.fillStyle = COLORS[S.colorIdx % COLORS.length];
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, S.mx + 16, S.my - 8);
+}
 
-  // Running segment length at cursor
-  if (S.tool === 'segment' && S.polyPts.length > 0) {
-    const runLen = segmentLength(S.polyPts) + Math.hypot(S.mix - S.polyPts[S.polyPts.length - 1].x, S.miy - S.polyPts[S.polyPts.length - 1].y);
-    const txt = fmtLen(runLen);
-    ctx.font = '600 11px "JetBrains Mono", monospace';
-    const tw = ctx.measureText(txt).width + 8;
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    roundRect(ctx, S.mx + 12, S.my - 16, tw, 16, 2);
-    ctx.fill();
-    ctx.fillStyle = COLORS[S.colorIdx % COLORS.length];
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(txt, S.mx + 16, S.my - 8);
-  }
+function drawActivePolySideLabels(ctx) {
+  if (S.tool !== 'polygon' || S.polyPts.length === 0) return;
+  const pts = S.polyPts;
+  const c = COLORS[S.colorIdx % COLORS.length];
+  const tempPts = pts.concat([{ x: S.mix, y: S.miy }]);
+  const cp = centroid(tempPts);
+  const off = 12 / (S.view.zoom * S.view.fit);
 
-  // ---- Label collision detection with nudging ----
-  const LABEL_PAD = 3;
-  const labelBoxes = [];
+  ctx.font = FONT_POLY_SIDE;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 
-  function rectsOverlap(a, b) {
-    return a.x < b.x + b.w && a.x + a.w > b.x &&
-           a.y < b.y + b.h && a.y + a.h > b.y;
-  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i], p2 = pts[i + 1];
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    let midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+    const toCx = cp.x - midX, toCy = cp.y - midY;
+    const dist = Math.hypot(toCx, toCy);
+    if (dist > 0) { midX += toCx / dist * off; midY += toCy / dist * off; }
 
-  function canPlace(box) {
-    const padded = { x: box.x - LABEL_PAD, y: box.y - LABEL_PAD,
-                     w: box.w + LABEL_PAD * 2, h: box.h + LABEL_PAD * 2 };
-    for (let i = 0; i < labelBoxes.length; i++) {
-      if (rectsOverlap(padded, labelBoxes[i])) return false;
-    }
-    return true;
-  }
-
-  function tryPlace(box, maxNudge) {
-    if (canPlace(box)) { labelBoxes.push(box); return box; }
-    const dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
-                  {x:-0.7,y:-0.7},{x:0.7,y:-0.7},{x:-0.7,y:0.7},{x:0.7,y:0.7}];
-    for (let step = LABEL_PAD + 2; step <= maxNudge; step += LABEL_PAD + 2) {
-      for (let d = 0; d < dirs.length; d++) {
-        const nb = { x: box.x + dirs[d].x * step, y: box.y + dirs[d].y * step,
-                     w: box.w, h: box.h };
-        if (canPlace(nb)) { labelBoxes.push(nb); return nb; }
-      }
-    }
-    return null;
-  }
-
-  // Side length labels for active polygon (no collision)
-  if (S.tool === 'polygon' && S.polyPts.length > 0) {
-    const pts = S.polyPts;
-    const c = COLORS[S.colorIdx % COLORS.length];
-    const tempPts = pts.concat([{ x: S.mix, y: S.miy }]);
-    const cp = centroid(tempPts);
-    const off = 12 / (S.view.zoom * S.view.fit);
-
-    ctx.font = '600 10px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i], p2 = pts[i + 1];
-      const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      let midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
-      const toCx = cp.x - midX, toCy = cp.y - midY;
-      const dist = Math.hypot(toCx, toCy);
-      if (dist > 0) { midX += toCx / dist * off; midY += toCy / dist * off; }
-
-      const mid = i2s(midX, midY);
-      const txt = fmtLen(len);
-      const tw = ctx.measureText(txt).width + 6;
-
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      roundRect(ctx, mid.x - tw / 2, mid.y - 8, tw, 14, 2);
-      ctx.fill();
-      ctx.fillStyle = c;
-      ctx.fillText(txt, mid.x, mid.y);
-    }
-
-    const last = pts[pts.length - 1];
-    const len2 = Math.hypot(S.mix - last.x, S.miy - last.y);
-    let midX2 = (last.x + S.mix) / 2, midY2 = (last.y + S.miy) / 2;
-    const toCx2 = cp.x - midX2, toCy2 = cp.y - midY2;
-    const dist2 = Math.hypot(toCx2, toCy2);
-    if (dist2 > 0) { midX2 += toCx2 / dist2 * off; midY2 += toCy2 / dist2 * off; }
-
-    const mid2 = i2s(midX2, midY2);
-    const txt2 = fmtLen(len2);
-    const tw2 = ctx.measureText(txt2).width + 6;
+    const mid = i2s(midX, midY);
+    const txt = fmtLen(len);
+    const tw = ctx.measureText(txt).width + 6;
 
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    roundRect(ctx, mid2.x - tw2 / 2, mid2.y - 8, tw2, 14, 2);
+    roundRect(ctx, mid.x - tw / 2, mid.y - 8, tw, 14, 2);
     ctx.fill();
     ctx.fillStyle = c;
-    ctx.fillText(txt2, mid2.x, mid2.y);
+    ctx.fillText(txt, mid.x, mid.y);
   }
 
-  // ---- Pass 1: Area / length labels (highest priority) ----
+  const last = pts[pts.length - 1];
+  const len2 = Math.hypot(S.mix - last.x, S.miy - last.y);
+  let midX2 = (last.x + S.mix) / 2, midY2 = (last.y + S.miy) / 2;
+  const toCx2 = cp.x - midX2, toCy2 = cp.y - midY2;
+  const dist2 = Math.hypot(toCx2, toCy2);
+  if (dist2 > 0) { midX2 += toCx2 / dist2 * off; midY2 += toCy2 / dist2 * off; }
+
+  const mid2 = i2s(midX2, midY2);
+  const txt2 = fmtLen(len2);
+  const tw2 = ctx.measureText(txt2).width + 6;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  roundRect(ctx, mid2.x - tw2 / 2, mid2.y - 8, tw2, 14, 2);
+  ctx.fill();
+  ctx.fillStyle = c;
+  ctx.fillText(txt2, mid2.x, mid2.y);
+}
+
+function drawAreaLabels(ctx, boxes) {
+  const zoomFont = areaFont(S.view.zoom);
+  ctx.font = zoomFont;
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
     if (sh.hidden) continue;
@@ -358,12 +356,11 @@ function drawOverlay() {
         (sh.points[midIdx - 1].y + sh.points[midIdx].y) / 2
       );
       const txt = fmtLen(sh.length);
-      const fs = Math.min(Math.max(11, 13 * S.view.zoom), 22);
-      ctx.font = '600 ' + fs + 'px "JetBrains Mono", monospace';
+      const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
       const tw = ctx.measureText(txt).width + 10;
       const th = fs + 6;
       const box = { x: mp.x - tw / 2, y: mp.y - th / 2, w: tw, h: th };
-      const placed = tryPlace(box, 40);
+      const placed = tryPlace(boxes, box, 40);
       if (placed) {
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
         roundRect(ctx, placed.x, placed.y, tw, th, 3);
@@ -378,17 +375,16 @@ function drawOverlay() {
 
     if (!sh.closed || sh.area == null) continue;
 
-    const cp = centroid(sh.points);
+    const cp = sh._centroid || centroid(sh.points);
     const sp = i2s(cp.x, cp.y);
     const txt = fmtArea(sh.area);
-    const fs = Math.min(Math.max(11, 13 * S.view.zoom), 22);
+    const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
 
-    ctx.font = '600 ' + fs + 'px "JetBrains Mono", monospace';
     const tw = ctx.measureText(txt).width + 10;
     const th = fs + 6;
 
     const box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
-    const placed = tryPlace(box, 40);
+    const placed = tryPlace(boxes, box, 40);
     if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -399,11 +395,11 @@ function drawOverlay() {
     ctx.textBaseline = 'middle';
     ctx.fillText(txt, placed.x + tw / 2, placed.y + th / 2);
   }
+}
 
-  // ---- Pass 2: Side length labels (sorted by edge length) ----
+function drawSideLabels(ctx, boxes) {
   const sideLabelCandidates = [];
-  const fs2 = Math.min(Math.max(9, 10 * S.view.zoom), 14);
-  ctx.font = '600 ' + fs2 + 'px "JetBrains Mono", monospace';
+  ctx.font = sideFont(S.view.zoom);
 
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
@@ -411,7 +407,7 @@ function drawOverlay() {
     if (!sh.closed || sh.points.length < 3) continue;
 
     const pts = sh.points;
-    const cp = centroid(pts);
+    const cp = sh._centroid || centroid(pts);
     const off = 12 / (S.view.zoom * S.view.fit);
 
     for (let i = 0; i < pts.length; i++) {
@@ -439,14 +435,13 @@ function drawOverlay() {
 
   sideLabelCandidates.sort(function(a, b) { return b.len - a.len; });
 
-  ctx.font = '600 ' + fs2 + 'px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   for (let i = 0; i < sideLabelCandidates.length; i++) {
     const sl = sideLabelCandidates[i];
     const box = { x: sl.x - sl.tw / 2, y: sl.boxY, w: sl.tw, h: sl.th };
-    const placed = tryPlace(box, 24);
+    const placed = tryPlace(boxes, box, 24);
     if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -455,11 +450,39 @@ function drawOverlay() {
     ctx.fillStyle = sl.color;
     ctx.fillText(sl.txt, placed.x + sl.tw / 2, placed.y + sl.th / 2);
   }
+}
 
-  // Perspective mode overlay
+function drawOverlay() {
+  S.overlayDirty = false;
+
+  const ctx = oCtx;
+  const w = S.cw * S.dpr, h = S.ch * S.dpr;
+
+  ctx.clearRect(0, 0, w, h);
+  if (!S.img) return;
+
+  const s = S.view.zoom * S.view.fit;
+  const inv = 1 / s;
+
+  ctx.save();
+  ctx.scale(S.dpr, S.dpr);
+
+  // Image-space
+  ctx.save();
+  ctx.translate(S.view.ox, S.view.oy);
+  ctx.scale(s, s);
+  drawShapes(ctx, inv);
+  drawActiveTool(ctx, inv);
+  ctx.restore();
+
+  // Screen-space
+  drawRunningReadout(ctx);
+  drawActivePolySideLabels(ctx);
+  const labelBoxes = [];
+  drawAreaLabels(ctx, labelBoxes);
+  drawSideLabels(ctx, labelBoxes);
+
   drawPerspOverlay(ctx);
-
-  // (squarecal corners rendered by the polygon drawing block above)
 
   ctx.restore();
 }
