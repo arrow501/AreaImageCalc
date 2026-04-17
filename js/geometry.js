@@ -1,5 +1,6 @@
 import { S, COLORS } from './state.js';
-export { centroid, distSeg, pip } from './math.js';
+import { nearestPoint, segmentLength } from './math.js';
+export { centroid, distSeg, pip, segmentLength } from './math.js';
 
 export function findShape(id) {
   for (let i = 0; i < S.shapes.length; i++) {
@@ -54,27 +55,7 @@ export function fmtLen(px) {
 }
 
 export function findNearestPt(ip, thr) {
-  let best = Infinity, sh = null, idx = -1;
-  for (let i = 0; i < S.shapes.length; i++) {
-    const s = S.shapes[i];
-    if (!s.closed && s.type !== 'segment') continue;
-    if (s.hidden) continue;
-    for (let j = 0; j < s.points.length; j++) {
-      const p = s.points[j];
-      const d = Math.hypot(p.x - ip.x, p.y - ip.y);
-      if (d < best) { best = d; sh = s; idx = j; }
-    }
-  }
-  if (best <= thr) return { shape: sh, idx: idx, dist: best };
-  return null;
-}
-
-export function segmentLength(points) {
-  let len = 0;
-  for (let i = 1; i < points.length; i++) {
-    len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-  }
-  return len;
+  return nearestPoint(ip, S.shapes, thr);
 }
 
 export function hasWork() {
