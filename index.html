@@ -205,6 +205,25 @@
       color: #666;
       font-size: 10px;
     }
+    .shape-name {
+      font-size: 10px;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 1px;
+    }
+    .shape-eye {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .shape-eye:hover { color: #ccc; }
     .shape-del {
       background: none;
       border: none;
@@ -215,6 +234,7 @@
       line-height: 1;
     }
     .shape-del:hover { color: #ff4444; }
+    .shape-item.shape-hidden { opacity: 0.4; }
 
     /* ========== STATUS BAR ========== */
     #statusbar {
@@ -271,6 +291,42 @@
       margin-left: 4px;
     }
     #scale-popup button:hover { background: #e55a20; }
+
+    /* ========== LABEL POPUP ========== */
+    #label-popup {
+      position: absolute;
+      background: #2a2a2a;
+      border: 1px solid #FF6B35;
+      border-radius: 4px;
+      padding: 10px;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      white-space: nowrap;
+    }
+    #label-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #label-popup input[type=text] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px 8px;
+      width: 160px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    #label-popup input:focus { outline: none; border-color: #FF6B35; }
+    #label-popup button {
+      background: #FF6B35;
+      color: #fff;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    #label-popup button:hover { background: #e55a20; }
 
     /* ========== DROPZONE ========== */
     #dropzone {
@@ -567,25 +623,27 @@
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
     <button class="tb-btn" id="btn-new" title="New project — clears all tabs">New</button>
-    <button class="tb-btn" id="btn-open" title="Open image, PDF, or project [Ctrl+O]">Open</button>
-    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc">Save</button>
+    <button class="tb-btn" id="btn-open" title="Open image, PDF, or .arcalc project">Open</button>
+    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc file">Save</button>
     <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Set scale [1]">Scale</button>
-    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon lasso [2]">Polygon</button>
-    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand trace [3]">Freehand</button>
-    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points [4]">Edit</button>
+    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]">Scale</button>
+    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]">Polygon</button>
+    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]">Freehand</button>
+    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]">Distance</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-delete" title="Delete selected [Del]">Delete</button>
-    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear All</button>
+    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points — drag to move [E]">Edit</button>
+    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]">Label</button>
+    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]">Delete</button>
+    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
+    <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]">Fit</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Perspective</button>
+    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise [,]">&#8634; 90°</button>
+    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise [.]">&#8635; 90°</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634; 90°</button>
-    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635; 90°</button>
+    <button class="tb-btn disabled" id="btn-showall" title="Show all hidden shapes">Show Hidden</button>
     <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
-    <div class="tb-sep"></div>
     <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
 
     <!-- Brightness / Contrast Sliders -->
@@ -653,6 +711,12 @@
           <button id="rotate-apply">Apply</button>
           <button id="rotate-cancel-btn">Cancel</button>
         </div>
+      </div>
+
+      <div id="label-popup">
+        <label>Shape name:</label>
+        <input type="text" id="label-value" placeholder="Name...">
+        <button id="label-confirm">Set</button>
       </div>
 
       <div id="persp-bar">

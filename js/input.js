@@ -1,10 +1,10 @@
 import { S, worker, oCvs } from './state.js';
-import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim } from './geometry.js';
+import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip } from './geometry.js';
 import { resize } from './render.js';
 import {
-  closePoly, finishFH, delShape, selectAt,
+  closePoly, closeSegment, finishFH, delShape, selectAt,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
-  rotateImage
+  rotateImage, renameShape, hideShape, showAllShapes
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, status, updateFilters,
@@ -124,6 +124,11 @@ $(oCvs).on('mousedown', function(e) {
       S.overlayDirty = true;
       break;
 
+    case 'segment':
+      S.polyPts.push(ip);
+      S.overlayDirty = true;
+      break;
+
     case 'edit': {
       const thr = 10 / (S.view.zoom * S.view.fit);
       const hp = findNearestPt(ip, thr);
@@ -136,6 +141,32 @@ $(oCvs).on('mousedown', function(e) {
         updatePanel();
         status('Drag to move point');
       }
+      break;
+    }
+
+    case 'label': {
+      let clickedId = null;
+      for (let li = S.shapes.length - 1; li >= 0; li--) {
+        const lsh = S.shapes[li];
+        if (!lsh.hidden && lsh.closed && pip(ip, lsh.points)) { clickedId = lsh.id; break; }
+      }
+      if (!clickedId) {
+        const lthr = 15 / (S.view.zoom * S.view.fit);
+        let lbest = Infinity;
+        for (let li = 0; li < S.shapes.length; li++) {
+          const lsh = S.shapes[li];
+          if (lsh.hidden) continue;
+          const lpts = lsh.points;
+          const ledge = lsh.closed ? lpts.length : lpts.length - 1;
+          for (let lj = 0; lj < ledge; lj++) {
+            const lk = lsh.closed ? (lj + 1) % lpts.length : lj + 1;
+            const ld = distSeg(ip, lpts[lj], lpts[lk]);
+            if (ld < lbest) { lbest = ld; clickedId = lsh.id; }
+          }
+        }
+        if (lbest > lthr) clickedId = null;
+      }
+      if (clickedId) _showLabelPopup(clickedId);
       break;
     }
 
@@ -221,6 +252,7 @@ $(document).on('mousemove', function(e) {
   }
 
   if (S.tool === 'polygon' && S.polyPts.length > 0) S.overlayDirty = true;
+  if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
   if (S.tool === 'edit') S.overlayDirty = true;
 });
@@ -258,7 +290,11 @@ $(document).on('mouseup', function(e) {
   }
 
   if (S.dragPt && S.dragShape) {
-    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    if (S.dragShape.type === 'segment') {
+      S.dragShape.length = segmentLength(S.dragShape.points);
+    } else {
+      worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    }
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
@@ -273,6 +309,10 @@ $(oCvs).on('dblclick', function(e) {
   if (S.tool === 'polygon' && S.polyPts.length >= 3) {
     S.polyPts.pop();
     closePoly();
+  }
+  if (S.tool === 'segment' && S.polyPts.length >= 2) {
+    S.polyPts.pop();
+    closeSegment();
   }
 });
 
@@ -395,6 +435,11 @@ oCvs.addEventListener('touchstart', function(e) {
       S.overlayDirty = true;
       break;
 
+    case 'segment':
+      S.polyPts.push(ip);
+      S.overlayDirty = true;
+      break;
+
     case 'edit': {
       const thrScreen = 20 / (S.view.zoom * S.view.fit);
       const hp = findNearestPt(ip, thrScreen);
@@ -492,6 +537,7 @@ oCvs.addEventListener('touchmove', function(e) {
   }
 
   if (S.tool === 'polygon' && S.polyPts.length > 0) S.overlayDirty = true;
+  if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
   if (S.tool === 'edit') S.overlayDirty = true;
 }, { passive: false });
@@ -532,7 +578,11 @@ function touchEnd(e) {
   }
 
   if (S.dragPt && S.dragShape) {
-    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    if (S.dragShape.type === 'segment') {
+      S.dragShape.length = segmentLength(S.dragShape.points);
+    } else {
+      worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    }
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
@@ -581,6 +631,9 @@ $(document).on('keydown', function(e) {
       } else if (S.perspActive) {
         applyPerspective();
         e.preventDefault();
+      } else if (S.tool === 'segment' && S.polyPts.length >= 2) {
+        closeSegment();
+        e.preventDefault();
       }
       break;
 
@@ -590,11 +643,44 @@ $(document).on('keydown', function(e) {
       e.preventDefault();
       break;
 
+    case 's':
+    case 'S':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'scale' ? 'idle' : 'scale');
+      break;
+    case 'p':
+    case 'P':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'polygon' ? 'idle' : 'polygon');
+      break;
+    case 'f':
+    case 'F':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand');
+      break;
+    case 'd':
+    case 'D':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'segment' ? 'idle' : 'segment');
+      break;
+    case 'e':
+    case 'E':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit');
+      break;
+    case 'l':
+    case 'L':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'label' ? 'idle' : 'label');
+      break;
+    case 'h':
+    case 'H':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal' && S.selId) hideShape(S.selId);
+      break;
+    case 'w':
+    case 'W':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') enterPerspective();
+      break;
     case '1': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'scale' ? 'idle' : 'scale'); break;
     case '2': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'polygon' ? 'idle' : 'polygon'); break;
     case '3': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
-    case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
-    case '5':
+    case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'segment' ? 'idle' : 'segment'); break;
+    case '5': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
+    case '6':
       if (S.img && !S.perspActive && S.tool !== 'squarecal') enterPerspective();
       break;
 
@@ -620,7 +706,7 @@ $(document).on('keyup', function(e) {
   if (e.key === ' ') {
     S.spaceHeld = false;
     $('body').removeClass('cursor-grab cursor-grabbing');
-    if (S.tool === 'scale' || S.tool === 'polygon' || S.tool === 'freehand') {
+    if (S.tool === 'scale' || S.tool === 'polygon' || S.tool === 'freehand' || S.tool === 'segment') {
       $('body').addClass('cursor-crosshair');
     }
     if (S.tool === 'edit') {
@@ -694,6 +780,36 @@ $(document).on('paste', function(e) {
       return;
     }
   }
+});
+
+// ---- Label Popup ----
+
+function _showLabelPopup(shapeId) {
+  const sh = findShape(shapeId);
+  if (!sh) return;
+  S.labelShapeId = shapeId;
+  const sp = i2s(
+    sh.points.reduce(function(s, p) { return s + p.x; }, 0) / sh.points.length,
+    sh.points.reduce(function(s, p) { return s + p.y; }, 0) / sh.points.length
+  );
+  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
+  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
+  $('#label-popup').css({ left: l, top: t }).show();
+  $('#label-value').val(sh.name || '').focus().select();
+}
+
+function _confirmLabel() {
+  const val = $('#label-value').val().trim();
+  if (S.labelShapeId && val) renameShape(S.labelShapeId, val);
+  S.labelShapeId = null;
+  $('#label-popup').hide();
+}
+
+$('#label-confirm').on('click', _confirmLabel);
+
+$('#label-value').on('keydown', function(e) {
+  if (e.key === 'Enter') _confirmLabel();
+  if (e.key === 'Escape') { S.labelShapeId = null; $('#label-popup').hide(); }
 });
 
 // ---- Shared confirm modal (same style as storage-modal) ----
@@ -848,14 +964,19 @@ $('.persp-tab').on('click', function() {
 
 $('#shapes-list').on('click', '.shape-item', function(e) {
   if ($(e.target).closest('.shape-del').length) return;
+  if ($(e.target).closest('.shape-eye').length) return;
 
   S.selId = $(this).data('id');
   S.overlayDirty = true;
   updatePanel();
 
   const sh = findShape(S.selId);
-  if (sh && sh.area != null) {
-    status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
+  if (sh) {
+    if (sh.type === 'segment') {
+      status('Length: ' + fmtLen(sh.length));
+    } else if (sh.area != null) {
+      status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
+    }
   }
 });
 
@@ -1039,6 +1160,28 @@ $('#rotate-ccw-small').on('click', function() {
 $('#rotate-cw-small').on('click', function() {
   $('#rotate-popup').hide();
   rotateImage(90);
+});
+
+// ---- Show All Hidden Shapes ----
+
+$('#btn-showall').on('click', function() {
+  showAllShapes();
+});
+
+/// ---- Panel: hide-toggle per shape ----
+
+$('#shapes-list').on('click', '.shape-eye', function(e) {
+  e.stopPropagation();
+  hideShape($(this).data('id'));
+});
+
+// ---- Refresh protection ----
+
+window.addEventListener('beforeunload', function(e) {
+  if (S.storageFull) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 // Initialize sliders

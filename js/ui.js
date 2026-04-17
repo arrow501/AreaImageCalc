@@ -2,7 +2,7 @@
 // Imports only state.js and geometry.js — no feature modules, no cycles.
 
 import { S, iCvs } from './state.js';
-import { fmtArea, fmtPerim } from './geometry.js';
+import { fmtArea, fmtPerim, fmtLen } from './geometry.js';
 
 // ---- Tool State ----
 
@@ -17,7 +17,9 @@ export function cancelTool() {
   S.dragIdx = -1;
   S.touchId = null;
   S.touchIsPan = false;
+  S.labelShapeId = null;
   $('#scale-popup').hide();
+  $('#label-popup').hide();
   S.overlayDirty = true;
 }
 
@@ -32,7 +34,7 @@ export function setTool(t) {
 
   $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing cursor-move');
 
-  if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal') {
+  if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal' || t === 'segment') {
     $('body').addClass('cursor-crosshair');
   }
   if (t === 'edit') {
@@ -52,8 +54,14 @@ export function setTool(t) {
     case 'freehand':
       status('Click and drag to trace. Release to finish. ESC cancels.');
       break;
+    case 'segment':
+      status('Click to place points along a path. Double-click or Enter to finish. ESC cancels.');
+      break;
     case 'edit':
       status('Drag control points to edit shapes. ESC to exit.');
+      break;
+    case 'label':
+      status('Click a shape to rename it.');
       break;
     case 'squarecal':
       status('Click 4 corners of a known square. Drag to adjust. Enter side length and Apply.');
@@ -72,7 +80,7 @@ export function status(t) {
 // ---- Toolbar State ----
 
 export function enableTools(on) {
-  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
+  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-segment, #btn-label, #btn-delete, #btn-clear, #btn-showall, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -108,35 +116,53 @@ export function updateScaleDisp() {
   }
 }
 
+function _esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export function updatePanel() {
   const $l = $('#shapes-list');
   $l.empty();
 
   let total = 0;
+  let hasHidden = false;
 
   for (let i = 0; i < S.shapes.length; i++) {
     const s = S.shapes[i];
-    const aStr = s.area != null ? fmtArea(s.area) : '...';
-    const pStr = s.perimeter != null ? fmtPerim(s.perimeter) : '';
+    if (s.hidden) hasHidden = true;
 
-    if (s.area != null) total += s.area;
+    let mStr, pStr = '';
+    if (s.type === 'segment') {
+      mStr = s.length != null ? fmtLen(s.length) : '...';
+    } else {
+      mStr = s.area != null ? fmtArea(s.area) : '...';
+      pStr = s.perimeter != null ? fmtPerim(s.perimeter) : '';
+      if (s.area != null) total += s.area;
+    }
+
+    const hideTip = s.hidden ? 'Show shape [H]' : 'Hide shape [H]';
+    const hideChar = s.hidden ? '&#9675;' : '&#9679;';
 
     $l.append(
-      '<div class="shape-item' + (s.id === S.selId ? ' selected' : '') + '" data-id="' + s.id + '">' +
+      '<div class="shape-item' + (s.id === S.selId ? ' selected' : '') + (s.hidden ? ' shape-hidden' : '') + '" data-id="' + s.id + '">' +
         '<div class="shape-swatch" style="background:' + s.color + '"></div>' +
         '<div class="shape-info">' +
-          '<div class="area">' + aStr + '</div>' +
+          '<div class="shape-name">' + _esc(s.name || '') + '</div>' +
+          '<div class="area">' + mStr + '</div>' +
           (pStr ? '<div class="perim">P: ' + pStr + '</div>' : '') +
         '</div>' +
+        '<button class="shape-eye" data-id="' + s.id + '" title="' + hideTip + '">' + hideChar + '</button>' +
         '<button class="shape-del" data-id="' + s.id + '">&times;</button>' +
       '</div>'
     );
   }
 
   const tStr = S.shapes.length
-    ? 'Total: ' + fmtArea(total) + ' (' + S.shapes.length + ')'
+    ? 'Total area: ' + fmtArea(total) + ' (' + S.shapes.length + ')'
     : 'No shapes yet';
   $('#shapes-total').text(tStr);
+
+  $('#btn-showall').toggleClass('disabled', !hasHidden);
 }
 
 // ---- Image Adjustments ----

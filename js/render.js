@@ -1,5 +1,5 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
-import { s2i, i2s, centroid, fmtArea, fmtLen, findNearestPt, dot, roundRect } from './geometry.js';
+import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, findNearestPt, dot, roundRect } from './geometry.js';
 import { drawPerspOverlay } from './perspective.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
 
@@ -93,30 +93,38 @@ function drawOverlay() {
     if (S.scaleP2) dot(ctx, S.scaleP2.x, S.scaleP2.y, 4 * inv, '#4A9EFF');
   }
 
-  // Closed shapes
+  // Shapes (closed polygons + open segments)
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
-    if (!sh.closed || sh.points.length < 3) continue;
+    if (sh.hidden) continue;
 
     const pts = sh.points;
     const sel = sh.id === S.selId;
 
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let pi = 1; pi < pts.length; pi++) {
-      ctx.lineTo(pts[pi].x, pts[pi].y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = sh.color + '20';
-    ctx.fill();
-    ctx.strokeStyle = sh.color;
-    ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-    ctx.stroke();
-
-    if (pts.length <= 80 || sel) {
+    if (sh.type === 'segment') {
+      if (pts.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
+      ctx.strokeStyle = sh.color;
+      ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
+      ctx.stroke();
       const hr = (sel ? 4 : 2.5) * inv;
-      for (let pi = 0; pi < pts.length; pi++) {
-        dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+      for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+    } else {
+      if (!sh.closed || pts.length < 3) continue;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
+      ctx.closePath();
+      ctx.fillStyle = sh.color + '20';
+      ctx.fill();
+      ctx.strokeStyle = sh.color;
+      ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
+      ctx.stroke();
+      if (pts.length <= 80 || sel) {
+        const hr = (sel ? 4 : 2.5) * inv;
+        for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
       }
     }
   }
@@ -179,6 +187,20 @@ function drawOverlay() {
     }
   }
 
+  // Active segment drawing
+  if (S.tool === 'segment' && S.polyPts.length > 0) {
+    const c = COLORS[S.colorIdx % COLORS.length];
+    const pts = S.polyPts;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.lineTo(S.mix, S.miy);
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 1.5 * inv;
+    ctx.stroke();
+    for (let i = 0; i < pts.length; i++) dot(ctx, pts[i].x, pts[i].y, 4 * inv, c);
+  }
+
   // Edit mode: highlight hovered point
   if (S.tool === 'edit' && !S.dragPt) {
     const thr = 10 * inv;
@@ -212,6 +234,21 @@ function drawOverlay() {
   ctx.restore(); // Back to screen space
 
   // ========== SCREEN-SPACE DRAWING ==========
+
+  // Running segment length at cursor
+  if (S.tool === 'segment' && S.polyPts.length > 0) {
+    const runLen = segmentLength(S.polyPts) + Math.hypot(S.mix - S.polyPts[S.polyPts.length - 1].x, S.miy - S.polyPts[S.polyPts.length - 1].y);
+    const txt = fmtLen(runLen);
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    const tw = ctx.measureText(txt).width + 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    roundRect(ctx, S.mx + 12, S.my - 16, tw, 16, 2);
+    ctx.fill();
+    ctx.fillStyle = COLORS[S.colorIdx % COLORS.length];
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, S.mx + 16, S.my - 8);
+  }
 
   // ---- Label collision detection with nudging ----
   const LABEL_PAD = 3;
@@ -294,9 +331,37 @@ function drawOverlay() {
     ctx.fillText(txt2, mid2.x, mid2.y);
   }
 
-  // ---- Pass 1: Area labels (highest priority) ----
+  // ---- Pass 1: Area / length labels (highest priority) ----
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
+    if (sh.hidden) continue;
+
+    if (sh.type === 'segment') {
+      if (sh.points.length < 2 || sh.length == null) continue;
+      const midIdx = Math.floor(sh.points.length / 2);
+      const mp = i2s(
+        (sh.points[midIdx - 1].x + sh.points[midIdx].x) / 2,
+        (sh.points[midIdx - 1].y + sh.points[midIdx].y) / 2
+      );
+      const txt = fmtLen(sh.length);
+      const fs = Math.min(Math.max(11, 13 * S.view.zoom), 22);
+      ctx.font = '600 ' + fs + 'px "JetBrains Mono", monospace';
+      const tw = ctx.measureText(txt).width + 10;
+      const th = fs + 6;
+      const box = { x: mp.x - tw / 2, y: mp.y - th / 2, w: tw, h: th };
+      const placed = tryPlace(box, 40);
+      if (placed) {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        roundRect(ctx, placed.x, placed.y, tw, th, 3);
+        ctx.fill();
+        ctx.fillStyle = sh.color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(txt, placed.x + tw / 2, placed.y + th / 2);
+      }
+      continue;
+    }
+
     if (!sh.closed || sh.area == null) continue;
 
     const cp = centroid(sh.points);
@@ -328,6 +393,7 @@ function drawOverlay() {
 
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
+    if (sh.hidden) continue;
     if (!sh.closed || sh.points.length < 3) continue;
 
     const pts = sh.points;

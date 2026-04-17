@@ -57,7 +57,8 @@ export function findNearestPt(ip, thr) {
   let best = Infinity, sh = null, idx = -1;
   for (let i = 0; i < S.shapes.length; i++) {
     const s = S.shapes[i];
-    if (!s.closed) continue;
+    if (!s.closed && s.type !== 'segment') continue;
+    if (s.hidden) continue;
     for (let j = 0; j < s.points.length; j++) {
       const p = s.points[j];
       const d = Math.hypot(p.x - ip.x, p.y - ip.y);
@@ -66,6 +67,14 @@ export function findNearestPt(ip, thr) {
   }
   if (best <= thr) return { shape: sh, idx: idx, dist: best };
   return null;
+}
+
+export function segmentLength(points) {
+  let len = 0;
+  for (let i = 1; i < points.length; i++) {
+    len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  }
+  return len;
 }
 
 export function hasWork() {
