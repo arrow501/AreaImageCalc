@@ -43,7 +43,7 @@
       border-bottom: 1px solid #333;
       min-height: 40px;
       flex-shrink: 0;
-      overflow-x: auto;
+      flex-wrap: wrap;
     }
     .tb-btn {
       background: none;
@@ -152,6 +152,22 @@
     .sl-val::-webkit-outer-spin-button { -webkit-appearance: none; }
     .sl-val:focus { outline: none; border-color: #FF6B35; cursor: text; background: #1a1a1a; }
 
+    /* ========== PANEL REVEAL STRIP ========== */
+    #panel-reveal {
+      display: none;
+      width: 14px;
+      background: #252525;
+      border-left: 1px solid #333;
+      flex-shrink: 0;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-size: 11px;
+      transition: background 0.1s, color 0.1s;
+    }
+    #panel-reveal:hover { background: #2e2e2e; color: #bbb; }
+
     /* ========== SHAPES PANEL ========== */
     #shapes-panel {
       width: 220px;
@@ -163,6 +179,29 @@
       transition: width 0.15s;
     }
     #shapes-panel.collapsed { width: 0; overflow: hidden; border: none; }
+
+    /* ========== HIDDEN SHAPES NOTICE ========== */
+    #hidden-notice {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      background: #1e1e1e;
+      border-bottom: 1px solid #333;
+      font-size: 10px;
+      color: #888;
+      gap: 6px;
+    }
+    #btn-showall {
+      background: none;
+      border: none;
+      color: #4A9EFF;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
+      white-space: nowrap;
+    }
+    #btn-showall:hover { color: #7ab8ff; text-decoration: underline; }
     #shapes-header {
       padding: 8px 10px;
       font-weight: 600;
@@ -639,14 +678,12 @@
     <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]">Fit</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Perspective</button>
-    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise [,]">&#8634; 90°</button>
-    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise [.]">&#8635; 90°</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Persp</button>
+    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634; 90°</button>
+    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635; 90°</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-showall" title="Show all hidden shapes">Show Hidden</button>
     <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
     <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
-    <button class="tb-btn" id="btn-toggle-shapes" title="Show/hide shapes panel">Shapes &#171;</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -755,11 +792,18 @@
       </div>
     </div>
 
+    <!-- ========== PANEL REVEAL STRIP ========== -->
+    <div id="panel-reveal" title="Show shapes panel">&#187;</div>
+
     <!-- ========== SHAPES PANEL ========== -->
     <div id="shapes-panel">
       <div id="shapes-header">
         <span>Shapes</span>
-        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&raquo;</button>
+        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&laquo;</button>
+      </div>
+      <div id="hidden-notice">
+        <span id="hidden-count-label"></span>
+        <button id="btn-showall">show all</button>
       </div>
       <div id="shapes-list"></div>
       <div id="shapes-total"></div>

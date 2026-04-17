@@ -919,13 +919,13 @@ function toggleShapesPanel() {
   const $p = $('#shapes-panel');
   $p.toggleClass('collapsed');
   const col = $p.hasClass('collapsed');
-  $('#btn-toggle-shapes').html(col ? 'Shapes &#187;' : 'Shapes &#171;');
+  $('#panel-reveal').css('display', col ? 'flex' : 'none');
   $('#btn-toggle-panel').html(col ? '&#187;' : '&#171;');
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 }
 
 $('#btn-toggle-panel').on('click', toggleShapesPanel);
-$('#btn-toggle-shapes').on('click', toggleShapesPanel);
+$('#panel-reveal').on('click', toggleShapesPanel);
 
 $('#btn-toggle-tabs').on('click', function() {
   const $p = $('#tab-bar');

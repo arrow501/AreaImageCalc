@@ -162,7 +162,13 @@ export function updatePanel() {
     : 'No shapes yet';
   $('#shapes-total').text(tStr);
 
-  $('#btn-showall').toggleClass('disabled', !hasHidden);
+  if (hasHidden) {
+    const n = S.shapes.filter(function(s) { return s.hidden; }).length;
+    $('#hidden-count-label').text(n + ' hidden');
+    $('#hidden-notice').css('display', 'flex');
+  } else {
+    $('#hidden-notice').css('display', 'none');
+  }
 }
 
 // ---- Image Adjustments ----
