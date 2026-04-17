@@ -293,6 +293,7 @@ $(document).on('mouseup', function(e) {
     if (S.dragShape.type === 'segment') {
       S.dragShape.length = segmentLength(S.dragShape.points);
     } else {
+      S.dragShape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     }
     S.dragPt = null;
@@ -581,6 +582,7 @@ function touchEnd(e) {
     if (S.dragShape.type === 'segment') {
       S.dragShape.length = segmentLength(S.dragShape.points);
     } else {
+      S.dragShape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     }
     S.dragPt = null;

@@ -37,6 +37,7 @@ worker.onmessage = function(e) {
         const bgShape2 = tab2.shapes.find(function(s) { return s.id === d.id; });
         if (bgShape2) {
           bgShape2.points = d.points;
+          bgShape2._centroid = null;
           worker.postMessage({ type: 'calcArea', id: bgShape2.id, points: bgShape2.points, tabIdx: d.tabIdx });
         }
       }
@@ -45,6 +46,7 @@ worker.onmessage = function(e) {
     shape = findShape(d.id);
     if (shape) {
       shape.points = d.points;
+      shape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
       S.overlayDirty = true;
     }

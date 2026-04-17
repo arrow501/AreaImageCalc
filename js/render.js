@@ -375,7 +375,7 @@ function drawAreaLabels(ctx, boxes) {
 
     if (!sh.closed || sh.area == null) continue;
 
-    const cp = sh._centroid || centroid(sh.points);
+    const cp = sh._centroid || (sh._centroid = centroid(sh.points));
     const sp = i2s(cp.x, cp.y);
     const txt = fmtArea(sh.area);
     const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
@@ -407,7 +407,7 @@ function drawSideLabels(ctx, boxes) {
     if (!sh.closed || sh.points.length < 3) continue;
 
     const pts = sh.points;
-    const cp = sh._centroid || centroid(pts);
+    const cp = sh._centroid || (sh._centroid = centroid(pts));
     const off = 12 / (S.view.zoom * S.view.fit);
 
     for (let i = 0; i < pts.length; i++) {
