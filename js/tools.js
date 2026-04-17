@@ -7,49 +7,37 @@ import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
 import { EVT, emit } from './events.js';
 
-// Worker message handler
+// Routes a worker shape result to either the active tab (shown) or a background
+// tab (silent update). `apply(shape, isBg)` performs the actual mutation.
+function routeShapeResult(d, apply) {
+  const isBg = d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx;
+  const tab = isBg ? S.tabs[d.tabIdx] : null;
+  const shape = isBg
+    ? (tab ? tab.shapes.find(function(s) { return s.id === d.id; }) : null)
+    : findShape(d.id);
+  if (shape) apply(shape, isBg);
+}
+
 worker.onmessage = function(e) {
   const d = e.data;
-  let shape;
 
   if (d.type === 'areaResult') {
-    if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
-      // Result for a background tab — store directly
-      const tab = S.tabs[d.tabIdx];
-      if (tab) {
-        const bgShape = tab.shapes.find(function(s) { return s.id === d.id; });
-        if (bgShape) { bgShape.area = d.area; bgShape.perimeter = d.perimeter; }
-      }
-      return;
-    }
-    shape = findShape(d.id);
-    if (shape) {
+    routeShapeResult(d, function(shape, isBg) {
       shape.area = d.area;
       shape.perimeter = d.perimeter;
-      S.overlayDirty = true;
-      updatePanel();
-    }
+      if (!isBg) {
+        S.overlayDirty = true;
+        updatePanel();
+      }
+    });
   }
   else if (d.type === 'simplifyResult') {
-    if (d.tabIdx !== undefined && d.tabIdx !== S.currentTabIdx) {
-      const tab2 = S.tabs[d.tabIdx];
-      if (tab2) {
-        const bgShape2 = tab2.shapes.find(function(s) { return s.id === d.id; });
-        if (bgShape2) {
-          bgShape2.points = d.points;
-          bgShape2._centroid = null;
-          worker.postMessage({ type: 'calcArea', id: bgShape2.id, points: bgShape2.points, tabIdx: d.tabIdx });
-        }
-      }
-      return;
-    }
-    shape = findShape(d.id);
-    if (shape) {
+    routeShapeResult(d, function(shape, isBg) {
       shape.points = d.points;
       shape._centroid = null;
-      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
-      S.overlayDirty = true;
-    }
+      worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: d.tabIdx });
+      if (!isBg) S.overlayDirty = true;
+    });
   }
 };
 
