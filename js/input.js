@@ -915,19 +915,23 @@ $('#btn-fit').on('click', function() {
 
 // ---- Panel Toggles (shared logic) ----
 
-function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
-  const $p = $(panelSel);
+function toggleShapesPanel() {
+  const $p = $('#shapes-panel');
   $p.toggleClass('collapsed');
-  $btn.html($p.hasClass('collapsed') ? expandHtml : collapseHtml);
+  const col = $p.hasClass('collapsed');
+  $('#btn-toggle-shapes').html(col ? 'Shapes &#187;' : 'Shapes &#171;');
+  $('#btn-toggle-panel').html(col ? '&#187;' : '&#171;');
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 }
 
-$('#btn-toggle-panel').on('click', function() {
-  togglePanel('#shapes-panel', $(this), '&raquo;', '&laquo;');
-});
+$('#btn-toggle-panel').on('click', toggleShapesPanel);
+$('#btn-toggle-shapes').on('click', toggleShapesPanel);
 
 $('#btn-toggle-tabs').on('click', function() {
-  togglePanel('#tab-bar', $(this), '&#9662; Tabs', '&#9656; Tabs');
+  const $p = $('#tab-bar');
+  $p.toggleClass('collapsed');
+  $(this).html($p.hasClass('collapsed') ? '&#9656; Tabs' : '&#9662; Tabs');
+  setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 
 // ---- Scale Popup ----
