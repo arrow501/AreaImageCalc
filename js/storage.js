@@ -24,6 +24,22 @@ function buildState(dropNonActive, dropAll) {
   });
 }
 
+// Lean backup: keep shapes, scale, view, and tab metadata; drop all image blobs.
+// Used when the primary payload is too large to duplicate into .bak.
+function buildLeanState() {
+  return JSON.stringify({
+    v: SAVE_VER,
+    ts: Date.now(),
+    lean: true,
+    currentTabIdx: S.currentTabIdx,
+    tabs: S.tabs.map(function(tab) {
+      const s = serializeTab(tab);
+      s.imgDataUrl = null;
+      return s;
+    })
+  });
+}
+
 export function doSave() {
   S.pendingSave = false;
   snapshotCurrentTab();
@@ -55,7 +71,10 @@ export function doSave() {
     S.saveErrored = false;
     emit(EVT.STORAGE_UPDATE, [bytes]);
     try {
-      if (bytes < STORAGE_HARD_LIMIT) localStorage.setItem(BACKUP_KEY, json);
+      const backupJson = bytes > STORAGE_SOFT_LIMIT / 2 ? buildLeanState() : json;
+      if (new Blob([backupJson]).size < STORAGE_HARD_LIMIT) {
+        localStorage.setItem(BACKUP_KEY, backupJson);
+      }
     } catch (_) { /* backup is best-effort; ignore quota errors on secondary */ }
   } catch (e) {
     S.saveErrored = true;
@@ -131,7 +150,9 @@ export function restoreState() {
   if (backup.ok) {
     try {
       if (hydrateState(backup.state)) {
-        status('Recovered from backup — please save your project to a file');
+        status(backup.state.lean
+          ? 'Shape data recovered from backup — re-open your images'
+          : 'Recovered from backup — please save your project to a file');
         return true;
       }
     } catch (e) {
