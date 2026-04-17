@@ -844,6 +844,8 @@ function doNewProject() {
   S.tabs.length = 0;
   S.currentTabIdx = -1;
   switchToTab(createTab('Untitled', null, null));
+  $('#tab-bar').addClass('collapsed');
+  $('#btn-toggle-tabs').html('&#9656; Tabs');
   scheduleSave();
 }
 
@@ -1187,6 +1189,36 @@ window.addEventListener('beforeunload', function(e) {
     e.returnValue = '';
   }
 });
+
+// ---- Dynamic toolbar label shortening ----
+
+const _shortLabels = [
+  { id: 'btn-polygon',  full: 'Polygon',   short: 'Poly'   },
+  { id: 'btn-freehand', full: 'Freehand',  short: 'Free'   },
+  { id: 'btn-segment',  full: 'Distance',  short: 'Dist'   },
+  { id: 'btn-delete',   full: 'Delete',    short: 'Del'    },
+  { id: 'btn-clear',    full: 'Clear',     short: 'Clr'    },
+  { id: 'btn-rotate-custom', full: 'Rotate\u2026', short: 'Rot\u2026' },
+];
+
+function _syncToolbarLabels() {
+  const tb = document.getElementById('toolbar');
+  if (!tb) return;
+  _shortLabels.forEach(function(d) {
+    const el = document.getElementById(d.id);
+    if (el) el.textContent = d.full;
+  });
+  if (tb.getBoundingClientRect().height > 44) {
+    _shortLabels.forEach(function(d) {
+      const el = document.getElementById(d.id);
+      if (el) el.textContent = d.short;
+    });
+  }
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(_syncToolbarLabels).observe(document.getElementById('toolbar'));
+}
 
 // Initialize sliders
 setSlider('bright', 0);

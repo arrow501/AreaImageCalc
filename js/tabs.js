@@ -120,7 +120,13 @@ export function createTab(label, imgDataUrl, imgElement) {
     tab.view.ih = imgElement.naturalHeight;
   }
   S.tabs.push(tab);
-  return S.tabs.length - 1;
+  const newIdx = S.tabs.length - 1;
+  if (newIdx === 1) {
+    // Second tab opened — reveal tab bar automatically
+    $('#tab-bar').removeClass('collapsed');
+    $('#btn-toggle-tabs').html('&#9662; Tabs');
+  }
+  return newIdx;
 }
 
 export function switchToTab(idx) {
