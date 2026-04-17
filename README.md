@@ -12,8 +12,10 @@ A browser-based tool for measuring areas and perimeters on images. Load any imag
 - **Project save / load**: `.arcalc` files (JSON) save all tabs, images (WebP-compressed), shapes, and scale — reopens the full session
 - **Measurements export**: JSON file with per-tab areas, perimeters, and calibrated values
 - **Scale calibration**: click two points of known distance to convert pixels to real-world units (mm, cm, m, in, ft, yd)
-- **Drawing tools**: Polygon lasso and freehand tracing
-- **Edit mode**: drag control points to reshape existing polygons or freehand traces
+- **Drawing tools**: Polygon lasso, freehand tracing, and open-path Distance measurement
+- **Edit mode**: drag control points to reshape existing polygons, freehand traces, or distance paths
+- **Label / rename**: click any shape to rename it inline
+- **Hide / show shapes**: toggle visibility per shape; a "show all" notice appears when any are hidden
 - **Image rotation**: ↺ / ↻ 90° buttons and a custom angle popup — shapes and scale line rotate with the image
 - **Perspective correction**: drag four corner handles to de-skew an image with a live CSS preview
 - **Square calibration**: click the four corners of any object known to be a real-world square — corrects perspective and sets scale in one step
@@ -28,20 +30,23 @@ A browser-based tool for measuring areas and perimeters on images. Load any imag
 
 1. Open `index.html` in a modern browser (or visit the live demo)
 2. Drop an image / PDF, or click **Open**
-3. *(Optional)* Click **Scale** and mark a known distance to enable real-world units
-4. Draw shapes with **Polygon** or **Freehand**
+3. *(Optional)* Click **Scale** `S` and mark a known distance to enable real-world units
+4. Draw shapes with **Polygon** `P`, **Freehand** `F`, or measure a path with **Distance** `D`
 5. View per-shape and total measurements in the Shapes panel
-6. Click **Save** to export an `.arcalc` project file, or **Export** for a measurements JSON
+6. Rename shapes with **Label** `L`; hide individual shapes with the eye button or `H`
+7. Click **Save** to export an `.arcalc` project file, or **Export** for a measurements JSON
 
 ## Tools
 
 | Tool | Shortcut | Description |
 |------|----------|-------------|
-| Scale | `1` | Click two points of a known distance to calibrate units |
-| Polygon | `2` | Click to place vertices; click first point or double-click to close |
-| Freehand | `3` | Click and drag to trace; release to finish |
-| Edit | `4` | Drag control points to reshape existing shapes |
-| Perspective | `5` | Drag four corner handles to de-skew the image |
+| Scale | `S` | Click two points of a known distance to calibrate units |
+| Polygon | `P` | Click to place vertices; click first point or double-click to close |
+| Freehand | `F` | Click and drag to trace; release to finish |
+| Distance | `D` | Click points along a path; double-click or Enter to finish — reports length only |
+| Edit | `E` | Drag control points to reshape existing shapes |
+| Label | `L` | Click any shape to rename it |
+| Perspective | `W` | Drag four corner handles to de-skew the image |
 | Square Cal | — | In the Perspective panel → **Square Cal** tab; click 4 corners of a known square |
 | ↺ 90° | — | Rotate image 90° counter-clockwise |
 | ↻ 90° | — | Rotate image 90° clockwise |
@@ -51,11 +56,14 @@ A browser-based tool for measuring areas and perimeters on images. Load any imag
 
 | Key | Action |
 |-----|--------|
-| `1` – `5` | Select tool |
+| `S` / `P` / `F` / `D` / `E` / `L` | Activate tool (toggle off if already active) |
+| `W` | Enter / exit Perspective mode |
+| `H` | Hide / show selected shape |
+| `1`–`6` | Numeric aliases for Scale / Polygon / Freehand / Distance / Edit / Perspective |
 | `Space` + drag | Pan |
 | `+` / `-` | Zoom in / out |
 | `Ctrl+0` | Fit image to view |
-| `Enter` | Apply perspective correction or square calibration |
+| `Enter` | Finish Distance path · Apply perspective / square calibration |
 | `Escape` | Cancel current tool / exit perspective / deselect shape |
 | `Delete` / `Backspace` | Delete selected shape |
 
@@ -90,7 +98,7 @@ Supported units: `mm` `cm` `m` `in` `ft` `yd`
 
 A faster alternative that corrects perspective *and* sets scale in one step:
 
-1. Enter Perspective mode (button or `5`) → switch to the **Square Cal** tab
+1. Enter Perspective mode (button or `W`) → switch to the **Square Cal** tab
 2. Click the four corners of any object you know is a real-world square (any order; drag corners to fine-tune)
 3. Enter the side length and click **Apply**
 
@@ -98,7 +106,7 @@ The image is de-skewed and the scale is set automatically.
 
 ## Perspective Correction (Manual)
 
-1. Click **Perspective** (or press `5`)
+1. Click **Perspective** (or press `W`)
 2. Drag the four corner handles to match the image distortion — a reference grid helps judge alignment
 3. A live CSS preview shows the correction before committing
 4. Press **Apply** (or `Enter`) to re-raster; all shapes and the scale line transform automatically
