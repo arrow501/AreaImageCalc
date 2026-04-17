@@ -43,7 +43,7 @@
       border-bottom: 1px solid #333;
       min-height: 40px;
       flex-shrink: 0;
-      overflow-x: auto;
+      flex-wrap: wrap;
     }
     .tb-btn {
       background: none;
@@ -58,10 +58,12 @@
       gap: 4px;
       white-space: nowrap;
       line-height: 1.4;
+      flex-shrink: 0;
     }
     .tb-btn:hover { background: #333; color: #fff; }
     .tb-btn.active { background: #FF6B35; color: #fff; border-color: #e55a20; }
     .tb-btn.disabled { opacity: 0.35; pointer-events: none; }
+    .tb-icon { font-size: 17px; padding: 2px 8px; line-height: 1; }
     .tb-btn.storage-warn { box-shadow: inset 0 -2px 0 #e6a817; }
     .tb-btn.storage-warn::after { content: ' ⚠'; font-size: 0.85em; color: #e6a817; }
     .tb-btn.storage-full { box-shadow: inset 0 -2px 0 #e84040; }
@@ -74,17 +76,17 @@
     .storage-modal button.btn-primary { background: #FF6B35; border-color: #e55a20; color: #fff; font-weight: 600; }
     .tb-sep { width: 1px; height: 20px; background: #444; margin: 0 4px; flex-shrink: 0; }
     .tb-info {
-      margin-left: auto;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: #888;
       display: flex;
       gap: 12px;
       flex-shrink: 0;
+      margin-left: 8px;
     }
 
     /* ========== SLIDERS (Brightness/Contrast) ========== */
-    .tb-sliders { display: flex; gap: 2px; margin-left: auto; align-items: stretch; height: 28px; }
+    .tb-sliders { display: flex; gap: 2px; margin-left: auto; align-items: stretch; height: 28px; flex-shrink: 0; }
     .sl-group {
       display: flex;
       align-items: center;
@@ -151,6 +153,23 @@
     .sl-val::-webkit-outer-spin-button { -webkit-appearance: none; }
     .sl-val:focus { outline: none; border-color: #FF6B35; cursor: text; background: #1a1a1a; }
 
+    /* ========== PANEL REVEAL STRIP ========== */
+    #panel-reveal {
+      display: flex;
+      width: 0;
+      overflow: hidden;
+      background: #252525;
+      border-left: 1px solid #333;
+      flex-shrink: 0;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-size: 11px;
+      transition: background 0.1s, color 0.1s, width 0.15s ease;
+    }
+    #panel-reveal:hover { background: #2e2e2e; color: #bbb; }
+
     /* ========== SHAPES PANEL ========== */
     #shapes-panel {
       width: 220px;
@@ -162,6 +181,29 @@
       transition: width 0.15s;
     }
     #shapes-panel.collapsed { width: 0; overflow: hidden; border: none; }
+
+    /* ========== HIDDEN SHAPES NOTICE ========== */
+    #hidden-notice {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      background: #1e1e1e;
+      border-bottom: 1px solid #333;
+      font-size: 10px;
+      color: #888;
+      gap: 6px;
+    }
+    #btn-showall {
+      background: none;
+      border: none;
+      color: #4A9EFF;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
+      white-space: nowrap;
+    }
+    #btn-showall:hover { color: #7ab8ff; text-decoration: underline; }
     #shapes-header {
       padding: 8px 10px;
       font-weight: 600;
@@ -205,6 +247,25 @@
       color: #666;
       font-size: 10px;
     }
+    .shape-name {
+      font-size: 10px;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 1px;
+    }
+    .shape-eye {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .shape-eye:hover { color: #ccc; }
     .shape-del {
       background: none;
       border: none;
@@ -215,6 +276,7 @@
       line-height: 1;
     }
     .shape-del:hover { color: #ff4444; }
+    .shape-item.shape-hidden { opacity: 0.4; }
 
     /* ========== STATUS BAR ========== */
     #statusbar {
@@ -271,6 +333,42 @@
       margin-left: 4px;
     }
     #scale-popup button:hover { background: #e55a20; }
+
+    /* ========== LABEL POPUP ========== */
+    #label-popup {
+      position: absolute;
+      background: #2a2a2a;
+      border: 1px solid #FF6B35;
+      border-radius: 4px;
+      padding: 10px;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      white-space: nowrap;
+    }
+    #label-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #label-popup input[type=text] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px 8px;
+      width: 160px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    #label-popup input:focus { outline: none; border-color: #FF6B35; }
+    #label-popup button {
+      background: #FF6B35;
+      color: #fff;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    #label-popup button:hover { background: #e55a20; }
 
     /* ========== DROPZONE ========== */
     #dropzone {
@@ -415,9 +513,9 @@
       overflow-x: auto;
       overflow-y: hidden;
       flex-shrink: 0;
-      min-height: 28px;
-      padding: 0 4px;
-      max-height: 60px;
+      min-height: 32px;
+      padding: 0 4px 4px;
+      max-height: 64px;
       transition: max-height 0.15s ease, min-height 0.15s ease, padding 0.15s ease;
     }
     #tab-bar.collapsed { max-height: 0; min-height: 0; padding: 0; border-bottom-width: 0; }
@@ -567,26 +665,27 @@
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
     <button class="tb-btn" id="btn-new" title="New project — clears all tabs">New</button>
-    <button class="tb-btn" id="btn-open" title="Open image, PDF, or project [Ctrl+O]">Open</button>
-    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc">Save</button>
+    <button class="tb-btn" id="btn-open" title="Open image, PDF, or .arcalc project">Open</button>
+    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc file">Save</button>
     <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Set scale [1]">Scale</button>
-    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon lasso [2]">Polygon</button>
-    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand trace [3]">Freehand</button>
-    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points [4]">Edit</button>
+    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]">Scale</button>
+    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]">Polygon</button>
+    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]">Freehand</button>
+    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]">Distance</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-delete" title="Delete selected [Del]">Delete</button>
-    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear All</button>
+    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points — drag to move [E]">Edit</button>
+    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]">Label</button>
+    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]">Delete</button>
+    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634; 90°</button>
-    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635; 90°</button>
+    <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]">Fit</button>
     <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
+    <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635;</button>
+    <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634;</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Perspective</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
+    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9656; Tabs</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -615,7 +714,7 @@
   </div>
 
   <!-- ========== TAB BAR ========== -->
-  <div id="tab-bar"></div>
+  <div id="tab-bar" class="collapsed"></div>
 
   <!-- ========== MAIN CONTENT ========== -->
   <div id="main">
@@ -655,6 +754,12 @@
         </div>
       </div>
 
+      <div id="label-popup">
+        <label>Shape name:</label>
+        <input type="text" id="label-value" placeholder="Name...">
+        <button id="label-confirm">Set</button>
+      </div>
+
       <div id="persp-bar">
         <div class="persp-tabs">
           <button class="persp-tab active" data-persp-mode="manual">Manual</button>
@@ -689,11 +794,18 @@
       </div>
     </div>
 
+    <!-- ========== PANEL REVEAL STRIP ========== -->
+    <div id="panel-reveal" title="Show shapes panel">&#187;</div>
+
     <!-- ========== SHAPES PANEL ========== -->
     <div id="shapes-panel">
       <div id="shapes-header">
         <span>Shapes</span>
-        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&raquo;</button>
+        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&laquo;</button>
+      </div>
+      <div id="hidden-notice">
+        <span id="hidden-count-label"></span>
+        <button id="btn-showall">show all</button>
       </div>
       <div id="shapes-list"></div>
       <div id="shapes-total"></div>

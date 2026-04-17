@@ -1,5 +1,5 @@
 import { S, worker, imgWorker } from './state.js';
-import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, distSeg, pip } from './geometry.js';
+import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
 import { scheduleSave } from './storage.js';
 import { createTab, switchToTab, renderTabBar } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
@@ -249,7 +249,7 @@ export function confirmScale() {
   updateScaleDisp();
 
   for (let i = 0; i < S.shapes.length; i++) {
-    if (S.shapes[i].closed) {
+    if (S.shapes[i].type !== 'segment' && S.shapes[i].closed) {
       worker.postMessage({ type: 'calcArea', id: S.shapes[i].id, points: S.shapes[i].points, tabIdx: S.currentTabIdx });
     }
   }
@@ -273,7 +273,8 @@ export function closePoly() {
     closed: true,
     area: null,
     perimeter: null,
-    color: nextColor()
+    color: nextColor(),
+    name: 'Area ' + S.shapeN
   });
 
   S.selId = id;
@@ -298,7 +299,8 @@ export function finishFH() {
     closed: true,
     area: null,
     perimeter: null,
-    color: nextColor()
+    color: nextColor(),
+    name: 'Area ' + S.shapeN
   });
 
   S.selId = id;
@@ -310,6 +312,82 @@ export function finishFH() {
   updatePanel();
   setTool('idle');
   scheduleSave();
+}
+
+export function closeSegment() {
+  if (S.polyPts.length < 2) return;
+
+  const id = 's' + (++S.shapeN);
+  const pts = S.polyPts.slice();
+
+  S.shapes.push({
+    id: id,
+    type: 'segment',
+    points: pts,
+    closed: false,
+    length: segmentLength(pts),
+    area: null,
+    perimeter: null,
+    color: nextColor(),
+    name: 'Distance ' + S.shapeN
+  });
+
+  S.selId = id;
+  S.polyPts = [];
+  S.overlayDirty = true;
+  updatePanel();
+  setTool('idle');
+  scheduleSave();
+}
+
+export function renameShape(id, newName) {
+  const sh = findShape(id);
+  if (!sh) return;
+  sh.name = newName.trim() || sh.name;
+  S.overlayDirty = true;
+  updatePanel();
+  scheduleSave();
+}
+
+export function hideShape(id) {
+  const sh = findShape(id);
+  if (!sh) return;
+  sh.hidden = !sh.hidden;
+  if (sh.hidden && S.selId === id) S.selId = null;
+  S.overlayDirty = true;
+  updatePanel();
+  scheduleSave();
+}
+
+export function showAllShapes() {
+  for (let i = 0; i < S.shapes.length; i++) {
+    S.shapes[i].hidden = false;
+  }
+  S.overlayDirty = true;
+  updatePanel();
+  status('All shapes visible');
+  scheduleSave();
+}
+
+export function showLabelPopup(shapeId) {
+  const sh = findShape(shapeId);
+  if (!sh) return;
+  S.labelShapeId = shapeId;
+  const sp = i2s(
+    sh.points.reduce(function(s, p) { return s + p.x; }, 0) / sh.points.length,
+    sh.points.reduce(function(s, p) { return s + p.y; }, 0) / sh.points.length
+  );
+  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
+  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
+  $('#label-popup').css({ left: l, top: t }).show();
+  $('#label-value').val(sh.name || '').focus().select();
+}
+
+export function confirmLabel() {
+  const val = $('#label-value').val().trim();
+  if (S.labelShapeId && val) renameShape(S.labelShapeId, val);
+  S.labelShapeId = null;
+  $('#label-popup').hide();
 }
 
 export function delShape(id) {
@@ -326,8 +404,10 @@ export function selectAt(ip) {
   let found = null;
 
   for (let i = S.shapes.length - 1; i >= 0; i--) {
-    if (S.shapes[i].closed && pip(ip, S.shapes[i].points)) {
-      found = S.shapes[i].id;
+    const sh = S.shapes[i];
+    if (sh.hidden) continue;
+    if (sh.closed && pip(ip, sh.points)) {
+      found = sh.id;
       break;
     }
   }
@@ -338,11 +418,14 @@ export function selectAt(ip) {
 
     for (let i = 0; i < S.shapes.length; i++) {
       const sh = S.shapes[i];
-      if (!sh.closed) continue;
+      if (sh.hidden) continue;
 
-      for (let j = 0; j < sh.points.length; j++) {
-        const k = (j + 1) % sh.points.length;
-        const d = distSeg(ip, sh.points[j], sh.points[k]);
+      const pts = sh.points;
+      const edgeCount = sh.closed ? pts.length : pts.length - 1;
+
+      for (let j = 0; j < edgeCount; j++) {
+        const k = sh.closed ? (j + 1) % pts.length : j + 1;
+        const d = distSeg(ip, pts[j], pts[k]);
         if (d < best) {
           best = d;
           found = sh.id;
@@ -359,8 +442,12 @@ export function selectAt(ip) {
 
   if (found) {
     const sh = findShape(found);
-    if (sh && sh.area != null) {
-      status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
+    if (sh) {
+      if (sh.type === 'segment') {
+        status('Length: ' + fmtLen(sh.length));
+      } else if (sh.area != null) {
+        status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
+      }
     }
   } else {
     status('Select a tool or click a shape');
@@ -406,7 +493,9 @@ export function rotateImage(angleDeg) {
   for (let si = 0; si < S.shapes.length; si++) {
     const shape = S.shapes[si];
     shape.points = shape.points.map(transformPt);
-    if (shape.closed) {
+    if (shape.type === 'segment') {
+      shape.length = segmentLength(shape.points);
+    } else if (shape.closed) {
       worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
     }
   }

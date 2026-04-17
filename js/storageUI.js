@@ -36,6 +36,7 @@ function showHardLimitDialog() {
 
 // storage.js fires this event after every save attempt
 $(document).on('storage:update', function(e, bytes) {
+  S.storageFull = bytes >= STORAGE_HARD_LIMIT;
   updateBadge(bytes);
   if (bytes >= STORAGE_HARD_LIMIT) showHardLimitDialog();
 });

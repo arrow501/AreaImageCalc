@@ -93,7 +93,11 @@ export const S = {
   tabN: 0,           // tab ID counter (monotonically increasing)
 
   // Storage UI state
-  hardLimitDialogShown: false
+  hardLimitDialogShown: false,
+  storageFull: false,
+
+  // Label tool state
+  labelShapeId: null
 };
 
 // DOM references (module scripts are deferred, so DOM exists)

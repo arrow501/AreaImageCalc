@@ -120,7 +120,13 @@ export function createTab(label, imgDataUrl, imgElement) {
     tab.view.ih = imgElement.naturalHeight;
   }
   S.tabs.push(tab);
-  return S.tabs.length - 1;
+  const newIdx = S.tabs.length - 1;
+  if (newIdx === 1) {
+    // Second tab opened — reveal tab bar automatically
+    $('#tab-bar').removeClass('collapsed');
+    $('#btn-toggle-tabs').html('&#9662; Tabs');
+  }
+  return newIdx;
 }
 
 export function switchToTab(idx) {
@@ -244,7 +250,7 @@ export function serializeTab(tab) {
     imgDataUrl: tab.imgWebpUrl || tab.imgDataUrl,
     view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
     shapes: tab.shapes.map(function(s) {
-      return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter };
+      return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter, length: s.length, name: s.name, hidden: s.hidden };
     }),
     colorIdx: tab.colorIdx,
     shapeN: tab.shapeN,
