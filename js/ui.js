@@ -3,6 +3,7 @@
 
 import { S, iCvs } from './state.js';
 import { fmtArea, fmtPerim, fmtLen } from './geometry.js';
+import { EVT, emit } from './events.js';
 
 // ---- Tool State ----
 
@@ -99,7 +100,7 @@ export function fitView() {
 
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
-  if (S.perspActive) $(document).trigger('view:change');
+  if (S.perspActive) emit(EVT.VIEW_CHANGE);
 }
 
 export function updateZoomDisp() {

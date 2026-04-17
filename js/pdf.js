@@ -1,9 +1,10 @@
 import { S, imgWorker } from './state.js';
 import { createTab, switchToTab, renderTabBar } from './tabs.js';
 import { fitView, updateScaleDisp, updateFilters, enableTools, updatePanel, status } from './ui.js';
+import { EVT, on } from './events.js';
 
 // Lazy PDF page render triggered by tabs.js when switching to an unrendered PDF tab
-$(document).on('tab:renderPdf', function(e, idx) { renderPdfTabPage(idx); });
+on(EVT.TAB_RENDER_PDF, function(e, idx) { renderPdfTabPage(idx); });
 
 const PDFJS_VERSION = '3.11.174';
 const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/';

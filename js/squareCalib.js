@@ -22,11 +22,11 @@ import {
 } from './perspective.js';
 import { setTool, enableTools, status, updateScaleDisp } from './ui.js';
 import { scheduleSave } from './storage.js';
+import { EVT, on } from './events.js';
 
 // Tab-switch: cancel when switching tabs; squarecal:cancel: cancel when entering manual perspective mode
-$(document).on('tab:switch squarecal:cancel', function() {
-  if (S.tool === 'squarecal') cancelSqCalib();
-});
+on(EVT.TAB_SWITCH, function() { if (S.tool === 'squarecal') cancelSqCalib(); });
+on(EVT.SQCAL_CANCEL, function() { if (S.tool === 'squarecal') cancelSqCalib(); });
 
 // ── Mode switching (called directly by input.js) ──────────────────────────────
 

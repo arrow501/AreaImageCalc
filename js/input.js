@@ -17,6 +17,7 @@ import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspM
 import { createTab, switchToTab, closeTab } from './tabs.js';
 import { loadPdf } from './pdf.js';
 import { exportProject, importProject, exportMeasurements } from './export.js';
+import { EVT, emit } from './events.js';
 
 // ---- Coordinate Helpers ----
 
@@ -182,14 +183,14 @@ $(document).on('mousemove', function(e) {
     S.view.ox = S.panSt.ox + (e.clientX - S.panSt.x);
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) $(document).trigger('view:change');
+    if (S.perspActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    $(document).trigger('view:change');
+    emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
   }
@@ -489,7 +490,7 @@ oCvs.addEventListener('touchmove', function(e) {
     S.touchPanSt.oy = S.view.oy;
 
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) $(document).trigger('view:change');
+    if (S.perspActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
@@ -502,7 +503,7 @@ oCvs.addEventListener('touchmove', function(e) {
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    $(document).trigger('view:change');
+    emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
   }
@@ -974,7 +975,7 @@ $('#shapes-list').on('click', '.shape-del', function(e) {
 $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
-  if (S.perspActive) $(document).trigger('view:change');
+  if (S.perspActive) emit(EVT.VIEW_CHANGE);
 });
 
 // ---- Brightness / Contrast Sliders ----

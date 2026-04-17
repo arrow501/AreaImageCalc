@@ -5,6 +5,7 @@ import { createTab, switchToTab, renderTabBar } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
+import { EVT, emit } from './events.js';
 
 // Worker message handler
 worker.onmessage = function(e) {
@@ -192,7 +193,7 @@ export function zoomAt(factor, sx, sy) {
 
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
-  if (S.perspActive) $(document).trigger('view:change');
+  if (S.perspActive) emit(EVT.VIEW_CHANGE);
   setInteract();
 }
 

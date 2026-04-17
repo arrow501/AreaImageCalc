@@ -1,5 +1,6 @@
 import { S, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
 import { serializeTab, snapshotCurrentTab, createTab, switchToTab } from './tabs.js';
+import { EVT, emit } from './events.js';
 
 export function scheduleSave() {
   if (S.saveTimer) clearTimeout(S.saveTimer);
@@ -42,16 +43,16 @@ export function doSave() {
 
   if (bytes > STORAGE_HARD_LIMIT) {
     // Cannot save — shapes-only state still exceeds the hard limit (extremely unlikely)
-    $(document).trigger('storage:update', [STORAGE_HARD_LIMIT]);
+    emit(EVT.STORAGE_UPDATE, [STORAGE_HARD_LIMIT]);
     return;
   }
 
   try {
     localStorage.setItem(SAVE_KEY, json);
-    $(document).trigger('storage:update', [bytes]);
+    emit(EVT.STORAGE_UPDATE, [bytes]);
   } catch (e) {
     console.warn('Auto-save failed:', e);
-    $(document).trigger('storage:update', [STORAGE_HARD_LIMIT]);
+    emit(EVT.STORAGE_UPDATE, [STORAGE_HARD_LIMIT]);
   }
 }
 

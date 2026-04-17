@@ -1,5 +1,6 @@
 import { S, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
 import { exportProject } from './export.js';
+import { EVT, on } from './events.js';
 
 function updateBadge(bytes) {
   $('#btn-export-project')
@@ -35,7 +36,7 @@ function showHardLimitDialog() {
 }
 
 // storage.js fires this event after every save attempt
-$(document).on('storage:update', function(e, bytes) {
+on(EVT.STORAGE_UPDATE, function(e, bytes) {
   S.storageFull = bytes >= STORAGE_HARD_LIMIT;
   updateBadge(bytes);
   if (bytes >= STORAGE_HARD_LIMIT) showHardLimitDialog();

@@ -1,5 +1,6 @@
 import { S } from './state.js';
 import { setTool, enableTools, updateFilters, syncSliders, updatePanel, updateScaleDisp, updateZoomDisp, status, fitView } from './ui.js';
+import { EVT, emit } from './events.js';
 
 export function newCurrentTab() {
   if (S.currentTabIdx < 0) return;
@@ -63,7 +64,7 @@ export function applyTabToState(idx) {
   if (!tab) return;
 
   // Notify perspective.js and squareCalib.js to cancel their active tools
-  $(document).trigger('tab:switch');
+  emit(EVT.TAB_SWITCH);
 
   S.imgDataUrl = tab.imgDataUrl;
   S.img = tab.img;
@@ -148,7 +149,7 @@ export function switchToTab(idx) {
     syncSliders();
     $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
   } else if (tab.pdfSource) {
-    $(document).trigger('tab:renderPdf', [idx]);
+    emit(EVT.TAB_RENDER_PDF, [idx]);
   } else if (tab.imgDataUrl) {
     // Parked tab — reload the image element on demand
     const ni = new Image();
