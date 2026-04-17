@@ -265,3 +265,73 @@ test('pressing "+" and "-" changes zoom display', async ({ page }) => {
 
   expect(before).not.toBe(after);
 });
+
+// ---------------------------------------------------------------------------
+// 8. Durability: backup key rescues shapes when primary storage is corrupted
+// ---------------------------------------------------------------------------
+test('corrupt primary save recovers from .bak', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page);
+  await page.locator('#btn-polygon').click();
+
+  const overlay = page.locator('#overlay-canvas');
+  const box = await overlay.boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  await page.mouse.click(cx - 30, cy + 20);
+  await page.mouse.click(cx + 30, cy + 20);
+  await page.mouse.click(cx,      cy - 25);
+  await page.mouse.dblclick(cx, cy - 25);
+
+  await expect(page.locator('#shapes-list .shape-item')).toBeVisible({ timeout: 5000 });
+
+  // scheduleSave uses a 2s debounce — wait for both primary and backup to land.
+  await expect.poll(
+    () => page.evaluate(() => {
+      const p = localStorage.getItem('areaCalcState');
+      const b = localStorage.getItem('areaCalcState.bak');
+      return p && b ? p.length + ',' + b.length : null;
+    }),
+    { timeout: 6000 }
+  ).not.toBeNull();
+
+  // Corrupt the primary save.
+  await page.evaluate(() => localStorage.setItem('areaCalcState', '{not valid json'));
+
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+
+  // Shape count from the rescued backup should be at least 1.
+  await expect(page.locator('#shapes-list .shape-item')).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#status-text')).toContainText(/[Rr]ecovered/);
+});
+
+test('visibilitychange hidden flushes pending save', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page);
+  await page.locator('#btn-polygon').click();
+
+  const overlay = page.locator('#overlay-canvas');
+  const box = await overlay.boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  await page.mouse.click(cx - 30, cy + 20);
+  await page.mouse.click(cx + 30, cy + 20);
+  await page.mouse.click(cx,      cy - 25);
+  await page.mouse.dblclick(cx, cy - 25);
+
+  await expect(page.locator('#shapes-list .shape-item')).toBeVisible({ timeout: 5000 });
+
+  // Clear localStorage to observe the fresh flush, then fake a hidden visibilitychange
+  // within the 2s scheduleSave debounce window.
+  await page.evaluate(() => {
+    localStorage.removeItem('areaCalcState');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  const saved = await page.evaluate(() => localStorage.getItem('areaCalcState'));
+  expect(saved, 'visibilitychange hidden did not trigger a flush').not.toBeNull();
+});
