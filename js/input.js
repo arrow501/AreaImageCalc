@@ -850,11 +850,16 @@ function trapFocus($modal) {
 
 // ---- Shared confirm modal (same style as storage-modal) ----
 
-function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
+// message: string (treated as text) or jQuery node (appended as-is).
+function showConfirmModal(message, confirmLabel, onConfirm) {
+  const $p = $('<p>');
+  if (typeof message === 'string') $p.text(message);
+  else $p.append(message);
+
   const $overlay = $('<div class="storage-modal-overlay" role="dialog" aria-modal="true">')
     .append(
       $('<div class="storage-modal">')
-        .append($('<p>').html(htmlMessage))
+        .append($p)
         .append(
           $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
             release();
@@ -901,7 +906,9 @@ $('#btn-new').on('click', function() {
 
   if (hasContent) {
     showConfirmModal(
-      '<strong>Start a new project?</strong><br>All tabs, images, and shapes will be cleared.',
+      $('<span>').append($('<strong>').text('Start a new project?'))
+        .append('<br>')
+        .append(document.createTextNode('All tabs, images, and shapes will be cleared.')),
       'New Project',
       doNewProject
     );
