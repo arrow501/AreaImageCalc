@@ -704,25 +704,34 @@ $(document).on('keydown', function(e) {
 
     case '?':
       if (!S.perspActive && S.tool !== 'squarecal') {
-        $('#shortcuts-modal').toggleClass('open');
+        toggleShortcutsModal();
         e.preventDefault();
       }
       break;
   }
 });
 
-$('#btn-shortcuts').on('click', function() {
-  $('#shortcuts-modal').addClass('open');
-});
+let _releaseShortcutsFocus = null;
+function toggleShortcutsModal() {
+  const $m = $('#shortcuts-modal');
+  if ($m.hasClass('open')) closeShortcutsModal();
+  else openShortcutsModal();
+}
+function openShortcutsModal() {
+  const $m = $('#shortcuts-modal').addClass('open');
+  _releaseShortcutsFocus = trapFocus($m);
+}
+function closeShortcutsModal() {
+  $('#shortcuts-modal').removeClass('open');
+  if (_releaseShortcutsFocus) { _releaseShortcutsFocus(); _releaseShortcutsFocus = null; }
+}
+
+$('#btn-shortcuts').on('click', openShortcutsModal);
 $('#shortcuts-modal').on('click', function(e) {
-  if (e.target === this || $(e.target).hasClass('sc-close')) {
-    $(this).removeClass('open');
-  }
+  if (e.target === this || $(e.target).hasClass('sc-close')) closeShortcutsModal();
 });
 $(document).on('keydown', function(e) {
-  if (e.key === 'Escape' && $('#shortcuts-modal').hasClass('open')) {
-    $('#shortcuts-modal').removeClass('open');
-  }
+  if (e.key === 'Escape' && $('#shortcuts-modal').hasClass('open')) closeShortcutsModal();
 });
 
 $(document).on('keyup', function(e) {
@@ -814,26 +823,54 @@ $('#label-value').on('keydown', function(e) {
   if (e.key === 'Escape') { S.labelShapeId = null; $('#label-popup').hide(); }
 });
 
+// ---- Focus trap: cycle Tab within a modal, restore focus on close ----
+
+const FOCUSABLE_SEL = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function trapFocus($modal) {
+  const prev = document.activeElement;
+  const $focusable = $modal.find(FOCUSABLE_SEL).filter(':visible');
+  if ($focusable.length) $focusable.first().focus();
+
+  function onKey(e) {
+    if (e.key !== 'Tab') return;
+    const items = $modal.find(FOCUSABLE_SEL).filter(':visible').toArray();
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+    else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+  }
+  $modal.on('keydown.trap', onKey);
+
+  return function release() {
+    $modal.off('keydown.trap');
+    if (prev && typeof prev.focus === 'function') prev.focus();
+  };
+}
+
 // ---- Shared confirm modal (same style as storage-modal) ----
 
 function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
-  const $overlay = $('<div class="storage-modal-overlay">')
+  const $overlay = $('<div class="storage-modal-overlay" role="dialog" aria-modal="true">')
     .append(
       $('<div class="storage-modal">')
         .append($('<p>').html(htmlMessage))
         .append(
           $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
+            release();
             $overlay.remove();
             onConfirm();
           })
         )
         .append(
           $('<button>').text('Cancel').on('click', function() {
+            release();
             $overlay.remove();
           })
         )
     )
     .appendTo('body');
+  const release = trapFocus($overlay);
 }
 
 // ---- New button (new project — clears all tabs) ----

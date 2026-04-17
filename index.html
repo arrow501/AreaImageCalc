@@ -636,6 +636,10 @@
     }
     #btn-shortcuts:hover { color: #FF6B35; border-color: #FF6B35; }
 
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+    }
+
     /* ========== ROTATE POPUP ========== */
     #rotate-popup {
       position: absolute;
