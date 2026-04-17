@@ -45,6 +45,37 @@ function drawImage() {
   ctx.restore();
 }
 
+function _drawSegment(ctx, sh, sel, inv) {
+  const pts = sh.points;
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
+  ctx.strokeStyle = sh.color;
+  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
+  ctx.stroke();
+  const hr = (sel ? 4 : 2.5) * inv;
+  for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+}
+
+function _drawClosedShape(ctx, sh, sel, inv) {
+  const pts = sh.points;
+  if (!sh.closed || pts.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
+  ctx.closePath();
+  ctx.fillStyle = sh.color + '20';
+  ctx.fill();
+  ctx.strokeStyle = sh.color;
+  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
+  ctx.stroke();
+  if (pts.length <= 80 || sel) {
+    const hr = (sel ? 4 : 2.5) * inv;
+    for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+  }
+}
+
 function drawOverlay() {
   S.overlayDirty = false;
 
@@ -97,35 +128,11 @@ function drawOverlay() {
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
     if (sh.hidden) continue;
-
-    const pts = sh.points;
     const sel = sh.id === S.selId;
-
     if (sh.type === 'segment') {
-      if (pts.length < 2) continue;
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
-      ctx.strokeStyle = sh.color;
-      ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-      ctx.stroke();
-      const hr = (sel ? 4 : 2.5) * inv;
-      for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+      _drawSegment(ctx, sh, sel, inv);
     } else {
-      if (!sh.closed || pts.length < 3) continue;
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
-      ctx.closePath();
-      ctx.fillStyle = sh.color + '20';
-      ctx.fill();
-      ctx.strokeStyle = sh.color;
-      ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-      ctx.stroke();
-      if (pts.length <= 80 || sel) {
-        const hr = (sel ? 4 : 2.5) * inv;
-        for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
-      }
+      _drawClosedShape(ctx, sh, sel, inv);
     }
   }
 

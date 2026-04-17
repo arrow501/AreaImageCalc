@@ -369,6 +369,27 @@ export function showAllShapes() {
   scheduleSave();
 }
 
+export function showLabelPopup(shapeId) {
+  const sh = findShape(shapeId);
+  if (!sh) return;
+  S.labelShapeId = shapeId;
+  const sp = i2s(
+    sh.points.reduce(function(s, p) { return s + p.x; }, 0) / sh.points.length,
+    sh.points.reduce(function(s, p) { return s + p.y; }, 0) / sh.points.length
+  );
+  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
+  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
+  $('#label-popup').css({ left: l, top: t }).show();
+  $('#label-value').val(sh.name || '').focus().select();
+}
+
+export function confirmLabel() {
+  const val = $('#label-value').val().trim();
+  if (S.labelShapeId && val) renameShape(S.labelShapeId, val);
+  S.labelShapeId = null;
+  $('#label-popup').hide();
+}
+
 export function delShape(id) {
   S.shapes = S.shapes.filter(function(s) { return s.id !== id; });
   if (S.selId === id) S.selId = null;

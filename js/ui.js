@@ -211,3 +211,30 @@ export function syncSliders() {
   setSlider('bright', S.brightness);
   setSlider('contrast', S.contrast);
 }
+
+// ---- Dynamic Toolbar Label Shortening ----
+
+const _shortLabels = [
+  { id: 'btn-polygon',       full: 'Polygon',      short: 'Poly'      },
+  { id: 'btn-freehand',      full: 'Freehand',     short: 'Free'      },
+  { id: 'btn-segment',       full: 'Distance',     short: 'Dist'      },
+  { id: 'btn-delete',        full: 'Delete',       short: 'Del'       },
+  { id: 'btn-clear',         full: 'Clear',        short: 'Clr'       },
+  { id: 'btn-rotate-custom', full: 'Rotate\u2026', short: 'Rot\u2026' },
+  { id: 'btn-persp',         full: 'Perspective',  short: 'Persp'     },
+];
+
+export function syncToolbarLabels() {
+  const tb = document.getElementById('toolbar');
+  if (!tb) return;
+  _shortLabels.forEach(function(d) {
+    const el = document.getElementById(d.id);
+    if (el) el.textContent = d.full;
+  });
+  if (tb.getBoundingClientRect().height > 44) {
+    _shortLabels.forEach(function(d) {
+      const el = document.getElementById(d.id);
+      if (el) el.textContent = d.short;
+    });
+  }
+}

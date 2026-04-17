@@ -155,8 +155,9 @@
 
     /* ========== PANEL REVEAL STRIP ========== */
     #panel-reveal {
-      display: none;
-      width: 14px;
+      display: flex;
+      width: 0;
+      overflow: hidden;
       background: #252525;
       border-left: 1px solid #333;
       flex-shrink: 0;
@@ -165,7 +166,7 @@
       justify-content: center;
       color: #555;
       font-size: 11px;
-      transition: background 0.1s, color 0.1s;
+      transition: background 0.1s, color 0.1s, width 0.15s ease;
     }
     #panel-reveal:hover { background: #2e2e2e; color: #bbb; }
 
@@ -682,7 +683,7 @@
     <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
     <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635;</button>
     <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634;</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Persp</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Perspective</button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9656; Tabs</button>
 

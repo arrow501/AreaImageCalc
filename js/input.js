@@ -4,11 +4,12 @@ import { resize } from './render.js';
 import {
   closePoly, closeSegment, finishFH, delShape, selectAt,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
-  rotateImage, renameShape, hideShape, showAllShapes
+  rotateImage, renameShape, hideShape, showAllShapes,
+  showLabelPopup, confirmLabel
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, status, updateFilters,
-  setSlider
+  setSlider, syncToolbarLabels
 } from './ui.js';
 import { scheduleSave } from './storage.js';
 import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
@@ -166,7 +167,7 @@ $(oCvs).on('mousedown', function(e) {
         }
         if (lbest > lthr) clickedId = null;
       }
-      if (clickedId) _showLabelPopup(clickedId);
+      if (clickedId) showLabelPopup(clickedId);
       break;
     }
 
@@ -784,31 +785,10 @@ $(document).on('paste', function(e) {
 
 // ---- Label Popup ----
 
-function _showLabelPopup(shapeId) {
-  const sh = findShape(shapeId);
-  if (!sh) return;
-  S.labelShapeId = shapeId;
-  const sp = i2s(
-    sh.points.reduce(function(s, p) { return s + p.x; }, 0) / sh.points.length,
-    sh.points.reduce(function(s, p) { return s + p.y; }, 0) / sh.points.length
-  );
-  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
-  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
-  $('#label-popup').css({ left: l, top: t }).show();
-  $('#label-value').val(sh.name || '').focus().select();
-}
-
-function _confirmLabel() {
-  const val = $('#label-value').val().trim();
-  if (S.labelShapeId && val) renameShape(S.labelShapeId, val);
-  S.labelShapeId = null;
-  $('#label-popup').hide();
-}
-
-$('#label-confirm').on('click', _confirmLabel);
+$('#label-confirm').on('click', confirmLabel);
 
 $('#label-value').on('keydown', function(e) {
-  if (e.key === 'Enter') _confirmLabel();
+  if (e.key === 'Enter') confirmLabel();
   if (e.key === 'Escape') { S.labelShapeId = null; $('#label-popup').hide(); }
 });
 
@@ -921,7 +901,7 @@ function toggleShapesPanel() {
   const $p = $('#shapes-panel');
   $p.toggleClass('collapsed');
   const col = $p.hasClass('collapsed');
-  $('#panel-reveal').css('display', col ? 'flex' : 'none');
+  $('#panel-reveal').css('width', col ? '14px' : '0');
   $('#btn-toggle-panel').html(col ? '&#187;' : '&#171;');
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 }
@@ -1192,32 +1172,8 @@ window.addEventListener('beforeunload', function(e) {
 
 // ---- Dynamic toolbar label shortening ----
 
-const _shortLabels = [
-  { id: 'btn-polygon',  full: 'Polygon',   short: 'Poly'   },
-  { id: 'btn-freehand', full: 'Freehand',  short: 'Free'   },
-  { id: 'btn-segment',  full: 'Distance',  short: 'Dist'   },
-  { id: 'btn-delete',   full: 'Delete',    short: 'Del'    },
-  { id: 'btn-clear',    full: 'Clear',     short: 'Clr'    },
-  { id: 'btn-rotate-custom', full: 'Rotate\u2026', short: 'Rot\u2026' },
-];
-
-function _syncToolbarLabels() {
-  const tb = document.getElementById('toolbar');
-  if (!tb) return;
-  _shortLabels.forEach(function(d) {
-    const el = document.getElementById(d.id);
-    if (el) el.textContent = d.full;
-  });
-  if (tb.getBoundingClientRect().height > 44) {
-    _shortLabels.forEach(function(d) {
-      const el = document.getElementById(d.id);
-      if (el) el.textContent = d.short;
-    });
-  }
-}
-
 if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(_syncToolbarLabels).observe(document.getElementById('toolbar'));
+  new ResizeObserver(syncToolbarLabels).observe(document.getElementById('toolbar'));
 }
 
 // Initialize sliders
