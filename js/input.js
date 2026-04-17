@@ -1223,7 +1223,7 @@ $('#shapes-list').on('click', '.shape-eye', function(e) {
 // ---- Refresh protection ----
 
 window.addEventListener('beforeunload', function(e) {
-  if (S.storageFull) {
+  if (S.storageFull || S.saveErrored) {
     e.preventDefault();
     e.returnValue = '';
   }

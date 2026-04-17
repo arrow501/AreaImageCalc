@@ -19,3 +19,8 @@ startRenderLoop();
 window.addEventListener('beforeunload', function() {
   if (S.pendingSave) doSave();
 });
+
+// Mobile browsers may kill the page on backgrounding without firing beforeunload.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden' && S.pendingSave) doSave();
+});

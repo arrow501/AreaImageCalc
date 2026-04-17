@@ -96,6 +96,7 @@ export const S = {
   // Storage UI state
   hardLimitDialogShown: false,
   storageFull: false,
+  saveErrored: false,
 
   // Label tool state
   labelShapeId: null

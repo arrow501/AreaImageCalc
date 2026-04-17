@@ -52,11 +52,13 @@ export function doSave() {
 
   try {
     localStorage.setItem(SAVE_KEY, json);
+    S.saveErrored = false;
     emit(EVT.STORAGE_UPDATE, [bytes]);
     try {
       if (bytes < STORAGE_HARD_LIMIT) localStorage.setItem(BACKUP_KEY, json);
     } catch (_) { /* backup is best-effort; ignore quota errors on secondary */ }
   } catch (e) {
+    S.saveErrored = true;
     console.warn('Auto-save failed:', e);
     emit(EVT.STORAGE_UPDATE, [STORAGE_HARD_LIMIT]);
   }
