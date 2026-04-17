@@ -3,9 +3,15 @@ import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, findNearestPt, dot,
 import { drawPerspOverlay } from './perspective.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
 
+export function refreshCanvasRect() {
+  const r = oCvs.getBoundingClientRect();
+  S.canvasRect.left = r.left;
+  S.canvasRect.top = r.top;
+}
+
 export function resize() {
   const w = $wrap.width(), h = $wrap.height();
-  if (w === S.cw && h === S.ch) return;
+  if (w === S.cw && h === S.ch) { refreshCanvasRect(); return; }
 
   S.cw = w;
   S.ch = h;
@@ -18,6 +24,7 @@ export function resize() {
   iCvs.height = oCvs.height = h * S.dpr;
 
   S.imageDirty = S.overlayDirty = true;
+  refreshCanvasRect();
 }
 
 function drawImage() {

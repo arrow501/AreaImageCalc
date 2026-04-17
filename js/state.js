@@ -58,6 +58,7 @@ export const S = {
   dpr: window.devicePixelRatio || 1,
   cw: 0,
   ch: 0,
+  canvasRect: { left: 0, top: 0 },
 
   // Mouse position (screen and image space)
   mx: 0, my: 0,

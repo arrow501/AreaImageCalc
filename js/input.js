@@ -1,6 +1,6 @@
 import { S, worker, oCvs } from './state.js';
 import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip } from './geometry.js';
-import { resize } from './render.js';
+import { resize, refreshCanvasRect } from './render.js';
 import {
   closePoly, closeSegment, finishFH, delShape, selectAt,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
@@ -21,18 +21,16 @@ import { exportProject, importProject, exportMeasurements } from './export.js';
 // ---- Coordinate Helpers ----
 
 function canvasXY(e) {
-  const r = oCvs.getBoundingClientRect();
-  S.mx = e.clientX - r.left;
-  S.my = e.clientY - r.top;
+  S.mx = e.clientX - S.canvasRect.left;
+  S.my = e.clientY - S.canvasRect.top;
   const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
 }
 
 function touchXY(touch) {
-  const r = oCvs.getBoundingClientRect();
-  S.mx = touch.clientX - r.left;
-  S.my = touch.clientY - r.top;
+  S.mx = touch.clientX - S.canvasRect.left;
+  S.my = touch.clientY - S.canvasRect.top;
   const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
