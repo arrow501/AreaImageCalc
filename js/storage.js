@@ -1,6 +1,9 @@
 import { S, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
 import { serializeTab, snapshotCurrentTab, createTab, switchToTab } from './tabs.js';
+import { status } from './ui.js';
 import { EVT, emit } from './events.js';
+
+const BACKUP_KEY = SAVE_KEY + '.bak';
 
 export function scheduleSave() {
   if (S.saveTimer) clearTimeout(S.saveTimer);
@@ -50,60 +53,94 @@ export function doSave() {
   try {
     localStorage.setItem(SAVE_KEY, json);
     emit(EVT.STORAGE_UPDATE, [bytes]);
+    try {
+      if (bytes < STORAGE_HARD_LIMIT) localStorage.setItem(BACKUP_KEY, json);
+    } catch (_) { /* backup is best-effort; ignore quota errors on secondary */ }
   } catch (e) {
     console.warn('Auto-save failed:', e);
     emit(EVT.STORAGE_UPDATE, [STORAGE_HARD_LIMIT]);
   }
 }
 
-export function restoreState() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-
-    const state = JSON.parse(raw);
-    if (!state) return false;
-
-    // Legacy v2 single-tab format
-    if (state.v === SAVE_VER_LEGACY && state.img) {
-      const idx = createTab('Restored', state.img, null);
-      const tab = S.tabs[idx];
-      if (state.iw) tab.view.iw = state.iw;
-      if (state.ih) tab.view.ih = state.ih;
-      tab.shapes = state.shapes || [];
-      tab.colorIdx = state.colorIdx || 0;
-      tab.shapeN = state.shapeN || 0;
-      tab.scalePPU = state.scalePPU || 0;
-      tab.scaleUnit = state.scaleUnit || 'cm';
-      tab.scaleLine = state.scaleLine || null;
-      switchToTab(idx);
-      return true;
-    }
-
-    // v3 multi-tab format
-    if (state.v !== SAVE_VER || !state.tabs || !state.tabs.length) return false;
-
-    for (let i = 0; i < state.tabs.length; i++) {
-      const td = state.tabs[i];
-      const tidx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-      const t = S.tabs[tidx];
-      if (td.view) t.view = td.view;
-      t.shapes = td.shapes || [];
-      t.colorIdx = td.colorIdx || 0;
-      t.shapeN = td.shapeN || 0;
-      t.scalePPU = td.scalePPU || 0;
-      t.scaleUnit = td.scaleUnit || 'cm';
-      t.scaleLine = td.scaleLine || null;
-      t.brightness = td.brightness || 0;
-      t.contrast = td.contrast || 0;
-    }
-
-    const targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
-    switchToTab(targetIdx);
+function hydrateState(state) {
+  if (state.v === SAVE_VER_LEGACY && state.img) {
+    const idx = createTab('Restored', state.img, null);
+    const tab = S.tabs[idx];
+    if (state.iw) tab.view.iw = state.iw;
+    if (state.ih) tab.view.ih = state.ih;
+    tab.shapes = state.shapes || [];
+    tab.colorIdx = state.colorIdx || 0;
+    tab.shapeN = state.shapeN || 0;
+    tab.scalePPU = state.scalePPU || 0;
+    tab.scaleUnit = state.scaleUnit || 'cm';
+    tab.scaleLine = state.scaleLine || null;
+    switchToTab(idx);
     return true;
-  } catch (e) {
-    console.warn('Restore failed:', e);
-    localStorage.removeItem(SAVE_KEY);
-    return false;
   }
+
+  if (state.v !== SAVE_VER || !Array.isArray(state.tabs) || !state.tabs.length) return false;
+
+  for (let i = 0; i < state.tabs.length; i++) {
+    const td = state.tabs[i];
+    const tidx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+    const t = S.tabs[tidx];
+    if (td.view) t.view = td.view;
+    t.shapes = td.shapes || [];
+    t.colorIdx = td.colorIdx || 0;
+    t.shapeN = td.shapeN || 0;
+    t.scalePPU = td.scalePPU || 0;
+    t.scaleUnit = td.scaleUnit || 'cm';
+    t.scaleLine = td.scaleLine || null;
+    t.brightness = td.brightness || 0;
+    t.contrast = td.contrast || 0;
+  }
+
+  const targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
+  switchToTab(targetIdx);
+  return true;
+}
+
+function tryLoad(key) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return { ok: false, empty: true };
+  try {
+    const state = JSON.parse(raw);
+    if (!state) return { ok: false, empty: false };
+    return { ok: true, state: state };
+  } catch (e) {
+    return { ok: false, empty: false, error: e };
+  }
+}
+
+export function restoreState() {
+  const primary = tryLoad(SAVE_KEY);
+  if (primary.empty) return false;
+
+  if (primary.ok) {
+    try {
+      if (hydrateState(primary.state)) return true;
+    } catch (e) {
+      console.warn('Primary hydrate failed:', e);
+    }
+  }
+
+  // Primary is corrupt or failed to hydrate — try backup before giving up.
+  const backup = tryLoad(BACKUP_KEY);
+  if (backup.ok) {
+    try {
+      if (hydrateState(backup.state)) {
+        status('Recovered from backup — please save your project to a file');
+        return true;
+      }
+    } catch (e) {
+      console.warn('Backup hydrate failed:', e);
+    }
+  }
+
+  // Both unusable — clear primary only if it failed to parse (not if it was empty).
+  if (!primary.empty) {
+    console.warn('Restore failed; both primary and backup are unusable');
+    localStorage.removeItem(SAVE_KEY);
+  }
+  return false;
 }
