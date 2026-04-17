@@ -2,6 +2,10 @@ import { S } from './state.js';
 import { setTool, enableTools, updateFilters, syncSliders, updatePanel, updateScaleDisp, updateZoomDisp, status, fitView } from './ui.js';
 import { EVT, emit } from './events.js';
 
+export function getActiveTab() {
+  return S.currentTabIdx >= 0 ? S.tabs[S.currentTabIdx] : null;
+}
+
 export function newCurrentTab() {
   if (S.currentTabIdx < 0) return;
   const idx = S.currentTabIdx;
@@ -44,8 +48,8 @@ export function makeTabData() {
 }
 
 export function snapshotCurrentTab() {
-  if (S.currentTabIdx < 0 || !S.tabs[S.currentTabIdx]) return;
-  const tab = S.tabs[S.currentTabIdx];
+  const tab = getActiveTab();
+  if (!tab) return;
   tab.imgDataUrl = S.imgDataUrl;
   tab.img = S.img;
   tab.view = { ox: S.view.ox, oy: S.view.oy, zoom: S.view.zoom, fit: S.view.fit, iw: S.view.iw, ih: S.view.ih };

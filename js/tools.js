@@ -1,7 +1,7 @@
 import { S, worker, imgWorker } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
 import { scheduleSave } from './storage.js';
-import { createTab, switchToTab, renderTabBar } from './tabs.js';
+import { createTab, switchToTab, renderTabBar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
@@ -112,7 +112,7 @@ export function loadImg(file, skipConfirm) {
       } else {
         // Load into current (blank) tab
         _loadIntoCurrentTab(ni, dataUrl, file.name);
-        tab = S.tabs[S.currentTabIdx];
+        tab = getActiveTab();
       }
 
       // Kick off background WebP encode once we know which tab this image belongs to
@@ -142,10 +142,11 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   S.imgDataUrl = dataUrl;
 
   // Update current tab metadata
-  if (S.currentTabIdx >= 0 && S.tabs[S.currentTabIdx]) {
-    S.tabs[S.currentTabIdx].label = filename || 'Image';
-    S.tabs[S.currentTabIdx].img = ni;
-    S.tabs[S.currentTabIdx].imgDataUrl = dataUrl;
+  const curTab = getActiveTab();
+  if (curTab) {
+    curTab.label = filename || 'Image';
+    curTab.img = ni;
+    curTab.imgDataUrl = dataUrl;
   }
 
   fitView();
@@ -514,7 +515,7 @@ export function rotateImage(angleDeg) {
     // Clear stale pre-rotation WebP and re-encode the rotated image.
     // Without this, serializeTab() would save the old WebP while shapes
     // are already in post-rotation coordinates, corrupting reloaded state.
-    const tab = S.tabs[S.currentTabIdx];
+    const tab = getActiveTab();
     if (tab) {
       tab.imgWebpUrl = null;
       tab.webpPending = true;
