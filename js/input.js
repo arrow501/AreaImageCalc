@@ -701,6 +701,27 @@ $(document).on('keydown', function(e) {
         fitView();
       }
       break;
+
+    case '?':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        $('#shortcuts-modal').toggleClass('open');
+        e.preventDefault();
+      }
+      break;
+  }
+});
+
+$('#btn-shortcuts').on('click', function() {
+  $('#shortcuts-modal').addClass('open');
+});
+$('#shortcuts-modal').on('click', function(e) {
+  if (e.target === this || $(e.target).hasClass('sc-close')) {
+    $(this).removeClass('open');
+  }
+});
+$(document).on('keydown', function(e) {
+  if (e.key === 'Escape' && $('#shortcuts-modal').hasClass('open')) {
+    $('#shortcuts-modal').removeClass('open');
   }
 });
 

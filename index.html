@@ -604,6 +604,38 @@
     #pdf-modal-load { background: #FF6B35; color: #fff; border: none; padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; }
     #pdf-modal-load:hover { background: #e55a20; }
 
+    /* ========== SHORTCUTS MODAL ========== */
+    #shortcuts-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 9000; display: none; align-items: center; justify-content: center;
+    }
+    #shortcuts-modal.open { display: flex; }
+    #shortcuts-modal .sc-panel {
+      background: #2a2a2a; border: 1px solid #444; border-radius: 4px;
+      padding: 16px 20px; min-width: 300px; max-width: 420px; color: #e0e0e0;
+      font-size: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+    }
+    #shortcuts-modal h3 { margin: 0 0 10px; font-size: 13px; color: #FF6B35; }
+    #shortcuts-modal table { width: 100%; border-collapse: collapse; }
+    #shortcuts-modal td { padding: 3px 6px; }
+    #shortcuts-modal td:first-child { color: #999; width: 40%; }
+    #shortcuts-modal td:last-child { text-align: right; }
+    #shortcuts-modal kbd {
+      background: #1a1a1a; border: 1px solid #444; border-radius: 3px;
+      padding: 1px 6px; font-size: 11px; color: #ddd;
+    }
+    #shortcuts-modal .sc-close {
+      margin-top: 12px; background: #444; color: #ccc; border: none;
+      padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px;
+    }
+    #shortcuts-modal .sc-close:hover { background: #555; }
+    #btn-shortcuts {
+      background: none; border: 1px solid #444; color: #aaa;
+      border-radius: 50%; width: 18px; height: 18px; font-size: 11px;
+      line-height: 1; padding: 0; cursor: pointer; margin-left: auto;
+    }
+    #btn-shortcuts:hover { color: #FF6B35; border-color: #FF6B35; }
+
     /* ========== ROTATE POPUP ========== */
     #rotate-popup {
       position: absolute;
@@ -664,28 +696,28 @@
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
-    <button class="tb-btn" id="btn-new" title="New project — clears all tabs">New</button>
-    <button class="tb-btn" id="btn-open" title="Open image, PDF, or .arcalc project">Open</button>
-    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc file">Save</button>
-    <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
+    <button class="tb-btn" id="btn-new" title="New project — clears all tabs" aria-label="New project — clears all tabs">New</button>
+    <button class="tb-btn" id="btn-open" title="Open image, PDF, or .arcalc project" aria-label="Open image, PDF, or .arcalc project">Open</button>
+    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc file" aria-label="Save project as .arcalc file">Save</button>
+    <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON" aria-label="Export measurements as JSON">Export</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]">Scale</button>
-    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]">Polygon</button>
-    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]">Freehand</button>
-    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]">Distance</button>
+    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]" aria-label="Scale tool (shortcut S) — click 2 known points">Scale</button>
+    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]" aria-label="Polygon tool (shortcut P) — click vertices, close to finish">Polygon</button>
+    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]" aria-label="Freehand tool (shortcut F) — drag to trace">Freehand</button>
+    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]" aria-label="Distance tool (shortcut D) — click points, finish with double-click or Enter">Distance</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points — drag to move [E]">Edit</button>
-    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]">Label</button>
-    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]">Delete</button>
-    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear</button>
+    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points — drag to move [E]" aria-label="Edit tool (shortcut E) — drag control points to move">Edit</button>
+    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]" aria-label="Label tool (shortcut L) — click a shape to rename it">Label</button>
+    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]" aria-label="Delete selected shape (Delete key)">Delete</button>
+    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes" aria-label="Remove all shapes">Clear</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]">Fit</button>
-    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
-    <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635;</button>
-    <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634;</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]">Perspective</button>
+    <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]" aria-label="Fit image to view (Ctrl+0)">Fit</button>
+    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle" aria-label="Rotate by custom angle">Rotate&hellip;</button>
+    <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise" aria-label="Rotate 90 degrees clockwise">&#8635;</button>
+    <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)">Perspective</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9656; Tabs</button>
+    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar" aria-label="Show or hide tab bar">&#9656; Tabs</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -815,10 +847,35 @@
   <!-- ========== STATUS BAR ========== -->
   <div id="statusbar" role="status" aria-live="polite" aria-atomic="true">
     <span id="status-text">Drop an image, click Open, or paste to start</span>
+    <button id="btn-shortcuts" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
   </div>
 </div>
 
 <input type="file" id="file-input" accept="image/*,.pdf,.arcalc" multiple style="display:none">
+
+<div id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="sc-title">
+  <div class="sc-panel">
+    <h3 id="sc-title">Keyboard Shortcuts</h3>
+    <table>
+      <tr><td>Scale</td><td><kbd>S</kbd> / <kbd>1</kbd></td></tr>
+      <tr><td>Polygon</td><td><kbd>P</kbd> / <kbd>2</kbd></td></tr>
+      <tr><td>Freehand</td><td><kbd>F</kbd> / <kbd>3</kbd></td></tr>
+      <tr><td>Distance</td><td><kbd>D</kbd> / <kbd>4</kbd></td></tr>
+      <tr><td>Edit points</td><td><kbd>E</kbd> / <kbd>5</kbd></td></tr>
+      <tr><td>Label shape</td><td><kbd>L</kbd></td></tr>
+      <tr><td>Perspective</td><td><kbd>W</kbd> / <kbd>6</kbd></td></tr>
+      <tr><td>Hide/show shape</td><td><kbd>H</kbd></td></tr>
+      <tr><td>Delete shape</td><td><kbd>Del</kbd></td></tr>
+      <tr><td>Cancel / clear selection</td><td><kbd>Esc</kbd></td></tr>
+      <tr><td>Finish segment / apply</td><td><kbd>Enter</kbd></td></tr>
+      <tr><td>Pan image</td><td><kbd>Space</kbd> + drag</td></tr>
+      <tr><td>Zoom in / out</td><td><kbd>+</kbd> / <kbd>-</kbd></td></tr>
+      <tr><td>Fit to view</td><td><kbd>Ctrl</kbd> + <kbd>0</kbd></td></tr>
+      <tr><td>Show this help</td><td><kbd>?</kbd></td></tr>
+    </table>
+    <button class="sc-close">Close</button>
+  </div>
+</div>
 
 <div id="pdf-modal">
   <div style="margin-bottom:10px">PDF loaded &mdash; <span id="pdf-page-count"></span></div>
