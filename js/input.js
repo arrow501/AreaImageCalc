@@ -1,4 +1,4 @@
-import { S, worker, oCvs } from './state.js';
+import { S, worker, iCvs, oCvs } from './state.js';
 import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip } from './geometry.js';
 import { resize, refreshCanvasRect } from './render.js';
 import {
@@ -207,7 +207,9 @@ $(document).on('mousemove', function(e) {
     if (delta < -Math.PI) delta += 2 * Math.PI;
     S.rotDrag.curAngle = delta * 180 / Math.PI;
     $('#rotate-angle-input').val(S.rotDrag.curAngle.toFixed(1));
-    S.imageDirty = S.overlayDirty = true;
+    iCvs.style.transformOrigin = S.rotDrag.pivotX + 'px ' + S.rotDrag.pivotY + 'px';
+    iCvs.style.transform = 'rotate(' + S.rotDrag.curAngle + 'deg)';
+    S.overlayDirty = true;
     return;
   }
 
@@ -285,7 +287,8 @@ $(document).on('mouseup', function(e) {
     S.rotDrag.dragging = false;
     const angle = S.rotDrag.curAngle;
     S.rotDrag.curAngle = 0;
-    S.imageDirty = false;
+    iCvs.style.transform = '';
+    iCvs.style.transformOrigin = '';
     S.overlayDirty = true;
     oCvs.style.cursor = 'crosshair';
     if (angle !== 0) {
@@ -1229,6 +1232,8 @@ $('#btn-rotate-custom').on('click', function() {
 function applyCustomRotate() {
   const val = parseFloat($('#rotate-angle-input').val());
   if (isNaN(val)) { status('Enter a valid angle'); return; }
+  iCvs.style.transform = '';
+  iCvs.style.transformOrigin = '';
   S.rotDrag = null;
   S.imageDirty = S.overlayDirty = true;
   $('#rotate-popup').hide();
@@ -1241,6 +1246,8 @@ $('#rotate-apply').on('click', applyCustomRotate);
 $('#rotate-angle-input').on('keydown', function(e) {
   if (e.key === 'Enter') applyCustomRotate();
   if (e.key === 'Escape') {
+    iCvs.style.transform = '';
+    iCvs.style.transformOrigin = '';
     S.rotDrag = null;
     S.imageDirty = S.overlayDirty = true;
     $('#rotate-popup').hide();
@@ -1250,6 +1257,8 @@ $('#rotate-angle-input').on('keydown', function(e) {
 });
 
 $('#rotate-cancel-btn').on('click', function() {
+  iCvs.style.transform = '';
+  iCvs.style.transformOrigin = '';
   S.rotDrag = null;
   S.imageDirty = S.overlayDirty = true;
   $('#rotate-popup').hide();

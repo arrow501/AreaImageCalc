@@ -92,15 +92,6 @@ function drawImage() {
 
   const s = S.view.zoom * S.view.fit;
 
-  if (S.rotDrag && S.rotDrag.curAngle !== 0) {
-    const rad = S.rotDrag.curAngle * Math.PI / 180;
-    const pivotX = S.view.iw / 2 * s + S.view.ox;
-    const pivotY = S.view.ih / 2 * s + S.view.oy;
-    ctx.translate(pivotX, pivotY);
-    ctx.rotate(rad);
-    ctx.translate(-pivotX, -pivotY);
-  }
-
   ctx.translate(S.view.ox, S.view.oy);
   ctx.scale(s, s);
   ctx.drawImage(S.img, 0, 0);
