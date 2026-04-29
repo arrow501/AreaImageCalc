@@ -1,4 +1,4 @@
-import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
+import { S, COLORS, $wrap, iCvs, gCvs, oCvs, iCtx, gCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, findNearestPt, dot, roundRect } from './geometry.js';
 import { drawPerspOverlay } from './perspective.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
@@ -63,11 +63,11 @@ export function resize() {
   S.ch = h;
   S.dpr = window.devicePixelRatio || 1;
 
-  iCvs.style.width = oCvs.style.width = w + 'px';
-  iCvs.style.height = oCvs.style.height = h + 'px';
+  iCvs.style.width = gCvs.style.width = oCvs.style.width = w + 'px';
+  iCvs.style.height = gCvs.style.height = oCvs.style.height = h + 'px';
 
-  iCvs.width = oCvs.width = w * S.dpr;
-  iCvs.height = oCvs.height = h * S.dpr;
+  iCvs.width = gCvs.width = oCvs.width = w * S.dpr;
+  iCvs.height = gCvs.height = oCvs.height = h * S.dpr;
 
   S.imageDirty = S.overlayDirty = true;
   refreshCanvasRect();
@@ -462,20 +462,41 @@ function drawSideLabels(ctx, boxes) {
   }
 }
 
+function drawGridCanvas() {
+  const w = S.cw * S.dpr, h = S.ch * S.dpr;
+  gCtx.clearRect(0, 0, w, h);
+  if (!S.img || (!S.perspActive && !S.rotDrag)) return;
+
+  gCtx.save();
+  gCtx.scale(S.dpr, S.dpr);
+
+  const s = S.view.zoom * S.view.fit;
+  const ox = S.view.ox, oy = S.view.oy;
+  const iw = S.view.iw * s, ih = S.view.ih * s;
+  const GL = 8;
+
+  gCtx.strokeStyle = '#ffffff';
+  gCtx.lineWidth = 0.75;
+
+  for (let i = 1; i < GL; i++) {
+    const t = i / GL;
+    gCtx.beginPath();
+    gCtx.moveTo(ox, oy + ih * t);
+    gCtx.lineTo(ox + iw, oy + ih * t);
+    gCtx.stroke();
+    gCtx.beginPath();
+    gCtx.moveTo(ox + iw * t, oy);
+    gCtx.lineTo(ox + iw * t, oy + ih);
+    gCtx.stroke();
+  }
+
+  gCtx.restore();
+}
+
 function drawRotateDragOverlay(ctx) {
   const s = S.view.zoom * S.view.fit;
   const pivotX = S.view.iw / 2 * s + S.view.ox;
   const pivotY = S.view.ih / 2 * s + S.view.oy;
-
-  // Dashed guide circle around pivot
-  const guideR = Math.max(40, Math.min(S.view.iw, S.view.ih) * s * 0.35);
-  ctx.beginPath();
-  ctx.arc(pivotX, pivotY, guideR, 0, Math.PI * 2);
-  ctx.setLineDash([6, 4]);
-  ctx.strokeStyle = 'rgba(255,107,53,0.25)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.setLineDash([]);
 
   // Crosshair at pivot
   const arm = 10;
@@ -528,6 +549,8 @@ function drawRotateDragOverlay(ctx) {
 
 function drawOverlay() {
   S.overlayDirty = false;
+
+  drawGridCanvas();
 
   const ctx = oCtx;
   const w = S.cw * S.dpr, h = S.ch * S.dpr;

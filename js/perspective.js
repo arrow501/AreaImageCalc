@@ -173,27 +173,7 @@ export function drawPerspOverlay(ctx) {
   if (!S.perspActive || !S.perspCorners) return;
   ctx.save();
 
-  const GL = 8;
   const tl = i2s(0,0), tr = i2s(S.view.iw,0), bl = i2s(0,S.view.ih), br = i2s(S.view.iw,S.view.ih);
-
-  ctx.strokeStyle = 'rgba(74,158,255,0.25)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4,4]);
-  for (let i = 1; i < GL; i++) {
-    const t = i/GL;
-    ctx.beginPath();
-    ctx.moveTo(tl.x+(bl.x-tl.x)*t, tl.y+(bl.y-tl.y)*t);
-    ctx.lineTo(tr.x+(br.x-tr.x)*t, tr.y+(br.y-tr.y)*t);
-    ctx.stroke();
-  }
-  for (let i = 1; i < GL; i++) {
-    const t = i/GL;
-    ctx.beginPath();
-    ctx.moveTo(tl.x+(tr.x-tl.x)*t, tl.y+(tr.y-tl.y)*t);
-    ctx.lineTo(bl.x+(br.x-bl.x)*t, bl.y+(br.y-bl.y)*t);
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
 
   ctx.strokeStyle = 'rgba(74,158,255,0.5)';
   ctx.lineWidth = 1;

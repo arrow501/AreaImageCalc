@@ -108,8 +108,10 @@ export const S = {
 // DOM references (module scripts are deferred, so DOM exists)
 export const $wrap = $('#canvas-wrap');
 export const iCvs = document.getElementById('image-canvas');
+export const gCvs = document.getElementById('grid-canvas');
 export const oCvs = document.getElementById('overlay-canvas');
 export const iCtx = iCvs.getContext('2d');
+export const gCtx = gCvs.getContext('2d');
 export const oCtx = oCvs.getContext('2d');
 
 // Workers

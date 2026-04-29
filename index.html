@@ -33,6 +33,7 @@
       will-change: transform;
     }
     #canvas-wrap canvas { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
+    #grid-canvas { mix-blend-mode: difference; pointer-events: none; }
 
     /* ========== TOOLBAR ========== */
     #toolbar {
@@ -758,6 +759,7 @@
   <div id="main">
     <div id="canvas-wrap">
       <canvas id="image-canvas"></canvas>
+      <canvas id="grid-canvas"></canvas>
       <canvas id="overlay-canvas"></canvas>
 
       <div id="dropzone">
