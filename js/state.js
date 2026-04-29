@@ -99,7 +99,10 @@ export const S = {
   saveErrored: false,
 
   // Label tool state
-  labelShapeId: null
+  labelShapeId: null,
+
+  // Drag-based rotation state (null = inactive)
+  rotDrag: null
 };
 
 // DOM references (module scripts are deferred, so DOM exists)

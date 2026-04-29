@@ -91,6 +91,16 @@ function drawImage() {
   ctx.imageSmoothingQuality = S.interacting ? 'low' : 'high';
 
   const s = S.view.zoom * S.view.fit;
+
+  if (S.rotDrag && S.rotDrag.curAngle !== 0) {
+    const rad = S.rotDrag.curAngle * Math.PI / 180;
+    const pivotX = S.view.iw / 2 * s + S.view.ox;
+    const pivotY = S.view.ih / 2 * s + S.view.oy;
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(rad);
+    ctx.translate(-pivotX, -pivotY);
+  }
+
   ctx.translate(S.view.ox, S.view.oy);
   ctx.scale(s, s);
   ctx.drawImage(S.img, 0, 0);
@@ -452,6 +462,70 @@ function drawSideLabels(ctx, boxes) {
   }
 }
 
+function drawRotateDragOverlay(ctx) {
+  const s = S.view.zoom * S.view.fit;
+  const pivotX = S.view.iw / 2 * s + S.view.ox;
+  const pivotY = S.view.ih / 2 * s + S.view.oy;
+
+  // Dashed guide circle around pivot
+  const guideR = Math.max(40, Math.min(S.view.iw, S.view.ih) * s * 0.35);
+  ctx.beginPath();
+  ctx.arc(pivotX, pivotY, guideR, 0, Math.PI * 2);
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = 'rgba(255,107,53,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Crosshair at pivot
+  const arm = 10;
+  ctx.beginPath();
+  ctx.moveTo(pivotX - arm, pivotY);
+  ctx.lineTo(pivotX + arm, pivotY);
+  ctx.moveTo(pivotX, pivotY - arm);
+  ctx.lineTo(pivotX, pivotY + arm);
+  ctx.strokeStyle = '#FF6B35';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Pivot dot
+  ctx.beginPath();
+  ctx.arc(pivotX, pivotY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#FF6B35';
+  ctx.fill();
+
+  if (S.rotDrag.dragging) {
+    // Line from pivot to mouse
+    ctx.beginPath();
+    ctx.moveTo(pivotX, pivotY);
+    ctx.lineTo(S.mx, S.my);
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(255,107,53,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Arc showing swept angle
+    const arcR = 30;
+    const startA = S.rotDrag.startMouseAngle;
+    const endA = startA + S.rotDrag.curAngle * Math.PI / 180;
+    ctx.beginPath();
+    ctx.arc(pivotX, pivotY, arcR, startA, endA, S.rotDrag.curAngle < 0);
+    ctx.strokeStyle = '#FF6B35';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Handle dot at mouse position
+    ctx.beginPath();
+    ctx.arc(S.mx, S.my, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#FF6B35';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
 function drawOverlay() {
   S.overlayDirty = false;
 
@@ -483,6 +557,8 @@ function drawOverlay() {
   drawSideLabels(ctx, labelBoxes);
 
   drawPerspOverlay(ctx);
+
+  if (S.rotDrag) drawRotateDragOverlay(ctx);
 
   ctx.restore();
 }

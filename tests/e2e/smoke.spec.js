@@ -307,6 +307,59 @@ test('corrupt primary save recovers from .bak', async ({ page }) => {
   await expect(page.locator('#status-text')).toContainText(/[Rr]ecovered/);
 });
 
+// ---------------------------------------------------------------------------
+// 9. Drag-based rotation
+// ---------------------------------------------------------------------------
+test('Rotate popup shows drag hint and commits rotation on drag', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page, 400, 400);
+
+  // Open rotate popup
+  await page.locator('#btn-rotate-custom').click();
+  await expect(page.locator('#rotate-popup')).toBeVisible();
+  await expect(page.locator('#rotate-popup .rotate-primary')).toContainText('Drag on canvas');
+
+  const overlay = page.locator('#overlay-canvas');
+  const box = await overlay.boundingBox();
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  // Drag from right of pivot clockwise through the top — sweeps ~90° CW
+  await page.mouse.move(cx + 80, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy - 80);
+  await page.mouse.up();
+
+  // Status should contain rotation confirmation
+  await expect(page.locator('#status-text')).toContainText(/Rotated/, { timeout: 5000 });
+});
+
+test('Rotate popup apply button commits typed angle', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page, 400, 400);
+
+  await page.locator('#btn-rotate-custom').click();
+  await expect(page.locator('#rotate-popup')).toBeVisible();
+
+  await page.locator('#rotate-angle-input').fill('30');
+  await page.locator('#rotate-apply').click();
+
+  await expect(page.locator('#rotate-popup')).toBeHidden();
+  await expect(page.locator('#status-text')).toContainText('Rotated', { timeout: 5000 });
+});
+
+test('Rotate popup cancel hides popup without rotating', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page, 400, 400);
+
+  const initialStatus = await page.locator('#status-text').textContent();
+  await page.locator('#btn-rotate-custom').click();
+  await page.locator('#rotate-cancel-btn').click();
+
+  await expect(page.locator('#rotate-popup')).toBeHidden();
+  await expect(page.locator('#status-text')).toContainText('cancelled');
+});
+
 test('visibilitychange hidden flushes pending save', async ({ page }) => {
   await page.goto('/');
   await loadTestImage(page);

@@ -656,14 +656,15 @@
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
       white-space: nowrap;
     }
-    #rotate-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #rotate-popup .rotate-primary { font-size: 11px; color: #ccc; display: block; margin-bottom: 4px; }
+    #rotate-popup .rotate-secondary { font-size: 10px; color: #777; display: block; margin-bottom: 6px; }
     #rotate-popup .rotate-row { display: flex; align-items: center; gap: 6px; }
     #rotate-popup input[type=number] {
       background: #1a1a1a;
       border: 1px solid #444;
       color: #e0e0e0;
       padding: 4px 8px;
-      width: 72px;
+      width: 80px;
       border-radius: 3px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
@@ -781,10 +782,11 @@
       </div>
 
       <div id="rotate-popup">
-        <label>Rotation angle (degrees, + = CW):</label>
+        <span class="rotate-primary">Drag on canvas to rotate around center</span>
+        <span class="rotate-secondary">or type exact angle (+ = CW) and click Apply</span>
         <div class="rotate-row">
           <button id="rotate-ccw-small" title="90° counter-clockwise">&#8634; 90°</button>
-          <input type="number" id="rotate-angle-input" step="any" placeholder="45">
+          <input type="number" id="rotate-angle-input" step="0.1" placeholder="degrees">
           <button id="rotate-cw-small" title="90° clockwise">&#8635; 90°</button>
           <button id="rotate-apply">Apply</button>
           <button id="rotate-cancel-btn">Cancel</button>

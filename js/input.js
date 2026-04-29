@@ -57,6 +57,18 @@ $(oCvs).on('mousedown', function(e) {
     return;
   }
 
+  if (S.rotDrag && e.button === 0 && S.img) {
+    const sc = S.view.zoom * S.view.fit;
+    S.rotDrag.pivotX = S.view.iw / 2 * sc + S.view.ox;
+    S.rotDrag.pivotY = S.view.ih / 2 * sc + S.view.oy;
+    S.rotDrag.startMouseAngle = Math.atan2(S.my - S.rotDrag.pivotY, S.mx - S.rotDrag.pivotX);
+    S.rotDrag.dragging = true;
+    S.rotDrag.curAngle = 0;
+    S.overlayDirty = true;
+    oCvs.style.cursor = 'grabbing';
+    return;
+  }
+
   if (e.button !== 0 || !S.img) return;
 
   if (S.perspActive) {
@@ -188,6 +200,17 @@ $(document).on('mousemove', function(e) {
     return;
   }
 
+  if (S.rotDrag && S.rotDrag.dragging) {
+    const currentAngle = Math.atan2(S.my - S.rotDrag.pivotY, S.mx - S.rotDrag.pivotX);
+    let delta = currentAngle - S.rotDrag.startMouseAngle;
+    if (delta > Math.PI) delta -= 2 * Math.PI;
+    if (delta < -Math.PI) delta += 2 * Math.PI;
+    S.rotDrag.curAngle = delta * 180 / Math.PI;
+    $('#rotate-angle-input').val(S.rotDrag.curAngle.toFixed(1));
+    S.imageDirty = S.overlayDirty = true;
+    return;
+  }
+
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
     emit(EVT.VIEW_CHANGE);
@@ -258,6 +281,20 @@ $(document).on('mousemove', function(e) {
 });
 
 $(document).on('mouseup', function(e) {
+  if (S.rotDrag && S.rotDrag.dragging) {
+    S.rotDrag.dragging = false;
+    const angle = S.rotDrag.curAngle;
+    S.rotDrag.curAngle = 0;
+    S.imageDirty = false;
+    S.overlayDirty = true;
+    oCvs.style.cursor = 'crosshair';
+    if (angle !== 0) {
+      rotateImage(angle);
+      $('#rotate-angle-input').val('');
+    }
+    return;
+  }
+
   if (S.isPan) {
     S.isPan = false;
     $('body').removeClass('cursor-grabbing');
@@ -1181,40 +1218,59 @@ $('#btn-rotate-cw').on('click', function() {
 
 $('#btn-rotate-custom').on('click', function() {
   if (!S.img) return;
+  S.rotDrag = { dragging: false, startMouseAngle: 0, curAngle: 0, pivotX: 0, pivotY: 0 };
   $('#rotate-angle-input').val('');
   $('#rotate-popup').show();
-  $('#rotate-angle-input').focus();
-  status('Enter rotation angle and press Apply');
+  status('Drag on canvas to rotate, or type exact angle and click Apply');
+  oCvs.style.cursor = 'crosshair';
+  S.overlayDirty = true;
 });
 
 function applyCustomRotate() {
   const val = parseFloat($('#rotate-angle-input').val());
   if (isNaN(val)) { status('Enter a valid angle'); return; }
-  if (val === 0) { $('#rotate-popup').hide(); return; }
+  S.rotDrag = null;
+  S.imageDirty = S.overlayDirty = true;
   $('#rotate-popup').hide();
-  rotateImage(val);
+  oCvs.style.cursor = '';
+  if (val !== 0) rotateImage(val);
 }
 
 $('#rotate-apply').on('click', applyCustomRotate);
 
 $('#rotate-angle-input').on('keydown', function(e) {
   if (e.key === 'Enter') applyCustomRotate();
-  if (e.key === 'Escape') { $('#rotate-popup').hide(); status('Rotation cancelled'); }
+  if (e.key === 'Escape') {
+    S.rotDrag = null;
+    S.imageDirty = S.overlayDirty = true;
+    $('#rotate-popup').hide();
+    oCvs.style.cursor = '';
+    status('Rotation cancelled');
+  }
 });
 
 $('#rotate-cancel-btn').on('click', function() {
+  S.rotDrag = null;
+  S.imageDirty = S.overlayDirty = true;
   $('#rotate-popup').hide();
+  oCvs.style.cursor = '';
   status('Rotation cancelled');
 });
 
 // Quick 90° buttons inside the popup
 $('#rotate-ccw-small').on('click', function() {
+  S.rotDrag = null;
+  S.overlayDirty = true;
   $('#rotate-popup').hide();
+  oCvs.style.cursor = '';
   rotateImage(-90);
 });
 
 $('#rotate-cw-small').on('click', function() {
+  S.rotDrag = null;
+  S.overlayDirty = true;
   $('#rotate-popup').hide();
+  oCvs.style.cursor = '';
   rotateImage(90);
 });
 
