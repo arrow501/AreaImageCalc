@@ -448,7 +448,7 @@ export function selectAt(ip) {
 
 // ---- Image Rotation ----
 
-export function rotateImage(angleDeg) {
+export function rotateImage(angleDeg, onDone) {
   if (!S.img || angleDeg === 0) return;
 
   const rad = angleDeg * Math.PI / 180;
@@ -498,41 +498,42 @@ export function rotateImage(angleDeg) {
     S.scaleLine.p2 = transformPt(S.scaleLine.p2);
   }
 
-  // Load updated image
-  const dataUrl = cvs.toDataURL('image/png');
-  const newImg = new Image();
-  newImg.onload = function() {
-    S.img = newImg;
+  // createImageBitmap is non-blocking (no toDataURL PNG encode on the main thread).
+  // imgDataUrl is updated asynchronously via toBlob so scheduleSave (2 s debounce)
+  // always sees the fresh value before the first write.
+  createImageBitmap(cvs).then(function(bitmap) {
+    S.img = bitmap;
     S.view.iw = new_w;
     S.view.ih = new_h;
-    S.imgDataUrl = dataUrl;
     S.FH_MIN_DIST = Math.max(1, Math.log2(new_w + new_h) - 8.5);
 
     S.imageDirty = S.overlayDirty = true;
     fitView();
     updatePanel();
 
-    // Clear stale pre-rotation WebP and re-encode the rotated image.
-    // Without this, serializeTab() would save the old WebP while shapes
-    // are already in post-rotation coordinates, corrupting reloaded state.
-    const tab = getActiveTab();
-    if (tab) {
-      tab.imgWebpUrl = null;
-      tab.webpPending = true;
-      if (typeof createImageBitmap === 'function') {
-        createImageBitmap(cvs).then(function(bitmap) {
-          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
-        }).catch(function() { tab.webpPending = false; });
-      } else {
-        tab.webpPending = false;
-      }
-    }
-
-    scheduleSave();
+    if (onDone) onDone();
 
     const absDeg = Math.abs(angleDeg % 360);
     const dir = angleDeg > 0 ? 'CW' : 'CCW';
     status('Rotated ' + absDeg + '\u00b0 ' + dir + ' (' + new_w + '\u00d7' + new_h + ')');
-  };
-  newImg.src = dataUrl;
+
+    // Update imgDataUrl and WebP asynchronously \u2014 both complete well within the
+    // 2 s scheduleSave debounce window, so the save always gets fresh data.
+    cvs.toBlob(function(blob) {
+      const reader = new FileReader();
+      reader.onload = function() { S.imgDataUrl = reader.result; };
+      reader.readAsDataURL(blob);
+
+      const tab = getActiveTab();
+      if (tab) {
+        tab.imgWebpUrl = null;
+        tab.webpPending = true;
+        createImageBitmap(blob).then(function(bmp) {
+          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bmp }, [bmp]);
+        }).catch(function() { tab.webpPending = false; });
+      }
+    }, 'image/png');
+
+    scheduleSave();
+  });
 }

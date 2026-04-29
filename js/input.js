@@ -287,13 +287,17 @@ $(document).on('mouseup', function(e) {
     S.rotDrag.dragging = false;
     const angle = S.rotDrag.curAngle;
     S.rotDrag.curAngle = 0;
-    iCvs.style.transform = '';
-    iCvs.style.transformOrigin = '';
     S.overlayDirty = true;
     oCvs.style.cursor = 'crosshair';
     if (angle !== 0) {
-      rotateImage(angle);
+      rotateImage(angle, function() {
+        iCvs.style.transform = '';
+        iCvs.style.transformOrigin = '';
+      });
       $('#rotate-angle-input').val('');
+    } else {
+      iCvs.style.transform = '';
+      iCvs.style.transformOrigin = '';
     }
     return;
   }
