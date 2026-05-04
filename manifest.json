@@ -1,0 +1,17 @@
+{
+  "name": "AreaImageCalc",
+  "short_name": "AreaImageCalc",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    { "src": "favicon.ico", "sizes": "any", "type": "image/x-icon" }
+  ],
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": { "application/json": [".arcalc"] }
+    }
+  ]
+}
