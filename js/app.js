@@ -3,6 +3,7 @@ import { resize, startRenderLoop } from './render.js';
 import { enableTools } from './ui.js';
 import { scheduleSave, doSave, restoreState } from './storage.js';
 import { createTab, switchToTab } from './tabs.js';
+import { importProject } from './export.js';
 import './input.js';
 import './storageUI.js';
 
@@ -15,6 +16,14 @@ if (!restoreState()) {
 }
 
 startRenderLoop();
+
+if ('launchQueue' in window) {
+  window.launchQueue.setConsumer(async function(launchParams) {
+    if (!launchParams.files.length) return;
+    const file = await launchParams.files[0].getFile();
+    importProject(file);
+  });
+}
 
 window.addEventListener('beforeunload', function() {
   if (S.pendingSave) doSave();

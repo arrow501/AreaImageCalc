@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="80" fill="#1a1a1a"/>
+  <!-- filled polygon -->
+  <polygon points="256,80 440,340 180,420 72,240" fill="#2a6496" opacity="0.85"/>
+  <!-- polygon outline with vertex dots -->
+  <polygon points="256,80 440,340 180,420 72,240" fill="none" stroke="#4fc3f7" stroke-width="10" stroke-linejoin="round"/>
+  <circle cx="256" cy="80"  r="10" fill="#4fc3f7"/>
+  <circle cx="440" cy="340" r="10" fill="#4fc3f7"/>
+  <circle cx="180" cy="420" r="10" fill="#4fc3f7"/>
+  <circle cx="72"  cy="240" r="10" fill="#4fc3f7"/>
+  <!-- scale bar bottom-right -->
+  <line x1="340" y1="460" x2="460" y2="460" stroke="#e0e0e0" stroke-width="6" stroke-linecap="round"/>
+  <line x1="340" y1="450" x2="340" y2="470" stroke="#e0e0e0" stroke-width="4" stroke-linecap="round"/>
+  <line x1="460" y1="450" x2="460" y2="470" stroke="#e0e0e0" stroke-width="4" stroke-linecap="round"/>
+</svg>
