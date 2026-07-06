@@ -3,6 +3,7 @@ import {
   COLORS,
   SAVE_KEY,
   SAVE_VER,
+  SAVE_VER_COMPAT,
   SAVE_VER_LEGACY,
   STORAGE_SOFT_LIMIT,
   STORAGE_HARD_LIMIT,
@@ -46,6 +47,11 @@ describe('save-format version constants', () => {
 
   test('SAVE_VER_LEGACY is strictly older than SAVE_VER', () => {
     expect(SAVE_VER_LEGACY).toBeLessThan(SAVE_VER);
+  });
+
+  test('version chain is ordered legacy < compat < current', () => {
+    expect(SAVE_VER_LEGACY).toBeLessThan(SAVE_VER_COMPAT);
+    expect(SAVE_VER_COMPAT).toBeLessThan(SAVE_VER);
   });
 });
 

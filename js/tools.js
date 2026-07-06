@@ -2,7 +2,7 @@ import { S, worker, imgWorker } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
 import { encodeCanvas } from './canvasUtil.js';
 import { scheduleSave } from './storage.js';
-import { createTab, switchToTab, renderTabBar, getActiveTab } from './tabs.js';
+import { createTab, switchToTab, renderSidebar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
@@ -169,7 +169,7 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
   enableTools(true);
   status('Image loaded (' + S.view.iw + '\u00d7' + S.view.ih + '). Pick a tool to begin.');
-  renderTabBar();
+  renderSidebar();
   scheduleSave();
 }
 

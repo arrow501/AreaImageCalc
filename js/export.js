@@ -49,7 +49,7 @@
  */
 
 import { S, SAVE_VER } from './state.js';
-import { serializeTab, snapshotCurrentTab, createTab, switchToTab } from './tabs.js';
+import { serializeTab, snapshotCurrentTab, createTab, switchToTab, hydrateTabFields } from './tabs.js';
 import { status } from './ui.js';
 
 function triggerDownload(content, filename, mime) {
@@ -94,16 +94,8 @@ export function importProject(file) {
       for (let i = 0; i < data.tabs.length; i++) {
         const td = data.tabs[i];
         const idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-        const tab = S.tabs[idx];
-        if (td.view) tab.view = td.view;
-        tab.shapes = td.shapes || [];
-        tab.colorIdx = td.colorIdx || 0;
-        tab.shapeN = td.shapeN || 0;
-        tab.scalePPU = td.scalePPU || 0;
-        tab.scaleUnit = td.scaleUnit || 'cm';
-        tab.scaleLine = td.scaleLine || null;
-        tab.brightness = td.brightness || 0;
-        tab.contrast = td.contrast || 0;
+        hydrateTabFields(S.tabs[idx], td);
+        if (td.docId != null && td.docId >= S.docN) S.docN = td.docId + 1;
       }
 
       const targetIdx = (data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length) ? data.currentTabIdx : 0;

@@ -506,69 +506,130 @@
     }
     #sq-calib-apply.disabled { opacity: 0.35; pointer-events: none; }
 
-    /* ========== TAB BAR ========== */
-    #tab-bar {
-      display: flex;
-      align-items: flex-end;
+    /* ========== DOCUMENT SIDEBAR ========== */
+    #sidebar {
+      width: 200px;
       background: #1e1e1e;
-      border-bottom: 1px solid #333;
-      overflow-x: auto;
-      overflow-y: hidden;
+      border-right: 1px solid #333;
+      display: flex;
+      flex-direction: column;
       flex-shrink: 0;
-      min-height: 32px;
-      padding: 0 4px 4px;
-      max-height: 64px;
-      transition: max-height 0.15s ease, min-height 0.15s ease, padding 0.15s ease;
+      overflow: hidden;
+      transition: width 0.15s ease;
     }
-    #tab-bar.collapsed { max-height: 0; min-height: 0; padding: 0; border-bottom-width: 0; }
-    #tab-bar::-webkit-scrollbar { height: 4px; }
-    #tab-bar::-webkit-scrollbar-track { background: #1e1e1e; }
-    #tab-bar::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
-    .tab-item {
+    #sidebar.collapsed { width: 0; border-right-width: 0; }
+    #sidebar-header {
+      padding: 8px 6px 8px 10px;
+      font-weight: 600;
+      font-size: 12px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-width: 199px;
+    }
+    #btn-new-doc {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 8px;
+      line-height: 1;
+      border-radius: 3px;
+    }
+    #btn-new-doc:hover { color: #ccc; background: #333; }
+    #doc-list { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px; min-width: 199px; }
+    #doc-list::-webkit-scrollbar { width: 6px; }
+    #doc-list::-webkit-scrollbar-track { background: #1e1e1e; }
+    #doc-list::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    .doc-item { border-radius: 3px; margin-bottom: 1px; }
+    .doc-row {
       display: flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 6px 4px 12px;
+      padding: 5px 4px 5px 6px;
       cursor: pointer;
-      border-radius: 3px 3px 0 0;
-      background: #252525;
-      color: #888;
-      white-space: nowrap;
+      border-radius: 3px;
+      color: #999;
       font-size: 11px;
-      flex-shrink: 0;
-      border: 1px solid transparent;
-      border-bottom: none;
-      margin-right: 1px;
-      max-width: 160px;
       user-select: none;
     }
-    .tab-item:hover { background: #2e2e2e; color: #bbb; }
-    .tab-item.active { background: #2a2a2a; color: #e0e0e0; border-color: #444; border-bottom: 2px solid #FF6B35; }
-    .tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    .tab-close {
+    .doc-row:hover { background: #2a2a2a; color: #ccc; }
+    .doc-item.active > .doc-row {
+      background: #2e2e2e;
+      color: #e8e8e8;
+      box-shadow: inset 2px 0 0 #FF6B35;
+    }
+    .doc-caret {
+      width: 14px;
+      text-align: center;
+      color: #666;
+      flex-shrink: 0;
+      font-size: 10px;
+    }
+    .doc-caret:not(.doc-caret-empty):hover { color: #fff; }
+    .doc-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .doc-count { color: #555; font-size: 10px; flex-shrink: 0; }
+    .doc-close {
       background: none;
       border: none;
       color: #555;
       cursor: pointer;
       font-size: 14px;
-      padding: 0 2px;
+      padding: 0 4px;
       line-height: 1;
       flex-shrink: 0;
-    }
-    .tab-close:hover { color: #ff4444; }
-    #btn-new-tab {
-      background: none;
-      border: none;
-      color: #666;
-      cursor: pointer;
-      font-size: 18px;
-      padding: 2px 10px;
-      line-height: 1;
-      align-self: center;
       border-radius: 3px;
-      flex-shrink: 0;
+      visibility: hidden;
     }
-    #btn-new-tab:hover { color: #ccc; background: #333; }
+    .doc-row:hover .doc-close, .doc-page:hover .doc-close { visibility: visible; }
+    .doc-close:hover { color: #ff4444; }
+    .doc-pages { padding: 1px 0 3px; }
+    .doc-page {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 4px 3px 26px;
+      cursor: pointer;
+      border-radius: 3px;
+      color: #888;
+      font-size: 11px;
+      user-select: none;
+    }
+    .doc-page:hover { background: #2a2a2a; color: #ccc; }
+    .doc-page.active { background: #333; color: #e8e8e8; box-shadow: inset 2px 0 0 #FF6B35; }
+
+    /* ========== PAGE NAV (status bar) ========== */
+    #page-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #888;
+    }
+    #page-nav button {
+      background: none;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 3px;
+      width: 20px;
+      height: 18px;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+    }
+    #page-nav button:hover { color: #fff; border-color: #666; }
+    #page-nav button.disabled { opacity: 0.3; pointer-events: none; }
 
     /* ========== PDF MODAL ========== */
     #pdf-modal {
@@ -581,23 +642,100 @@
       background: #2a2a2a;
       border: 1px solid #FF6B35;
       border-radius: 6px;
-      padding: 18px 20px;
-      min-width: 290px;
+      padding: 14px 16px;
+      width: min(560px, calc(100vw - 40px));
       box-shadow: 0 8px 32px rgba(0,0,0,0.7);
       font-size: 13px;
       color: #ccc;
     }
-    #pdf-modal label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    .pdf-modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    #pdf-modal-title {
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    #pdf-page-count { font-size: 11px; color: #888; flex-shrink: 0; }
+    #pdf-thumbs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 8px;
+      max-height: min(340px, 50vh);
+      overflow-y: auto;
+      padding: 2px;
+      margin-bottom: 10px;
+    }
+    #pdf-thumbs::-webkit-scrollbar { width: 6px; }
+    #pdf-thumbs::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    .pdf-thumb {
+      position: relative;
+      border: 2px solid #3a3a3a;
+      border-radius: 3px;
+      cursor: pointer;
+      background: #222;
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pdf-thumb:hover { border-color: #666; }
+    .pdf-thumb.selected { border-color: #FF6B35; }
+    .pdf-thumb.selected::after {
+      content: '\2713';
+      position: absolute;
+      top: 3px;
+      right: 4px;
+      font-size: 11px;
+      color: #fff;
+      background: #FF6B35;
+      border-radius: 2px;
+      width: 15px;
+      height: 15px;
+      line-height: 15px;
+      text-align: center;
+    }
+    .pdf-thumb-box { width: 100%; display: flex; align-items: center; justify-content: center; }
+    .pdf-thumb-box canvas { max-width: 100%; height: auto; display: block; border-radius: 1px; }
+    .pdf-thumb-num {
+      position: absolute;
+      bottom: 3px;
+      left: 4px;
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ddd;
+      background: rgba(0,0,0,0.65);
+      padding: 0 4px;
+      border-radius: 2px;
+    }
+    .pdf-modal-tools { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+    .pdf-modal-tools button {
+      background: #333;
+      color: #ccc;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .pdf-modal-tools button:hover { background: #444; color: #fff; }
     #pdf-modal input[type=text] {
       background: #1a1a1a;
       border: 1px solid #444;
       color: #e0e0e0;
-      padding: 5px 8px;
-      width: 100%;
+      padding: 4px 8px;
+      flex: 1;
+      min-width: 0;
       border-radius: 3px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      margin-bottom: 12px;
+      font-size: 11px;
     }
     #pdf-modal input:focus { outline: none; border-color: #FF6B35; }
     .pdf-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
@@ -605,6 +743,7 @@
     #pdf-modal-cancel:hover { background: #555; }
     #pdf-modal-load { background: #FF6B35; color: #fff; border: none; padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; }
     #pdf-modal-load:hover { background: #e55a20; }
+    #pdf-modal-load.disabled { opacity: 0.35; pointer-events: none; }
 
     /* ========== SHORTCUTS MODAL ========== */
     #shortcuts-modal {
@@ -723,7 +862,7 @@
     <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)">Perspective</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar" aria-label="Show or hide tab bar">&#9656; Tabs</button>
+    <button class="tb-btn" id="btn-toggle-docs" title="Show/hide document sidebar" aria-label="Show or hide document sidebar">Docs</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -751,11 +890,17 @@
     </div>
   </div>
 
-  <!-- ========== TAB BAR ========== -->
-  <div id="tab-bar" class="collapsed"></div>
-
   <!-- ========== MAIN CONTENT ========== -->
   <div id="main">
+    <!-- ========== DOCUMENT SIDEBAR ========== -->
+    <div id="sidebar" class="collapsed">
+      <div id="sidebar-header">
+        <span>Documents</span>
+        <button id="btn-new-doc" title="New document tab" aria-label="New document tab">+</button>
+      </div>
+      <div id="doc-list"></div>
+    </div>
+
     <div id="canvas-wrap">
       <canvas id="image-canvas"></canvas>
       <canvas id="overlay-canvas"></canvas>
@@ -853,6 +998,11 @@
   <!-- ========== STATUS BAR ========== -->
   <div id="statusbar" role="status" aria-live="polite" aria-atomic="true">
     <span id="status-text">Drop an image, click Open, or paste to start</span>
+    <div id="page-nav" style="display:none">
+      <button id="page-prev" title="Previous page [PgUp]" aria-label="Previous page">&#8249;</button>
+      <span id="page-nav-label"></span>
+      <button id="page-next" title="Next page [PgDn]" aria-label="Next page">&#8250;</button>
+    </div>
     <button id="btn-shortcuts" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
   </div>
 </div>
@@ -884,9 +1034,16 @@
 </div>
 
 <div id="pdf-modal">
-  <div style="margin-bottom:10px">PDF loaded &mdash; <span id="pdf-page-count"></span></div>
-  <label>Pages to load (e.g. 1-5, 1,3,5 or leave blank for all):</label>
-  <input type="text" id="pdf-page-range" placeholder="all">
+  <div class="pdf-modal-head">
+    <span id="pdf-modal-title"></span>
+    <span id="pdf-page-count"></span>
+  </div>
+  <div id="pdf-thumbs"></div>
+  <div class="pdf-modal-tools">
+    <button id="pdf-select-all">All</button>
+    <button id="pdf-select-none">None</button>
+    <input type="text" id="pdf-page-range" placeholder="or type a range: 1-5, 8, 11">
+  </div>
   <div class="pdf-modal-actions">
     <button id="pdf-modal-cancel">Cancel</button>
     <button id="pdf-modal-load">Load Pages</button>

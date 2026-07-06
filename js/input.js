@@ -15,10 +15,18 @@ import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
 import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
 import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
-import { createTab, switchToTab, closeTab } from './tabs.js';
+import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage } from './tabs.js';
 import { loadPdf } from './pdf.js';
 import { exportProject, importProject, exportMeasurements } from './export.js';
-import { EVT, emit } from './events.js';
+import { EVT, emit, on } from './events.js';
+
+// Sidebar reveal/collapse animates width; re-fit once the transition settles
+on(EVT.LAYOUT_CHANGE, function() {
+  setTimeout(function() {
+    resize();
+    if (S.img) fitView();
+  }, 170);
+});
 
 // ---- Coordinate Helpers ----
 
@@ -801,6 +809,20 @@ $(document).on('keydown', function(e) {
       if (S.img) zoomAt(1 / 1.2, S.cw / 2, S.ch / 2);
       break;
 
+    case 'PageUp':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        navPage(-1);
+        e.preventDefault();
+      }
+      break;
+
+    case 'PageDown':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        navPage(1);
+        e.preventDefault();
+      }
+      break;
+
     case '?':
       if (!S.perspActive && S.tool !== 'squarecal') {
         toggleShortcutsModal();
@@ -991,8 +1013,9 @@ function doNewProject() {
   S.tabs.length = 0;
   S.currentTabIdx = -1;
   switchToTab(createTab('Untitled', null, null));
-  $('#tab-bar').addClass('collapsed');
-  $('#btn-toggle-tabs').html('&#9656; Tabs');
+  $('#sidebar').addClass('collapsed');
+  $('#btn-toggle-docs').removeClass('active');
+  emit(EVT.LAYOUT_CHANGE);
   scheduleSave();
 }
 
@@ -1078,10 +1101,10 @@ function toggleShapesPanel() {
 $('#btn-toggle-panel').on('click', toggleShapesPanel);
 $('#panel-reveal').on('click', toggleShapesPanel);
 
-$('#btn-toggle-tabs').on('click', function() {
-  const $p = $('#tab-bar');
+$('#btn-toggle-docs').on('click', function() {
+  const $p = $('#sidebar');
   $p.toggleClass('collapsed');
-  $(this).html($p.hasClass('collapsed') ? '&#9656; Tabs' : '&#9662; Tabs');
+  $(this).toggleClass('active', !$p.hasClass('collapsed'));
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 
@@ -1237,24 +1260,42 @@ $('.sl-val').each(function() {
   });
 });
 
-// ---- Tab Bar Events ----
+// ---- Sidebar (documents) Events ----
 
-$(document).on('click', '.tab-item', function(e) {
-  if ($(e.target).hasClass('tab-close') || $(e.target).closest('.tab-close').length) return;
-  const idx = parseInt($(this).data('idx'), 10);
-  if (idx !== S.currentTabIdx) switchToTab(idx);
+$(document).on('click', '#doc-list .doc-row', function(e) {
+  if ($(e.target).closest('.doc-close').length) return;
+  if ($(e.target).hasClass('doc-caret') && $(e.target).data('doc') !== undefined) {
+    toggleDocCollapsed($(e.target).data('doc'));
+    return;
+  }
+  const idx = parseInt($(this).attr('data-idx'), 10);
+  if (!isNaN(idx) && idx !== S.currentTabIdx) switchToTab(idx);
 });
 
-$(document).on('click', '.tab-close', function(e) {
+$(document).on('click', '#doc-list .doc-page', function(e) {
+  if ($(e.target).closest('.doc-close').length) return;
+  const idx = parseInt($(this).attr('data-idx'), 10);
+  if (!isNaN(idx) && idx !== S.currentTabIdx) switchToTab(idx);
+});
+
+$(document).on('click', '#doc-list .doc-close', function(e) {
   e.stopPropagation();
-  const idx = parseInt($(this).data('idx'), 10);
-  closeTab(idx);
+  const docAttr = $(this).attr('data-doc');
+  const idxAttr = $(this).attr('data-idx');
+  if (docAttr !== undefined && docAttr !== '') {
+    closeDoc(parseInt(docAttr, 10));
+  } else if (idxAttr !== undefined && idxAttr !== '') {
+    closeTab(parseInt(idxAttr, 10));
+  }
 });
 
-$(document).on('click', '#btn-new-tab', function() {
+$(document).on('click', '#btn-new-doc', function() {
   const idx = createTab('Untitled', null, null);
   switchToTab(idx);
 });
+
+$('#page-prev').on('click', function() { navPage(-1); });
+$('#page-next').on('click', function() { navPage(1); });
 
 // ---- Export Buttons ----
 

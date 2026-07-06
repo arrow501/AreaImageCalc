@@ -1,4 +1,4 @@
-export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_COMPAT, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
 
 // Shared mutable state — every module imports S and reads/writes S.xxx
 export const S = {
@@ -91,6 +91,7 @@ export const S = {
   tabs: [],          // array of tab state objects
   currentTabIdx: -1, // index of active tab
   tabN: 0,           // tab ID counter (monotonically increasing)
+  docN: 0,           // document group ID counter (multi-page PDFs)
 
   // Storage UI state
   hardLimitDialogShown: false,
