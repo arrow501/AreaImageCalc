@@ -1,5 +1,7 @@
 import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
 import { i2s, centroid } from './geometry.js';
+import { fitScale, segmentLength } from './math.js';
+import { encodeCanvas } from './canvasUtil.js';
 import { setTool, enableTools, status, updateScaleDisp, fitView, updatePanel } from './ui.js';
 import { scheduleSave } from './storage.js';
 import { getActiveTab } from './tabs.js';
@@ -234,10 +236,30 @@ export function findPerspHandle(sx, sy) {
 
 // ========== SHARED PIXEL TRANSFORM ==========
 
+// Pixel warp runs in the shared worker so the UI stays responsive.
+let _warpReqN = 0;
+const _warpCbs = {};
+worker.addEventListener('message', function(e) {
+  const d = e.data;
+  if (d.type !== 'warpResult' || !_warpCbs[d.reqId]) return;
+  const cb = _warpCbs[d.reqId];
+  delete _warpCbs[d.reqId];
+  cb(d);
+});
+
+// Total-pixel and side-length budgets for warped output. Strong perspective
+// corrections can stretch the bounding box arbitrarily; instead of cropping
+// (data loss) or ballooning (OOM on slow machines), a uniform downscale is
+// folded into the homography so all geometry stays consistent.
+const WARP_MAX_SIDE = 8192;
+function warpPixelBudget(iw, ih) {
+  return Math.min(Math.max(iw * ih * 1.6, 8e6), 3.2e7);
+}
+
 export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
   const iw = S.view.iw, ih = S.view.ih;
+  const startTabIdx = S.currentTabIdx;
 
-  // Compute output bounding box by transforming all 4 corners through Hfwd
   const corners = [
     applyHomography(Hfwd, 0, 0),
     applyHomography(Hfwd, iw, 0),
@@ -253,121 +275,109 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
     if (corners[i].y > maxY) maxY = corners[i].y;
   }
 
-  // Clamp to reasonable bounds (max 4x original size to prevent OOM)
-  const maxDim = Math.max(iw, ih) * 4;
-  minX = Math.max(minX, -maxDim);
-  minY = Math.max(minY, -maxDim);
-  maxX = Math.min(maxX, maxDim);
-  maxY = Math.min(maxY, maxDim);
+  const k = fitScale(maxX - minX, maxY - minY, warpPixelBudget(iw, ih), WARP_MAX_SIDE);
+  let H = Hfwd;
+  if (k < 1) {
+    H = [Hfwd[0] * k, Hfwd[1] * k, Hfwd[2] * k,
+         Hfwd[3] * k, Hfwd[4] * k, Hfwd[5] * k,
+         Hfwd[6], Hfwd[7], Hfwd[8]];
+    Hinv = invertH(H);
+    if (!Hinv) { status('Failed to invert perspective transform.'); return; }
+    minX *= k; minY *= k; maxX *= k; maxY *= k;
+  }
 
   const offX = Math.floor(minX);
   const offY = Math.floor(minY);
   const outW = Math.ceil(maxX) - offX;
   const outH = Math.ceil(maxY) - offY;
 
-  // Get source pixels
   const srcCvs = document.createElement('canvas');
   srcCvs.width = iw; srcCvs.height = ih;
   const srcCtx = srcCvs.getContext('2d');
   srcCtx.drawImage(S.img, 0, 0);
   const srcData = srcCtx.getImageData(0, 0, iw, ih);
-  const srcPx = srcData.data;
 
-  // Create output
-  const tmpCvs = document.createElement('canvas');
-  tmpCvs.width = outW; tmpCvs.height = outH;
-  const tmpCtx = tmpCvs.getContext('2d');
-  const outData = tmpCtx.createImageData(outW, outH);
-  const outPx = outData.data;
+  const reqId = ++_warpReqN;
+  _warpCbs[reqId] = function(d) {
+    // Bail if the user switched tabs while the warp was computing
+    if (S.currentTabIdx !== startTabIdx) return;
 
-  // Render: for each output pixel, find source via inverse transform
-  for (let oy = 0; oy < outH; oy++) {
-    for (let ox = 0; ox < outW; ox++) {
-      const sp = applyHomography(Hinv, ox + offX, oy + offY);
-      const ssx = sp.x, ssy = sp.y;
-      const outIdx = (oy * outW + ox) * 4;
+    const tmpCvs = document.createElement('canvas');
+    tmpCvs.width = d.outW; tmpCvs.height = d.outH;
+    tmpCvs.getContext('2d').putImageData(
+      new ImageData(new Uint8ClampedArray(d.buf), d.outW, d.outH), 0, 0);
 
-      if (ssx < 0 || ssx >= iw - 1 || ssy < 0 || ssy >= ih - 1) {
-        outPx[outIdx] = outPx[outIdx + 1] = outPx[outIdx + 2] = outPx[outIdx + 3] = 0;
-        continue;
+    let oldScalePxLen = 0;
+    if (S.scaleLine && S.scalePPU > 0) {
+      oldScalePxLen = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
+    }
+
+    for (let si = 0; si < S.shapes.length; si++) {
+      const shape = S.shapes[si];
+      for (let pi = 0; pi < shape.points.length; pi++) {
+        const pt = shape.points[pi];
+        const np = applyHomography(H, pt.x, pt.y);
+        shape.points[pi] = { x: np.x - offX, y: np.y - offY };
       }
-
-      // Bilinear interpolation
-      const x0 = Math.floor(ssx), y0 = Math.floor(ssy);
-      const fx = ssx - x0, fy = ssy - y0;
-      const x1 = Math.min(x0 + 1, iw - 1), y1 = Math.min(y0 + 1, ih - 1);
-      const i00 = (y0 * iw + x0) * 4, i10 = (y0 * iw + x1) * 4;
-      const i01 = (y1 * iw + x0) * 4, i11 = (y1 * iw + x1) * 4;
-
-      for (let c = 0; c < 4; c++) {
-        outPx[outIdx + c] = Math.round(
-          srcPx[i00 + c] * (1 - fx) * (1 - fy) + srcPx[i10 + c] * fx * (1 - fy) +
-          srcPx[i01 + c] * (1 - fx) * fy + srcPx[i11 + c] * fx * fy);
-      }
-    }
-  }
-  tmpCtx.putImageData(outData, 0, 0);
-
-  // Transform shape points: new_pt = H(old_pt) - offset
-  let oldScalePxLen = 0;
-  if (S.scaleLine && S.scalePPU > 0) {
-    oldScalePxLen = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
-  }
-
-  for (let si = 0; si < S.shapes.length; si++) {
-    const shape = S.shapes[si];
-    for (let pi = 0; pi < shape.points.length; pi++) {
-      const pt = shape.points[pi];
-      const np = applyHomography(Hfwd, pt.x, pt.y);
-      shape.points[pi] = { x: np.x - offX, y: np.y - offY };
-    }
-    if (shape.closed) worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points });
-  }
-
-  if (S.scaleLine) {
-    const np1 = applyHomography(Hfwd, S.scaleLine.p1.x, S.scaleLine.p1.y);
-    const np2 = applyHomography(Hfwd, S.scaleLine.p2.x, S.scaleLine.p2.y);
-    S.scaleLine.p1 = { x: np1.x - offX, y: np1.y - offY };
-    S.scaleLine.p2 = { x: np2.x - offX, y: np2.y - offY };
-    if (S.scalePPU > 0 && oldScalePxLen > 0) {
-      const realDist = oldScalePxLen / S.scalePPU;
-      S.scalePPU = Math.hypot(np2.x - np1.x, np2.y - np1.y) / realDist;
-      updateScaleDisp();
-    }
-  }
-
-  // Load new image
-  const dataUrl = tmpCvs.toDataURL('image/png');
-  const newImg = new Image();
-  newImg.onload = function() {
-    S.img = newImg;
-    S.view.iw = outW;
-    S.view.ih = outH;
-    S.imgDataUrl = dataUrl;
-
-    S.imageDirty = S.overlayDirty = true;
-    fitView();
-    updatePanel();
-
-    // Clear stale pre-transform WebP and re-encode the corrected image.
-    // Without this, serializeTab() would save the old WebP while shapes
-    // are already in post-transform coordinates, corrupting reloaded state.
-    const tab = getActiveTab();
-    if (tab) {
-      tab.imgWebpUrl = null;
-      tab.webpPending = true;
-      if (typeof createImageBitmap === 'function') {
-        createImageBitmap(tmpCvs).then(function(bitmap) {
-          imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
-        }).catch(function() { tab.webpPending = false; });
-      } else {
-        tab.webpPending = false;
+      shape._centroid = null;
+      if (shape.type === 'segment') {
+        shape.length = segmentLength(shape.points);
+      } else if (shape.closed) {
+        worker.postMessage({ type: 'calcArea', id: shape.id, points: shape.points, tabIdx: S.currentTabIdx });
       }
     }
 
-    scheduleSave();
+    if (S.scaleLine) {
+      const np1 = applyHomography(H, S.scaleLine.p1.x, S.scaleLine.p1.y);
+      const np2 = applyHomography(H, S.scaleLine.p2.x, S.scaleLine.p2.y);
+      S.scaleLine.p1 = { x: np1.x - offX, y: np1.y - offY };
+      S.scaleLine.p2 = { x: np2.x - offX, y: np2.y - offY };
+      if (S.scalePPU > 0 && oldScalePxLen > 0) {
+        const realDist = oldScalePxLen / S.scalePPU;
+        S.scalePPU = Math.hypot(np2.x - np1.x, np2.y - np1.y) / realDist;
+        updateScaleDisp();
+      }
+    }
 
-    if (onComplete) onComplete();
+    const dataUrl = encodeCanvas(tmpCvs);
+    const newImg = new Image();
+    newImg.onload = function() {
+      S.img = newImg;
+      S.view.iw = d.outW;
+      S.view.ih = d.outH;
+      S.imgDataUrl = dataUrl;
+
+      S.imageDirty = S.overlayDirty = true;
+      fitView();
+      updatePanel();
+
+      // Clear stale pre-transform WebP and re-encode the corrected image.
+      // Without this, serializeTab() would save the old WebP while shapes
+      // are already in post-transform coordinates, corrupting reloaded state.
+      const tab = getActiveTab();
+      if (tab) {
+        tab.baseImg = newImg;
+        tab.baseRotation = 0;
+        tab.imgWebpUrl = null;
+        tab.webpPending = true;
+        if (typeof createImageBitmap === 'function') {
+          createImageBitmap(tmpCvs).then(function(bitmap) {
+            imgWorker.postMessage({ type: 'encodeWebP', id: tab.tabId, bitmap: bitmap }, [bitmap]);
+          }).catch(function() { tab.webpPending = false; });
+        } else {
+          tab.webpPending = false;
+        }
+      }
+
+      scheduleSave();
+
+      if (onComplete) onComplete();
+    };
+    newImg.src = dataUrl;
   };
-  newImg.src = dataUrl;
+
+  worker.postMessage({
+    type: 'warp', reqId: reqId, buf: srcData.data.buffer,
+    iw: iw, ih: ih, outW: outW, outH: outH, offX: offX, offY: offY, Hinv: Hinv
+  }, [srcData.data.buffer]);
 }

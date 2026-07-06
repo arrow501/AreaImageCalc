@@ -100,6 +100,8 @@ export function renderPdfTabPage(tabIdx) {
       const ni = new Image();
       ni.onload = function() {
         tab.img = ni;
+        tab.baseImg = ni;
+        tab.baseRotation = 0;
         tab.view.iw = ni.naturalWidth;
         tab.view.ih = ni.naturalHeight;
 

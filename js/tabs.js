@@ -34,6 +34,8 @@ export function makeTabData() {
     imgWebpUrl: null, // set after background WebP encode completes
     webpPending: false,
     img: null,
+    baseImg: null,    // pre-rotation original; rotations recompose from this
+    baseRotation: 0,  // cumulative rotation applied to baseImg, degrees
     view: { ox: 0, oy: 0, zoom: 1, fit: 1, iw: 0, ih: 0 },
     shapes: [],
     colorIdx: 0,
@@ -120,6 +122,7 @@ export function createTab(label, imgDataUrl, imgElement) {
   tab.label = label || 'Untitled';
   tab.imgDataUrl = imgDataUrl || null;
   tab.img = imgElement || null;
+  tab.baseImg = imgElement || null;
   if (imgElement) {
     tab.view.iw = imgElement.naturalWidth;
     tab.view.ih = imgElement.naturalHeight;
@@ -160,6 +163,8 @@ export function switchToTab(idx) {
     const capturedIdx = idx;
     ni.onload = function() {
       S.tabs[capturedIdx].img = ni;
+      S.tabs[capturedIdx].baseImg = ni;
+      S.tabs[capturedIdx].baseRotation = 0;
       S.tabs[capturedIdx].view.iw = ni.naturalWidth;
       S.tabs[capturedIdx].view.ih = ni.naturalHeight;
       if (S.currentTabIdx !== capturedIdx) return;

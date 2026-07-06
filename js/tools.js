@@ -1,5 +1,6 @@
 import { S, worker, imgWorker } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
+import { encodeCanvas } from './canvasUtil.js';
 import { scheduleSave } from './storage.js';
 import { createTab, switchToTab, renderTabBar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
@@ -147,6 +148,8 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
     curTab.label = filename || 'Image';
     curTab.img = ni;
     curTab.imgDataUrl = dataUrl;
+    curTab.baseImg = ni;
+    curTab.baseRotation = 0;
   }
 
   fitView();
@@ -448,30 +451,44 @@ export function selectAt(ip) {
 
 // ---- Image Rotation ----
 
+// Rotation always recomposes from the tab's base image at the cumulative
+// angle: repeated rotations neither accumulate resampling blur nor grow the
+// canvas beyond the true rotated bounding box of the original.
 export function rotateImage(angleDeg) {
   if (!S.img || angleDeg === 0) return;
 
-  const rad = angleDeg * Math.PI / 180;
-  const cos_t = Math.cos(rad);
-  const sin_t = Math.sin(rad);
-  const abs_cos = Math.abs(cos_t);
-  const abs_sin = Math.abs(sin_t);
+  const tab = getActiveTab();
+  if (tab && !tab.baseImg) {
+    tab.baseImg = S.img;
+    tab.baseRotation = 0;
+  }
+  const base = tab ? tab.baseImg : S.img;
+  const oldRot = tab ? (tab.baseRotation || 0) : 0;
+  const newRot = (oldRot + angleDeg) % 360;
+
+  const bw = base.naturalWidth || base.width;
+  const bh = base.naturalHeight || base.height;
+  const newRad = newRot * Math.PI / 180;
+  const new_w = Math.round(bw * Math.abs(Math.cos(newRad)) + bh * Math.abs(Math.sin(newRad)));
+  const new_h = Math.round(bw * Math.abs(Math.sin(newRad)) + bh * Math.abs(Math.cos(newRad)));
 
   const old_w = S.view.iw;
   const old_h = S.view.ih;
-  const new_w = Math.round(old_w * abs_cos + old_h * abs_sin);
-  const new_h = Math.round(old_w * abs_sin + old_h * abs_cos);
 
-  // Draw the rotated image onto a new canvas
   const cvs = document.createElement('canvas');
   cvs.width = new_w;
   cvs.height = new_h;
   const ctx = cvs.getContext('2d');
   ctx.translate(new_w / 2, new_h / 2);
-  ctx.rotate(rad);
-  ctx.drawImage(S.img, -old_w / 2, -old_h / 2);
+  ctx.rotate(newRad);
+  ctx.drawImage(base, -bw / 2, -bh / 2);
 
-  // Forward transform: old image coords → new image coords (matches canvas rendering)
+  // Geometry moves by the delta step: rotate about the old canvas centre,
+  // then re-centre on the new canvas
+  const rad = angleDeg * Math.PI / 180;
+  const cos_t = Math.cos(rad);
+  const sin_t = Math.sin(rad);
+
   function transformPt(p) {
     const dx = p.x - old_w / 2;
     const dy = p.y - old_h / 2;
@@ -485,6 +502,7 @@ export function rotateImage(angleDeg) {
   for (let si = 0; si < S.shapes.length; si++) {
     const shape = S.shapes[si];
     shape.points = shape.points.map(transformPt);
+    shape._centroid = null;
     if (shape.type === 'segment') {
       shape.length = segmentLength(shape.points);
     } else if (shape.closed) {
@@ -499,7 +517,7 @@ export function rotateImage(angleDeg) {
   }
 
   // Load updated image
-  const dataUrl = cvs.toDataURL('image/png');
+  const dataUrl = encodeCanvas(cvs);
   const newImg = new Image();
   newImg.onload = function() {
     S.img = newImg;
@@ -507,6 +525,7 @@ export function rotateImage(angleDeg) {
     S.view.ih = new_h;
     S.imgDataUrl = dataUrl;
     S.FH_MIN_DIST = Math.max(1, Math.log2(new_w + new_h) - 8.5);
+    if (tab) tab.baseRotation = newRot;
 
     S.imageDirty = S.overlayDirty = true;
     fitView();

@@ -1,5 +1,35 @@
 import { describe, test, expect } from 'vitest';
-import { distSeg, pip, centroid, segmentLength, nearestPoint } from '../../js/math.js';
+import { distSeg, pip, centroid, segmentLength, nearestPoint, fitScale } from '../../js/math.js';
+
+// ─── fitScale ───────────────────────────────────────────────────────────────
+
+describe('fitScale', () => {
+  test('returns 1 when the raster fits both budgets', () => {
+    expect(fitScale(1000, 1000, 2e6, 4096)).toBe(1);
+  });
+
+  test('scales down to meet the pixel budget', () => {
+    const k = fitScale(4000, 4000, 4e6, 100000);
+    expect(4000 * k * 4000 * k).toBeLessThanOrEqual(4e6 + 1);
+    expect(k).toBeCloseTo(0.5);
+  });
+
+  test('scales down to meet the max side', () => {
+    const k = fitScale(10000, 100, 1e9, 5000);
+    expect(10000 * k).toBeLessThanOrEqual(5000);
+    expect(k).toBeCloseTo(0.5);
+  });
+
+  test('applies the stricter of the two constraints', () => {
+    const k = fitScale(20000, 20000, 1e6, 8192);
+    expect(20000 * k * 20000 * k).toBeLessThanOrEqual(1e6 + 1);
+    expect(20000 * k).toBeLessThanOrEqual(8192);
+  });
+
+  test('never upscales', () => {
+    expect(fitScale(10, 10, 1e9, 1e6)).toBe(1);
+  });
+});
 
 // ─── distSeg ────────────────────────────────────────────────────────────────
 
