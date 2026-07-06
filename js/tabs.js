@@ -111,7 +111,8 @@ export function applyTabToState(idx) {
   S.spaceHeld = false;
   S.touchId = null;
   S.touchIsPan = false;
-  S.FH_MIN_DIST = (S.view.iw && S.view.ih) ? Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5) : 0;
+  S.dragScaleIdx = -1;
+  S.dragScaleReal = 0;
 
   S.imageDirty = S.overlayDirty = true;
 }
@@ -171,7 +172,6 @@ export function switchToTab(idx) {
       S.img = ni;
       S.view.iw = ni.naturalWidth;
       S.view.ih = ni.naturalHeight;
-      S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
       fitView();
       updateFilters();
       syncSliders();

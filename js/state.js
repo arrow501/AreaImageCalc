@@ -32,11 +32,6 @@ export const S = {
   polyPts: [],
   fhPts: [],
   isFH: false,
-  fhLastTime: 0,
-
-  // Freehand sampling thresholds (image-space px)
-  FH_MIN_DIST: 0,
-  FH_MAX_DIST: 100,
 
   // Pan state
   isPan: false,
@@ -47,6 +42,10 @@ export const S = {
   dragPt: null,
   dragShape: null,
   dragIdx: -1,
+
+  // Scale-line endpoint drag state (edit tool)
+  dragScaleIdx: -1,
+  dragScaleReal: 0,
 
   // Rendering flags
   imageDirty: true,

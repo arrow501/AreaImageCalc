@@ -6,6 +6,7 @@ import { createTab, switchToTab, renderTabBar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
+import { recordHistory, clearHistory } from './history.js';
 import { EVT, emit } from './events.js';
 
 // Routes a worker shape result to either the active tab (shown) or a background
@@ -139,7 +140,6 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   S.img = ni;
   S.view.iw = ni.naturalWidth;
   S.view.ih = ni.naturalHeight;
-  S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
   S.imgDataUrl = dataUrl;
 
   // Update current tab metadata
@@ -160,6 +160,7 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   S.shapeN = 0;
   S.scaleLine = null;
   S.scalePPU = 0;
+  clearHistory(curTab);
 
   updateScaleDisp();
   setTool('idle');
@@ -202,14 +203,29 @@ export function setInteract() {
 
 // ---- Scale Popup ----
 
-export function showScalePopup() {
+export function showScalePopup(prefillVal) {
   const mp = i2s((S.scaleP1.x + S.scaleP2.x) / 2, (S.scaleP1.y + S.scaleP2.y) / 2);
   const l = Math.min(Math.max(mp.x + 12, 10), S.cw - 250);
   const t = Math.min(Math.max(mp.y - 30, 10), S.ch - 60);
 
   $('#scale-popup').css({ left: l, top: t }).show();
-  $('#scale-value').val('').focus();
-  status('Enter real-world distance');
+  $('#scale-value').val(prefillVal != null ? prefillVal : '').focus().select();
+  status('Enter real-world distance — drag the endpoints to fine-tune');
+}
+
+// Re-open the calibration popup on an already committed scale line so both
+// the value and the endpoints can be corrected.
+export function reopenScalePopup() {
+  if (!S.scaleLine) return;
+  setTool('scale');
+  S.scaleP1 = { x: S.scaleLine.p1.x, y: S.scaleLine.p1.y };
+  S.scaleP2 = { x: S.scaleLine.p2.x, y: S.scaleLine.p2.y };
+  S.scaleState = 2;
+  const px = Math.hypot(S.scaleP2.x - S.scaleP1.x, S.scaleP2.y - S.scaleP1.y);
+  const val = S.scalePPU > 0 ? Math.round(px / S.scalePPU * 10000) / 10000 : null;
+  $('#scale-unit').val(S.scaleUnit);
+  showScalePopup(val);
+  S.overlayDirty = true;
 }
 
 export function confirmScale() {
@@ -232,6 +248,7 @@ export function confirmScale() {
     return;
   }
 
+  recordHistory();
   S.scalePPU = px / val;
   S.scaleUnit = unit;
   S.scaleLine = {
@@ -260,6 +277,7 @@ export function confirmScale() {
 export function closePoly() {
   if (S.polyPts.length < 3) return;
 
+  recordHistory();
   const id = 's' + (++S.shapeN);
   S.shapes.push({
     id: id,
@@ -278,11 +296,12 @@ export function closePoly() {
   worker.postMessage({ type: 'calcArea', id: id, points: S.shapes[S.shapes.length - 1].points, tabIdx: S.currentTabIdx });
   S.overlayDirty = true;
   updatePanel();
-  setTool('idle');
+  status('Area added — keep clicking to draw another, or press Esc to finish.');
   scheduleSave();
 }
 
 export function finishFH() {
+  recordHistory();
   const id = 's' + (++S.shapeN);
   const pts = S.fhPts.slice();
   S.fhPts = [];
@@ -305,13 +324,14 @@ export function finishFH() {
 
   S.overlayDirty = true;
   updatePanel();
-  setTool('idle');
+  status('Region added — drag to trace another, or press Esc to finish.');
   scheduleSave();
 }
 
 export function closeSegment() {
   if (S.polyPts.length < 2) return;
 
+  recordHistory();
   const id = 's' + (++S.shapeN);
   const pts = S.polyPts.slice();
 
@@ -331,14 +351,17 @@ export function closeSegment() {
   S.polyPts = [];
   S.overlayDirty = true;
   updatePanel();
-  setTool('idle');
+  status('Distance added — keep clicking to measure another, or press Esc to finish.');
   scheduleSave();
 }
 
 export function renameShape(id, newName) {
   const sh = findShape(id);
   if (!sh) return;
-  sh.name = newName.trim() || sh.name;
+  const name = newName.trim();
+  if (!name || name === sh.name) return;
+  recordHistory();
+  sh.name = name;
   S.overlayDirty = true;
   updatePanel();
   scheduleSave();
@@ -386,12 +409,14 @@ export function confirmLabel() {
 }
 
 export function delShape(id) {
+  if (!findShape(id)) return;
+  recordHistory();
   S.shapes = S.shapes.filter(function(s) { return s.id !== id; });
   if (S.selId === id) S.selId = null;
 
   S.overlayDirty = true;
   updatePanel();
-  status('Shape deleted');
+  status('Shape deleted — Ctrl+Z to undo');
   scheduleSave();
 }
 
@@ -524,8 +549,10 @@ export function rotateImage(angleDeg) {
     S.view.iw = new_w;
     S.view.ih = new_h;
     S.imgDataUrl = dataUrl;
-    S.FH_MIN_DIST = Math.max(1, Math.log2(new_w + new_h) - 8.5);
-    if (tab) tab.baseRotation = newRot;
+    if (tab) {
+      tab.baseRotation = newRot;
+      clearHistory(tab);
+    }
 
     S.imageDirty = S.overlayDirty = true;
     fitView();

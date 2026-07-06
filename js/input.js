@@ -1,16 +1,17 @@
 import { S, worker, oCvs } from './state.js';
-import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip } from './geometry.js';
+import { s2i, i2s, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip, hitHandle } from './geometry.js';
 import { resize, refreshCanvasRect } from './render.js';
 import {
   closePoly, closeSegment, finishFH, delShape, selectAt,
-  loadImg, zoomAt, setInteract, showScalePopup, confirmScale,
+  loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
   rotateImage, renameShape, hideShape, showAllShapes,
   showLabelPopup, confirmLabel
 } from './tools.js';
 import {
-  setTool, cancelTool, fitView, updatePanel, status, updateFilters,
+  setTool, cancelTool, fitView, updatePanel, status, updateFilters, updateScaleDisp,
   setSlider, syncToolbarLabels
 } from './ui.js';
+import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
 import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
 import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
@@ -77,14 +78,9 @@ $(oCvs).on('mousedown', function(e) {
   switch (S.tool) {
     case 'squarecal':
       if (S.polyPts.length === 4) {
-        // Click near an existing corner → start dragging it
-        const grabR = 12 / (S.view.zoom * S.view.fit);
-        S.dragIdx = -1;
-        for (let ci = 0; ci < 4; ci++) {
-          if (Math.hypot(S.mix - S.polyPts[ci].x, S.miy - S.polyPts[ci].y) <= grabR) {
-            S.dragIdx = ci; break;
-          }
-        }
+        // Click a corner's grab ring → start dragging it
+        const h = hitHandle(S.mx, S.my);
+        S.dragIdx = h && h.kind === 'sqcal' ? h.idx : -1;
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
@@ -101,6 +97,12 @@ $(oCvs).on('mousedown', function(e) {
         S.scaleP2 = ip;
         S.scaleState = 2;
         showScalePopup();
+      } else if (S.scaleState === 2) {
+        const h = hitHandle(S.mx, S.my);
+        if (h && h.kind === 'scalePt') {
+          S.dragScaleIdx = h.idx;
+          oCvs.style.cursor = 'grabbing';
+        }
       }
       S.overlayDirty = true;
       break;
@@ -120,7 +122,6 @@ $(oCvs).on('mousedown', function(e) {
     case 'freehand':
       S.isFH = true;
       S.fhPts = [ip];
-      S.fhLastTime = Date.now();
       S.overlayDirty = true;
       break;
 
@@ -130,16 +131,28 @@ $(oCvs).on('mousedown', function(e) {
       break;
 
     case 'edit': {
-      const thr = 10 / (S.view.zoom * S.view.fit);
-      const hp = findNearestPt(ip, thr);
-      if (hp) {
-        S.dragShape = hp.shape;
-        S.dragIdx = hp.idx;
-        S.dragPt = { x: hp.shape.points[hp.idx].x, y: hp.shape.points[hp.idx].y };
-        S.selId = hp.shape.id;
+      const h = hitHandle(S.mx, S.my);
+      if (h && h.kind === 'shape') {
+        const shp = findShape(h.shapeId);
+        if (!shp) break;
+        recordHistory();
+        S.dragShape = shp;
+        S.dragIdx = h.idx;
+        S.dragPt = { x: shp.points[h.idx].x, y: shp.points[h.idx].y };
+        S.selId = shp.id;
+        oCvs.style.cursor = 'grabbing';
         S.overlayDirty = true;
         updatePanel();
         status('Drag to move point');
+      } else if (h && h.kind === 'scale') {
+        recordHistory();
+        S.dragScaleIdx = h.idx;
+        S.dragScaleReal = S.scalePPU > 0
+          ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
+          : 0;
+        oCvs.style.cursor = 'grabbing';
+        S.overlayDirty = true;
+        status('Drag to adjust the scale line — the entered distance is kept');
       }
       break;
     }
@@ -212,34 +225,19 @@ $(document).on('mousemove', function(e) {
       // Drag placed corner to fine-tune position
       S.polyPts[S.dragIdx] = { x: S.mix, y: S.miy };
     } else if (S.polyPts.length === 4) {
-      // Show grab cursor when hovering near a corner
-      const grabR2 = 12 / (S.view.zoom * S.view.fit);
-      const nearCorner = S.polyPts.some(function(p) {
-        return Math.hypot(S.mix - p.x, S.miy - p.y) <= grabR2;
-      });
-      oCvs.style.cursor = nearCorner ? 'grab' : '';
+      oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
     }
     S.overlayDirty = true;
     return;
   }
 
   if (S.isFH) {
-    const last = S.fhPts[S.fhPts.length - 1];
-    const dx = S.mix - last.x, dy = S.miy - last.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    sampleFreehand();
+    return;
+  }
 
-    const now = Date.now();
-    const dt = (now - S.fhLastTime) / 1000;
-    const speed = dt > 0 ? dist / dt : 0;
-
-    const t = Math.min(speed / 2000, 1);
-    const threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
-
-    if (dist >= threshold) {
-      S.fhPts.push({ x: S.mix, y: S.miy });
-      S.fhLastTime = now;
-      S.overlayDirty = true;
-    }
+  if (S.dragScaleIdx >= 0) {
+    moveScaleHandle();
     return;
   }
 
@@ -251,11 +249,49 @@ $(document).on('mousemove', function(e) {
     return;
   }
 
+  if (S.tool === 'edit') {
+    oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
+    S.overlayDirty = true;
+  }
+  if (S.tool === 'scale' && S.scaleState === 2) {
+    oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
+    S.overlayDirty = true;
+  }
+
   if (S.tool === 'polygon' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
-  if (S.tool === 'edit') S.overlayDirty = true;
 });
+
+// Freehand sampling: fixed screen-space step, so trace detail follows what
+// the user actually sees regardless of zoom or pointer speed.
+function sampleFreehand() {
+  const last = S.fhPts[S.fhPts.length - 1];
+  const scale = S.view.zoom * S.view.fit;
+  if (Math.hypot(S.mix - last.x, S.miy - last.y) * scale >= 2) {
+    S.fhPts.push({ x: S.mix, y: S.miy });
+    S.overlayDirty = true;
+  }
+}
+
+function moveScaleHandle() {
+  const p = { x: S.mix, y: S.miy };
+  if (S.tool === 'scale') {
+    if (S.dragScaleIdx === 0) S.scaleP1 = p;
+    else S.scaleP2 = p;
+  } else if (S.scaleLine) {
+    if (S.dragScaleIdx === 0) S.scaleLine.p1 = p;
+    else S.scaleLine.p2 = p;
+    if (S.dragScaleReal > 0) {
+      const px = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
+      if (px > 1e-6) {
+        S.scalePPU = px / S.dragScaleReal;
+        updateScaleDisp();
+      }
+    }
+  }
+  S.overlayDirty = true;
+}
 
 $(document).on('mouseup', function(e) {
   if (S.isPan) {
@@ -275,6 +311,20 @@ $(document).on('mouseup', function(e) {
   if (S.tool === 'squarecal' && S.dragIdx >= 0) {
     S.dragIdx = -1;
     S.overlayDirty = true;
+    return;
+  }
+
+  if (S.dragScaleIdx >= 0) {
+    const committed = S.tool === 'edit';
+    S.dragScaleIdx = -1;
+    S.dragScaleReal = 0;
+    oCvs.style.cursor = '';
+    S.overlayDirty = true;
+    if (committed) {
+      updatePanel();
+      status('Scale line adjusted.');
+      scheduleSave();
+    }
     return;
   }
 
@@ -299,21 +349,32 @@ $(document).on('mouseup', function(e) {
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
+    oCvs.style.cursor = '';
     S.overlayDirty = true;
     updatePanel();
-    status('Point moved. Drag control points to edit shapes.');
+    status('Point moved \u2014 Ctrl+Z to undo.');
     scheduleSave();
   }
 });
 
 $(oCvs).on('dblclick', function(e) {
+  canvasXY(e);
   if (S.tool === 'polygon' && S.polyPts.length >= 3) {
     S.polyPts.pop();
     closePoly();
+    return;
   }
   if (S.tool === 'segment' && S.polyPts.length >= 2) {
     S.polyPts.pop();
     closeSegment();
+    return;
+  }
+  // Double-click the committed scale line to re-calibrate it
+  if ((S.tool === 'idle' || S.tool === 'edit') && S.scaleLine && S.scalePPU > 0) {
+    const thr = 12 / (S.view.zoom * S.view.fit);
+    if (distSeg({ x: S.mix, y: S.miy }, S.scaleLine.p1, S.scaleLine.p2) <= thr) {
+      reopenScalePopup();
+    }
   }
 });
 
@@ -331,6 +392,9 @@ oCvs.addEventListener('wheel', function(e) {
 
 $(oCvs).on('contextmenu', function(e) {
   e.preventDefault();
+  // Right-click finishes an in-progress path; otherwise clears it
+  if (S.tool === 'polygon' && S.polyPts.length >= 3) { closePoly(); return; }
+  if (S.tool === 'segment' && S.polyPts.length >= 2) { closeSegment(); return; }
   if (S.tool !== 'idle') {
     cancelTool();
     setTool(S.tool);
@@ -348,6 +412,11 @@ oCvs.addEventListener('touchstart', function(e) {
     if (S.isFH) { S.isFH = false; S.fhPts = []; S.overlayDirty = true; }
     if (S.dragPt && S.dragShape) {
       S.dragPt = null; S.dragShape = null; S.dragIdx = -1;
+      S.overlayDirty = true;
+    }
+    if (S.dragScaleIdx >= 0) {
+      S.dragScaleIdx = -1;
+      S.dragScaleReal = 0;
       S.overlayDirty = true;
     }
     S.touchId = null;
@@ -390,13 +459,8 @@ oCvs.addEventListener('touchstart', function(e) {
   switch (S.tool) {
     case 'squarecal':
       if (S.polyPts.length === 4) {
-        const grabRT = 18 / (S.view.zoom * S.view.fit);
-        S.dragIdx = -1;
-        for (let cit = 0; cit < 4; cit++) {
-          if (Math.hypot(S.mix - S.polyPts[cit].x, S.miy - S.polyPts[cit].y) <= grabRT) {
-            S.dragIdx = cit; break;
-          }
-        }
+        const h = hitHandle(S.mx, S.my, 20);
+        S.dragIdx = h && h.kind === 'sqcal' ? h.idx : -1;
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
@@ -413,6 +477,9 @@ oCvs.addEventListener('touchstart', function(e) {
         S.scaleP2 = ip;
         S.scaleState = 2;
         showScalePopup();
+      } else if (S.scaleState === 2) {
+        const ht = hitHandle(S.mx, S.my, 20);
+        if (ht && ht.kind === 'scalePt') S.dragScaleIdx = ht.idx;
       }
       S.overlayDirty = true;
       break;
@@ -432,7 +499,6 @@ oCvs.addEventListener('touchstart', function(e) {
     case 'freehand':
       S.isFH = true;
       S.fhPts = [ip];
-      S.fhLastTime = Date.now();
       S.overlayDirty = true;
       break;
 
@@ -442,16 +508,26 @@ oCvs.addEventListener('touchstart', function(e) {
       break;
 
     case 'edit': {
-      const thrScreen = 20 / (S.view.zoom * S.view.fit);
-      const hp = findNearestPt(ip, thrScreen);
-      if (hp) {
-        S.dragShape = hp.shape;
-        S.dragIdx = hp.idx;
-        S.dragPt = { x: hp.shape.points[hp.idx].x, y: hp.shape.points[hp.idx].y };
-        S.selId = hp.shape.id;
+      const h = hitHandle(S.mx, S.my, 20);
+      if (h && h.kind === 'shape') {
+        const shp = findShape(h.shapeId);
+        if (!shp) break;
+        recordHistory();
+        S.dragShape = shp;
+        S.dragIdx = h.idx;
+        S.dragPt = { x: shp.points[h.idx].x, y: shp.points[h.idx].y };
+        S.selId = shp.id;
         S.overlayDirty = true;
         updatePanel();
         status('Drag to move point');
+      } else if (h && h.kind === 'scale') {
+        recordHistory();
+        S.dragScaleIdx = h.idx;
+        S.dragScaleReal = S.scalePPU > 0
+          ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
+          : 0;
+        S.overlayDirty = true;
+        status('Drag to adjust the scale line');
       }
       break;
     }
@@ -510,22 +586,12 @@ oCvs.addEventListener('touchmove', function(e) {
   }
 
   if (S.isFH) {
-    const last = S.fhPts[S.fhPts.length - 1];
-    const dx = S.mix - last.x, dy = S.miy - last.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    sampleFreehand();
+    return;
+  }
 
-    const now = Date.now();
-    const dt = (now - S.fhLastTime) / 1000;
-    const speed = dt > 0 ? dist / dt : 0;
-
-    const t = Math.min(speed / 2000, 1);
-    const threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
-
-    if (dist >= threshold) {
-      S.fhPts.push({ x: S.mix, y: S.miy });
-      S.fhLastTime = now;
-      S.overlayDirty = true;
-    }
+  if (S.dragScaleIdx >= 0) {
+    moveScaleHandle();
     return;
   }
 
@@ -567,6 +633,19 @@ function touchEnd(e) {
     return;
   }
 
+  if (S.dragScaleIdx >= 0) {
+    const committed = S.tool === 'edit';
+    S.dragScaleIdx = -1;
+    S.dragScaleReal = 0;
+    S.overlayDirty = true;
+    if (committed) {
+      updatePanel();
+      status('Scale line adjusted.');
+      scheduleSave();
+    }
+    return;
+  }
+
   if (S.isFH) {
     S.isFH = false;
     if (S.fhPts.length > 5) {
@@ -590,7 +669,7 @@ function touchEnd(e) {
     S.dragIdx = -1;
     S.overlayDirty = true;
     updatePanel();
-    status('Point moved. Drag control points to edit shapes.');
+    status('Point moved \u2014 Ctrl+Z to undo.');
     scheduleSave();
   }
 }
@@ -602,6 +681,27 @@ oCvs.addEventListener('touchcancel', touchEnd, { passive: false });
 
 $(document).on('keydown', function(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+  // Ctrl/Cmd shortcuts — never let plain letters below double as tool toggles
+  if (e.ctrlKey || e.metaKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      if ((S.tool === 'polygon' || S.tool === 'segment') && S.polyPts.length > 0) {
+        S.polyPts.pop();
+        S.overlayDirty = true;
+      } else if (!S.perspActive && S.tool !== 'squarecal') {
+        undo();
+      }
+    } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      if (!S.perspActive && S.tool !== 'squarecal') redo();
+    } else if (k === '0' && S.img) {
+      e.preventDefault();
+      fitView();
+    }
+    return;
+  }
 
   switch (e.key) {
     case ' ':
@@ -641,7 +741,13 @@ $(document).on('keydown', function(e) {
 
     case 'Delete':
     case 'Backspace':
-      if (!S.perspActive && S.tool !== 'squarecal' && S.selId) delShape(S.selId);
+      if ((S.tool === 'polygon' || S.tool === 'segment' || S.tool === 'squarecal') && S.polyPts.length > 0) {
+        S.polyPts.pop();
+        S.overlayDirty = true;
+        if (S.tool === 'squarecal') onSqCalibPoint();
+      } else if (!S.perspActive && S.tool !== 'squarecal' && S.selId) {
+        delShape(S.selId);
+      }
       e.preventDefault();
       break;
 
@@ -693,13 +799,6 @@ $(document).on('keydown', function(e) {
 
     case '-':
       if (S.img) zoomAt(1 / 1.2, S.cw / 2, S.ch / 2);
-      break;
-
-    case '0':
-      if ((e.ctrlKey || e.metaKey) && S.img) {
-        e.preventDefault();
-        fitView();
-      }
       break;
 
     case '?':
@@ -949,15 +1048,15 @@ $('#btn-delete').on('click', function() {
 
 $('#btn-clear').on('click', function() {
   if (!S.shapes.length) return;
-  if (!confirm('Delete all ' + S.shapes.length + ' shape(s)?')) return;
-
+  recordHistory();
+  const n = S.shapes.length;
   S.shapes = [];
   S.selId = null;
   S.colorIdx = 0;
   S.shapeN = 0;
   S.overlayDirty = true;
   updatePanel();
-  status('Cleared all shapes');
+  status('Cleared ' + n + ' shape' + (n !== 1 ? 's' : '') + ' — Ctrl+Z to undo');
   scheduleSave();
 });
 

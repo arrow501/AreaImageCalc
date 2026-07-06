@@ -1,9 +1,11 @@
 import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
-import { i2s, centroid } from './geometry.js';
+import { i2s, centroid, drawGrabRing } from './geometry.js';
+import { HANDLE_RING_R } from './handles.js';
 import { fitScale, segmentLength } from './math.js';
 import { encodeCanvas } from './canvasUtil.js';
 import { setTool, enableTools, status, updateScaleDisp, fitView, updatePanel } from './ui.js';
 import { scheduleSave } from './storage.js';
+import { clearHistory } from './history.js';
 import { getActiveTab } from './tabs.js';
 import { EVT, emit, on } from './events.js';
 
@@ -215,6 +217,7 @@ export function drawPerspOverlay(ctx) {
   const labels = ['TL','TR','BR','BL'];
   ctx.font = '600 9px "JetBrains Mono", monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const hov = S.perspDragIdx >= 0 ? S.perspDragIdx : findPerspHandle(S.mx, S.my);
   for (let i = 0; i < 4; i++) {
     const cp = cs[i], active = (i === S.perspDragIdx);
     ctx.beginPath(); ctx.arc(cp.x,cp.y,HR,0,Math.PI*2);
@@ -222,6 +225,9 @@ export function drawPerspOverlay(ctx) {
     ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.fillText(labels[i], cp.x, cp.y);
+    if (i === hov) {
+      drawGrabRing(ctx, { x: cp.x, y: cp.y, rx: cp.x, ry: cp.y }, active, HANDLE_RING_R);
+    }
   }
   ctx.restore();
 }
@@ -229,7 +235,7 @@ export function drawPerspOverlay(ctx) {
 export function findPerspHandle(sx, sy) {
   for (let i = 0; i < 4; i++) {
     const sp = i2s(S.perspCorners[i].x, S.perspCorners[i].y);
-    if (Math.hypot(sx - sp.x, sy - sp.y) <= 12) return i;
+    if (Math.hypot(sx - sp.x, sy - sp.y) <= HANDLE_RING_R) return i;
   }
   return -1;
 }
@@ -358,6 +364,7 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
       if (tab) {
         tab.baseImg = newImg;
         tab.baseRotation = 0;
+        clearHistory(tab);
         tab.imgWebpUrl = null;
         tab.webpPending = true;
         if (typeof createImageBitmap === 'function') {

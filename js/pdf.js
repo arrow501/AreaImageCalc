@@ -111,7 +111,6 @@ export function renderPdfTabPage(tabIdx) {
         S.imgDataUrl = dataUrl;
         S.view.iw = ni.naturalWidth;
         S.view.ih = ni.naturalHeight;
-        S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
 
         fitView();
         updateScaleDisp();

@@ -1,5 +1,6 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
-import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, findNearestPt, dot, roundRect } from './geometry.js';
+import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, dot, roundRect, handlesNear, drawGrabRing } from './geometry.js';
+import { hitTestHandles, HANDLE_RING_R } from './handles.js';
 import { drawPerspOverlay } from './perspective.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
 
@@ -245,33 +246,61 @@ function drawActiveTool(ctx, inv) {
     for (let i = 0; i < pts.length; i++) dot(ctx, pts[i].x, pts[i].y, 4 * inv, c);
   }
 
-  // Edit mode: hovered point highlight
-  if (S.tool === 'edit' && !S.dragPt) {
-    const thr = 10 * inv;
-    const hp = findNearestPt({ x: S.mix, y: S.miy }, thr);
-    if (hp) {
-      ctx.beginPath();
-      ctx.arc(hp.shape.points[hp.idx].x, hp.shape.points[hp.idx].y, 6 * inv, 0, Math.PI * 2);
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2 * inv;
-      ctx.stroke();
-    }
-  }
-
   if (S.dragPt && S.dragShape) {
     dot(ctx, S.dragPt.x, S.dragPt.y, 6 * inv, '#fff');
   }
 
-  // Active freehand drawing
+  // Active freehand drawing — live fill previews the region being traced
   if (S.tool === 'freehand' && S.fhPts.length > 1) {
+    const c = COLORS[S.colorIdx % COLORS.length];
     ctx.beginPath();
     ctx.moveTo(S.fhPts[0].x, S.fhPts[0].y);
     for (let i = 1; i < S.fhPts.length; i++) {
       ctx.lineTo(S.fhPts[i].x, S.fhPts[i].y);
     }
-    ctx.strokeStyle = COLORS[S.colorIdx % COLORS.length];
+    ctx.closePath();
+    ctx.fillStyle = c + '20';
+    ctx.fill();
+    ctx.strokeStyle = c;
     ctx.lineWidth = 1.5 * inv;
     ctx.stroke();
+  }
+}
+
+// ---- Grab-ring pass (screen space) ----
+
+function draggedHandlePos() {
+  if (S.dragPt) return i2s(S.dragPt.x, S.dragPt.y);
+  if (S.dragScaleIdx >= 0) {
+    const src = S.tool === 'scale'
+      ? (S.dragScaleIdx === 0 ? S.scaleP1 : S.scaleP2)
+      : (S.scaleLine ? (S.dragScaleIdx === 0 ? S.scaleLine.p1 : S.scaleLine.p2) : null);
+    return src ? i2s(src.x, src.y) : null;
+  }
+  if (S.tool === 'squarecal' && S.dragIdx >= 0 && S.dragIdx < S.polyPts.length) {
+    return i2s(S.polyPts[S.dragIdx].x, S.polyPts[S.dragIdx].y);
+  }
+  return null;
+}
+
+function drawHandleRings(ctx) {
+  const showing =
+    S.tool === 'edit' ||
+    (S.tool === 'scale' && S.scaleState === 2) ||
+    (S.tool === 'squarecal' && S.polyPts.length === 4);
+  if (!showing) return;
+
+  const dragged = draggedHandlePos();
+  if (dragged) {
+    drawGrabRing(ctx, { x: dragged.x, y: dragged.y, rx: dragged.x, ry: dragged.y }, true, HANDLE_RING_R);
+    return;
+  }
+
+  const layout = handlesNear(S.mx, S.my);
+  if (!layout.length) return;
+  const hit = hitTestHandles(layout, S.mx, S.my);
+  for (let i = 0; i < layout.length; i++) {
+    drawGrabRing(ctx, layout[i], layout[i] === hit, HANDLE_RING_R);
   }
 }
 
@@ -481,6 +510,7 @@ function drawOverlay() {
   const labelBoxes = [];
   drawAreaLabels(ctx, labelBoxes);
   drawSideLabels(ctx, labelBoxes);
+  drawHandleRings(ctx);
 
   drawPerspOverlay(ctx);
 

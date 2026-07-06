@@ -1,7 +1,7 @@
 // All DOM-update functions live here.
 // Imports only state.js and geometry.js — no feature modules, no cycles.
 
-import { S, iCvs } from './state.js';
+import { S, iCvs, oCvs } from './state.js';
 import { fmtArea, fmtPerim, fmtLen } from './geometry.js';
 import { EVT, emit } from './events.js';
 
@@ -16,9 +16,12 @@ export function cancelTool() {
   S.dragPt = null;
   S.dragShape = null;
   S.dragIdx = -1;
+  S.dragScaleIdx = -1;
+  S.dragScaleReal = 0;
   S.touchId = null;
   S.touchIsPan = false;
   S.labelShapeId = null;
+  oCvs.style.cursor = '';
   $('#scale-popup').hide();
   $('#label-popup').hide();
   S.overlayDirty = true;
@@ -50,16 +53,16 @@ export function setTool(t) {
       status('Click first point of known distance');
       break;
     case 'polygon':
-      status('Click to place vertices. Click first point or double-click to close. ESC cancels.');
+      status('Click to place vertices. Click the first point or double-click to close. Backspace removes the last point.');
       break;
     case 'freehand':
-      status('Click and drag to trace. Release to finish. ESC cancels.');
+      status('Drag to trace a region. Release to close it. ESC exits.');
       break;
     case 'segment':
-      status('Click to place points along a path. Double-click or Enter to finish. ESC cancels.');
+      status('Click points along a path. Double-click, Enter, or right-click to finish. Backspace removes the last point.');
       break;
     case 'edit':
-      status('Drag control points to edit shapes. ESC to exit.');
+      status('Drag control points to adjust shapes and the scale line. ESC to exit.');
       break;
     case 'label':
       status('Click a shape to rename it.');
