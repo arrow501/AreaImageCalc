@@ -388,7 +388,7 @@ function updatePageNav() {
   if (order.length < 2) { $nav.hide(); return; }
 
   const pos = order.indexOf(S.currentTabIdx);
-  $('#page-nav-label').text('Page ' + (cur.pageNum || pos + 1) + ' / ' + order.length);
+  $('#page-nav-label').text((pos + 1) + ' / ' + order.length);
   $('#page-prev').toggleClass('disabled', pos <= 0);
   $('#page-next').toggleClass('disabled', pos >= order.length - 1);
   $nav.css('display', 'flex');
