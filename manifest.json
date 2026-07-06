@@ -13,7 +13,10 @@
   "file_handlers": [
     {
       "action": "/",
-      "accept": { "application/json": [".arcalc"] }
+      "accept": {
+        "text/html": [".arcalc"],
+        "application/json": [".arcalc"]
+      }
     }
   ]
 }

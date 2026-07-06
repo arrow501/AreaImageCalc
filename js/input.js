@@ -17,7 +17,7 @@ import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective
 import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
 import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage } from './tabs.js';
 import { loadPdf } from './pdf.js';
-import { exportProject, importProject, exportMeasurements } from './export.js';
+import { exportProject, importProject, exportMeasurements, exportMeasurementsCsv } from './export.js';
 import { EVT, emit, on } from './events.js';
 
 // Sidebar reveal/collapse animates width; re-fit once the transition settles
@@ -1303,8 +1303,24 @@ $('#btn-export-project').on('click', function() {
   exportProject();
 });
 
-$('#btn-export-measurements').on('click', function() {
-  exportMeasurements();
+$('#btn-export-measurements').on('click', function(e) {
+  e.stopPropagation();
+  const $m = $('#export-menu');
+  if ($m.is(':visible')) { $m.hide(); return; }
+  const r = this.getBoundingClientRect();
+  $m.css({ left: r.left + 'px', top: (r.bottom + 4) + 'px' }).show();
+});
+
+$('#export-menu button').on('click', function() {
+  $('#export-menu').hide();
+  if ($(this).data('export') === 'csv') exportMeasurementsCsv();
+  else exportMeasurements();
+});
+
+$(document).on('click', function(e) {
+  if (!$(e.target).closest('#export-menu, #btn-export-measurements').length) {
+    $('#export-menu').hide();
+  }
 });
 
 // ---- Rotate Buttons ----

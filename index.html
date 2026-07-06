@@ -745,6 +745,32 @@
     #pdf-modal-load:hover { background: #e55a20; }
     #pdf-modal-load.disabled { opacity: 0.35; pointer-events: none; }
 
+    /* ========== EXPORT MENU ========== */
+    #export-menu {
+      position: fixed;
+      z-index: 400;
+      display: none;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      padding: 4px;
+      min-width: 180px;
+    }
+    #export-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: #ccc;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    #export-menu button:hover { background: #333; color: #fff; }
+
     /* ========== SHORTCUTS MODAL ========== */
     #shortcuts-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,.55);
@@ -1008,6 +1034,11 @@
 </div>
 
 <input type="file" id="file-input" accept="image/*,.pdf,.arcalc" multiple style="display:none">
+
+<div id="export-menu">
+  <button data-export="csv">Measurements (CSV)</button>
+  <button data-export="json">Measurements (JSON)</button>
+</div>
 
 <div id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="sc-title">
   <div class="sc-panel">
