@@ -21,9 +21,13 @@ export function cancelTool() {
   S.touchId = null;
   S.touchIsPan = false;
   S.labelShapeId = null;
+  S.pendingNotePt = null;
   oCvs.style.cursor = '';
   $('#scale-popup').hide();
   $('#label-popup').hide();
+  // Return keyboard focus to the app — a focused (hidden) popup input would
+  // swallow hotkeys until the next click
+  $('#scale-value, #label-value, #sq-side-value').blur();
   S.overlayDirty = true;
 }
 
@@ -38,7 +42,7 @@ export function setTool(t) {
 
   $('body').removeClass('cursor-crosshair cursor-grab cursor-grabbing cursor-move');
 
-  if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal' || t === 'segment') {
+  if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal' || t === 'segment' || t === 'note') {
     $('body').addClass('cursor-crosshair');
   }
   if (t === 'edit') {
@@ -65,7 +69,10 @@ export function setTool(t) {
       status('Drag control points to adjust shapes and the scale line. ESC to exit.');
       break;
     case 'label':
-      status('Click a shape to rename it.');
+      status('Click a shape to rename it, or a note to edit its text.');
+      break;
+    case 'note':
+      status('Click to pin a note. ESC exits.');
       break;
     case 'squarecal':
       status('Click 4 corners of a known square. Drag to adjust. Enter side length and Apply.');
@@ -84,7 +91,7 @@ export function status(t) {
 // ---- Toolbar State ----
 
 export function enableTools(on) {
-  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-segment, #btn-label, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
+  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -138,6 +145,8 @@ export function updatePanel() {
     let mStr, pStr = '';
     if (s.type === 'segment') {
       mStr = s.length != null ? fmtLen(s.length) : '...';
+    } else if (s.type === 'note') {
+      mStr = s.text ? (s.text.length > 36 ? s.text.slice(0, 35) + '…' : s.text) : '(empty)';
     } else {
       mStr = s.area != null ? fmtArea(s.area) : '...';
       pStr = s.perimeter != null ? fmtPerim(s.perimeter) : '';
@@ -222,6 +231,8 @@ const _shortLabels = [
   { id: 'btn-polygon',       full: 'Polygon',      short: 'Poly'      },
   { id: 'btn-freehand',      full: 'Freehand',     short: 'Free'      },
   { id: 'btn-segment',       full: 'Distance',     short: 'Dist'      },
+  { id: 'btn-label',         full: 'Label',        short: 'Lbl'       },
+  { id: 'btn-note',          full: 'Note',         short: 'Nt'        },
   { id: 'btn-delete',        full: 'Delete',       short: 'Del'       },
   { id: 'btn-clear',         full: 'Clear',        short: 'Clr'       },
   { id: 'btn-rotate-custom', full: 'Rotate\u2026', short: 'Rot\u2026' },

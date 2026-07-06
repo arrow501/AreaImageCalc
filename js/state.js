@@ -99,7 +99,10 @@ export const S = {
   saveErrored: false,
 
   // Label tool state
-  labelShapeId: null
+  labelShapeId: null,
+
+  // Note tool: anchor point awaiting text confirmation
+  pendingNotePt: null
 };
 
 // DOM references (module scripts are deferred, so DOM exists)

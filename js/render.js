@@ -370,12 +370,63 @@ function drawActivePolySideLabels(ctx) {
   ctx.fillText(txt2, mid2.x, mid2.y);
 }
 
+function drawNotes(ctx, boxes) {
+  ctx.font = FONT_RUN;
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
+    if (sh.hidden || sh.type !== 'note') continue;
+
+    const sel = sh.id === S.selId;
+    const sp = i2s(sh.points[0].x, sh.points[0].y);
+
+    // Pin marker
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, sel ? 5.5 : 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = sh.color;
+    ctx.fill();
+    ctx.strokeStyle = sel ? '#fff' : 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    if (!sh.text) continue;
+
+    const txt = sh.text.length > 48 ? sh.text.slice(0, 47) + '…' : sh.text;
+    const tw = ctx.measureText(txt).width + 12;
+    const th = 18;
+    const box = { x: sp.x + 9, y: sp.y - th - 6, w: tw, h: th };
+    const placed = tryPlace(boxes, box, 48);
+    if (!placed) continue;
+
+    // Leader when the label was nudged away from its default spot
+    if (Math.abs(placed.x - box.x) > 2 || Math.abs(placed.y - box.y) > 2) {
+      ctx.beginPath();
+      ctx.moveTo(sp.x, sp.y);
+      ctx.lineTo(placed.x + 4, placed.y + th);
+      ctx.strokeStyle = sh.color + '80';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    roundRect(ctx, placed.x, placed.y, tw, th, 3);
+    ctx.fill();
+    ctx.strokeStyle = sh.color + (sel ? 'FF' : '90');
+    ctx.lineWidth = 1;
+    roundRect(ctx, placed.x, placed.y, tw, th, 3);
+    ctx.stroke();
+    ctx.fillStyle = '#eee';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, placed.x + 6, placed.y + th / 2 + 0.5);
+  }
+}
+
 function drawAreaLabels(ctx, boxes) {
   const zoomFont = areaFont(S.view.zoom);
   ctx.font = zoomFont;
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
-    if (sh.hidden) continue;
+    if (sh.hidden || sh.type === 'note') continue;
 
     if (sh.type === 'segment') {
       if (sh.points.length < 2 || sh.length == null) continue;
@@ -510,6 +561,7 @@ function drawOverlay() {
   const labelBoxes = [];
   drawAreaLabels(ctx, labelBoxes);
   drawSideLabels(ctx, labelBoxes);
+  drawNotes(ctx, labelBoxes);
   drawHandleRings(ctx);
 
   drawPerspOverlay(ctx);

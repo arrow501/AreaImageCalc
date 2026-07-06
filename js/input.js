@@ -5,7 +5,7 @@ import {
   closePoly, closeSegment, finishFH, delShape, selectAt,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
   rotateImage, renameShape, hideShape, showAllShapes,
-  showLabelPopup, confirmLabel
+  showLabelPopup, confirmLabel, beginNoteAt
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, status, updateFilters, updateScaleDisp,
@@ -165,6 +165,10 @@ $(oCvs).on('mousedown', function(e) {
       break;
     }
 
+    case 'note':
+      beginNoteAt(ip);
+      break;
+
     case 'label': {
       let clickedId = null;
       for (let li = S.shapes.length - 1; li >= 0; li--) {
@@ -177,6 +181,11 @@ $(oCvs).on('mousedown', function(e) {
         for (let li = 0; li < S.shapes.length; li++) {
           const lsh = S.shapes[li];
           if (lsh.hidden) continue;
+          if (lsh.type === 'note') {
+            const ld = Math.hypot(ip.x - lsh.points[0].x, ip.y - lsh.points[0].y);
+            if (ld < lbest) { lbest = ld; clickedId = lsh.id; }
+            continue;
+          }
           const lpts = lsh.points;
           const ledge = lsh.closed ? lpts.length : lpts.length - 1;
           for (let lj = 0; lj < ledge; lj++) {
@@ -350,7 +359,7 @@ $(document).on('mouseup', function(e) {
   if (S.dragPt && S.dragShape) {
     if (S.dragShape.type === 'segment') {
       S.dragShape.length = segmentLength(S.dragShape.points);
-    } else {
+    } else if (S.dragShape.type !== 'note') {
       S.dragShape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     }
@@ -377,10 +386,22 @@ $(oCvs).on('dblclick', function(e) {
     closeSegment();
     return;
   }
-  // Double-click the committed scale line to re-calibrate it
-  if ((S.tool === 'idle' || S.tool === 'edit') && S.scaleLine && S.scalePPU > 0) {
+  if (S.tool === 'idle' || S.tool === 'edit') {
     const thr = 12 / (S.view.zoom * S.view.fit);
-    if (distSeg({ x: S.mix, y: S.miy }, S.scaleLine.p1, S.scaleLine.p2) <= thr) {
+
+    // Double-click a note pin to edit its text
+    for (let i = S.shapes.length - 1; i >= 0; i--) {
+      const sh = S.shapes[i];
+      if (sh.hidden || sh.type !== 'note') continue;
+      if (Math.hypot(S.mix - sh.points[0].x, S.miy - sh.points[0].y) <= thr) {
+        showLabelPopup(sh.id);
+        return;
+      }
+    }
+
+    // Double-click the committed scale line to re-calibrate it
+    if (S.scaleLine && S.scalePPU > 0 &&
+        distSeg({ x: S.mix, y: S.miy }, S.scaleLine.p1, S.scaleLine.p2) <= thr) {
       reopenScalePopup();
     }
   }
@@ -540,6 +561,10 @@ oCvs.addEventListener('touchstart', function(e) {
       break;
     }
 
+    case 'note':
+      beginNoteAt(ip);
+      break;
+
     case 'idle':
       selectAt(ip);
       break;
@@ -668,7 +693,7 @@ function touchEnd(e) {
   if (S.dragPt && S.dragShape) {
     if (S.dragShape.type === 'segment') {
       S.dragShape.length = segmentLength(S.dragShape.points);
-    } else {
+    } else if (S.dragShape.type !== 'note') {
       S.dragShape._centroid = null;
       worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
     }
@@ -782,6 +807,10 @@ $(document).on('keydown', function(e) {
     case 'l':
     case 'L':
       if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'label' ? 'idle' : 'label');
+      break;
+    case 'n':
+    case 'N':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'note' ? 'idle' : 'note');
       break;
     case 'h':
     case 'H':
@@ -945,7 +974,13 @@ $('#label-confirm').on('click', confirmLabel);
 
 $('#label-value').on('keydown', function(e) {
   if (e.key === 'Enter') confirmLabel();
-  if (e.key === 'Escape') { S.labelShapeId = null; $('#label-popup').hide(); }
+  if (e.key === 'Escape') {
+    S.labelShapeId = null;
+    S.pendingNotePt = null;
+    $('#label-popup').hide();
+    this.blur();
+  }
+  e.stopPropagation();
 });
 
 // ---- Focus trap: cycle Tab within a modal, restore focus on close ----

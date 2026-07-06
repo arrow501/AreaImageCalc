@@ -387,25 +387,83 @@ export function showAllShapes() {
   scheduleSave();
 }
 
+function positionLabelPopup(sp) {
+  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
+  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
+  $('#label-popup').css({ left: l, top: t }).show();
+}
+
 export function showLabelPopup(shapeId) {
   const sh = findShape(shapeId);
   if (!sh) return;
   S.labelShapeId = shapeId;
+  S.pendingNotePt = null;
+  const isNote = sh.type === 'note';
   const sp = i2s(
     sh.points.reduce(function(s, p) { return s + p.x; }, 0) / sh.points.length,
     sh.points.reduce(function(s, p) { return s + p.y; }, 0) / sh.points.length
   );
-  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
-  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
-  $('#label-popup').css({ left: l, top: t }).show();
-  $('#label-value').val(sh.name || '').focus().select();
+  positionLabelPopup(sp);
+  $('#label-popup label').text(isNote ? 'Note text:' : 'Shape name:');
+  $('#label-value').val(isNote ? (sh.text || '') : (sh.name || '')).focus().select();
+}
+
+// Note tool: the note is only created once its text is confirmed, so
+// cancelling leaves no empty shape behind.
+export function beginNoteAt(ip) {
+  S.pendingNotePt = ip;
+  S.labelShapeId = null;
+  positionLabelPopup(i2s(ip.x, ip.y));
+  $('#label-popup label').text('Note text:');
+  $('#label-value').val('').focus();
+  status('Type the note text and press Enter.');
 }
 
 export function confirmLabel() {
   const val = $('#label-value').val().trim();
-  if (S.labelShapeId && val) renameShape(S.labelShapeId, val);
+
+  if (S.pendingNotePt) {
+    if (val) {
+      recordHistory();
+      const id = 's' + (++S.shapeN);
+      S.shapes.push({
+        id: id,
+        type: 'note',
+        points: [S.pendingNotePt],
+        closed: false,
+        color: '#FFD740',
+        name: 'Note ' + S.shapeN,
+        text: val
+      });
+      S.selId = id;
+      S.overlayDirty = true;
+      updatePanel();
+      status('Note added — click to pin another, or press Esc to finish.');
+      scheduleSave();
+    }
+    S.pendingNotePt = null;
+    $('#label-popup').hide();
+    $('#label-value').blur();
+    return;
+  }
+
+  if (S.labelShapeId && val) {
+    const sh = findShape(S.labelShapeId);
+    if (sh && sh.type === 'note') {
+      if (val !== sh.text) {
+        recordHistory();
+        sh.text = val;
+        S.overlayDirty = true;
+        updatePanel();
+        scheduleSave();
+      }
+    } else {
+      renameShape(S.labelShapeId, val);
+    }
+  }
   S.labelShapeId = null;
   $('#label-popup').hide();
+  $('#label-value').blur();
 }
 
 export function delShape(id) {
@@ -440,6 +498,15 @@ export function selectAt(ip) {
       const sh = S.shapes[i];
       if (sh.hidden) continue;
 
+      if (sh.type === 'note') {
+        const d = Math.hypot(ip.x - sh.points[0].x, ip.y - sh.points[0].y);
+        if (d < best) {
+          best = d;
+          found = sh.id;
+        }
+        continue;
+      }
+
       const pts = sh.points;
       const edgeCount = sh.closed ? pts.length : pts.length - 1;
 
@@ -465,6 +532,8 @@ export function selectAt(ip) {
     if (sh) {
       if (sh.type === 'segment') {
         status('Length: ' + fmtLen(sh.length));
+      } else if (sh.type === 'note') {
+        status('Note: ' + (sh.text || ''));
       } else if (sh.area != null) {
         status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
       }
