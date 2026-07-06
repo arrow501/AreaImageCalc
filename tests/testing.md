@@ -4,10 +4,10 @@
 
 Two test suites run entirely locally — no CI required.
 
-| Suite | Tool | Count | Scope |
-|-------|------|-------|-------|
-| Unit | Vitest | 38 tests | Pure functions (no DOM) |
-| E2E | Playwright | 12 tests | Full app in headless Chromium |
+| Suite | Tool | Scope |
+|-------|------|-------|
+| Unit | Vitest | Layer 0 pure modules (no DOM) |
+| E2E | Playwright | Full app in headless Chromium |
 
 ---
 
@@ -26,37 +26,23 @@ npm run test:all       # both suites
 
 Runs in Node.js — no browser, no DOM, no mocks needed.
 
-### `math.test.js`
-Tests `js/math.js` pure functions:
-
-- **`distSeg(p, a, b)`** — distance from point to line segment (10 cases)
-  - Zero-length segment, endpoints, midpoint, perpendicular above/below
-  - Clamped beyond-end and before-start cases
-  - Diagonal segments
-- **`pip(point, polygon)`** — point-in-polygon ray casting (9 cases)
-  - Inside/outside unit square and triangle
-  - Concave (L-shaped) polygon with a notch
-- **`centroid(points)`** — arithmetic mean centroid (6 cases)
-  - Single point, two-point midpoint, unit square, triangle
-  - Fractional coords, regular hexagon
-
-### `constants.test.js`
-Tests `js/constants.js` exported values:
-
-- **`COLORS`** — array, ≥2 entries, all valid 6-digit hex, all unique
-- **`SAVE_KEY`** — non-empty string
-- **`SAVE_VER` / `SAVE_VER_LEGACY`** — positive integers, legacy < current
-- **`STORAGE_SOFT_LIMIT` / `STORAGE_HARD_LIMIT`** — positive, soft < hard, soft ≥ 1 MB, hard ≤ 50 MB
+| File | Module under test | Covers |
+|------|-------------------|--------|
+| `math.test.js` | `js/math.js` | `distSeg`, `pip`, `centroid`, `segmentLength`, `nearestPoint`, `fitScale` |
+| `constants.test.js` | `js/constants.js` | palette validity, save-version ordering (legacy < compat < current), storage limits |
+| `handles.test.js` | `js/handles.js` | grab-ring layout: no displacement when apart, collision push-apart, control point never exits its ring, deterministic coincident separation, hit-testing against displaced ring centres |
+| `arcalcFormat.test.js` | `js/arcalcFormat.js` | HTML polyglot structure, `<`-escaping, round-trips (incl. hostile strings), legacy JSON + BOM acceptance, rejection of unrelated/truncated files |
+| `csv.test.js` | `js/csv.js` | escaping, number formatting, scaled/unscaled rows, segment and note rows, CRLF |
 
 ### Adding unit tests
 
-Only `js/math.js` and `js/constants.js` are importable without a DOM. To test
-other modules, they would need to be refactored to separate pure logic from DOM
-access (see the architectural plan for guidance).
+Layer 0 modules (`math.js`, `constants.js`, `handles.js`, `arcalcFormat.js`,
+`csv.js`) are importable without a DOM. To test other modules, extract the
+pure logic into Layer 0 first.
 
 ---
 
-## E2E Tests (`tests/e2e/smoke.spec.js`)
+## E2E Tests (`tests/e2e/`)
 
 Runs the full app in headless Chromium via Playwright.
 
@@ -67,53 +53,31 @@ A minimal Node.js `http.createServer` that serves the project root. Started
 automatically by Playwright's `webServer` config; reused across tests when
 already running. Prefer this over `python3 -m http.server` (more reliable).
 
-**CDN interception** — applied in `beforeEach` to every test:
-- jQuery CDN (`code.jquery.com`) → served from `node_modules/jquery/dist/jquery.min.js`
-- Google Fonts CSS/fonts → fulfilled with empty 200 responses
-- `favicon.ico` → 204 No Content
+**Shared helpers** — `tests/e2e/helpers.js`
+- `interceptCdn(page)` — routes jQuery CDN to `node_modules`, fulfills Google
+  Fonts with empty 200s, stubs favicon. Required: the test environment blocks
+  external network requests.
+- `loadTestImage(page, w, h)` — builds a PNG in-browser, uploads it via
+  `#file-input`, waits for the "Image loaded" status.
+- `canvasCenter(page)` — centre of the overlay canvas in page coords.
+- `drawTriangle(page, cx, cy, off)` — draws and closes a polygon triangle.
 
-This is necessary because the test environment blocks external network requests.
-
-**Browser binary** — auto-detected:
-```
-/opt/pw-browsers/chromium   ← pre-installed binary (this machine)
-```
-On machines where Playwright manages its own browsers, it falls back to the
-downloaded build automatically. Override with env var:
+**Browser binary** — auto-detected at `/opt/pw-browsers/chromium`; falls back
+to Playwright's own download elsewhere. Override:
 ```sh
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chrome npm run test:e2e
 ```
 
-### Test coverage
+### Spec files
 
-| # | Test | What it checks |
-|---|------|----------------|
-| 1 | App loads | Title matches `/area/i`, no JS runtime errors, no failed `.js` modules, jQuery defined |
-| 2 | Dropzone visible | `#dropzone` visible before image load |
-| 3 | Tools disabled | `#btn-polygon`, `#btn-freehand`, `#btn-scale` have `.disabled` before load |
-| 4 | Image load enables tools | Tools lose `.disabled`, dropzone content hides |
-| 5 | Status bar dimensions | Shows "800" and "600" after loading an 800×600 image |
-| 6 | Draw polygon | Shape appears in panel, area resolves from `...` |
-| 7 | Delete shape | Shape removed, total shows "No shapes yet" |
-| 8 | New tab | Tab count increases by 1 |
-| 9 | Close tab | Tab count decreases by 1 |
-| 10 | Key `2` | `#btn-polygon` gets `.active` |
-| 11 | Key `Escape` | `#btn-polygon` loses `.active` |
-| 12 | Key `+` | `#zoom-display` text changes |
+| File | Covers |
+|------|--------|
+| `smoke.spec.js` | App boot without errors, initial UI state, image load enables tools, polygon draw + area, delete, document sidebar add/close, tool hotkeys, zoom keys, backup-key recovery, visibilitychange save flush |
+| `interactions.spec.js` | Sticky tools, Backspace point removal, right-click path finish, undo/redo (add, delete, clear), scale-endpoint drag in edit mode, double-click scale re-calibration, freehand trace |
+| `export.spec.js` | .arcalc is self-describing HTML, .arcalc round-trip, legacy JSON import, CSV export content, JSON export content |
+| `notes.spec.js` | Note pinning via hotkey, cancel leaves no shape, double-click text editing, note undo |
 
-### `loadTestImage` helper
-
-Creates a PNG entirely in-browser (no fixture files), uploads it via
-`#file-input`, and waits for `#status-text` to contain `"Image loaded"`.
-Default size: 800×600. Accepts `(page, width, height)`.
-
-### Adding E2E tests
-
-Add new `test(...)` blocks to `smoke.spec.js` or create additional spec files
-in `tests/e2e/`. The `loadTestImage` helper is importable from the same file or
-can be moved to a shared `helpers.js`.
-
-Common patterns:
+### Common patterns
 
 ```js
 // Wait for a specific status message
@@ -122,9 +86,16 @@ await expect(page.locator('#status-text')).toContainText('Click to place vertice
 // Assert count of DOM elements
 await expect(page.locator('.shape-item')).toHaveCount(2);
 
-// Simulate mouse drawing
-const box = await page.locator('#overlay-canvas').boundingBox();
-await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+// Capture a download
+const [download] = await Promise.all([
+  page.waitForEvent('download'),
+  page.locator('#btn-export-project').click(),
+]);
+
+// Reset persisted state before a reload (beforeunload flushes a save,
+// so a plain localStorage.clear() before reload is not enough)
+await page.addInitScript(() => localStorage.clear());
+await page.reload();
 ```
 
 ---
