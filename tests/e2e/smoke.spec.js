@@ -207,8 +207,7 @@ test('new-document button adds an entry to the sidebar', async ({ page }) => {
   await page.goto('/');
   await loadTestImage(page);
 
-  // Sidebar starts collapsed; expand it before clicking the new-doc button.
-  await page.locator('#btn-toggle-docs').click();
+  // Sidebar is visible by default
   await expect(page.locator('#sidebar')).not.toHaveClass(/collapsed/);
 
   const before = await page.locator('.doc-item').count();
@@ -220,9 +219,6 @@ test('closing a document removes it from the sidebar', async ({ page }) => {
   await page.goto('/');
   await loadTestImage(page);
 
-  await page.locator('#btn-toggle-docs').click();
-  await expect(page.locator('#sidebar')).not.toHaveClass(/collapsed/);
-
   await page.locator('#btn-new-doc').click();
   const before = await page.locator('.doc-item').count();
 
@@ -231,6 +227,27 @@ test('closing a document removes it from the sidebar', async ({ page }) => {
   await lastRow.hover();
   await lastRow.locator('.doc-close').click();
   await expect(page.locator('.doc-item')).toHaveCount(before - 1);
+});
+
+test('sidebar toggle collapses and restores the panel', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page);
+
+  await page.locator('#btn-toggle-sidebar').click();
+  await expect(page.locator('#sidebar')).toHaveClass(/collapsed/);
+  await page.locator('#btn-toggle-sidebar').click();
+  await expect(page.locator('#sidebar')).not.toHaveClass(/collapsed/);
+});
+
+test('pane headers collapse their sections', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page);
+
+  await expect(page.locator('#doc-list')).toBeVisible();
+  await page.locator('#pane-docs .pane-header').click();
+  await expect(page.locator('#doc-list')).toBeHidden();
+  await page.locator('#pane-docs .pane-header').click();
+  await expect(page.locator('#doc-list')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

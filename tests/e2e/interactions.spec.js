@@ -141,7 +141,6 @@ test('Ctrl+Z undoes an image rotation, restoring exact shape coordinates', async
   await expect(page.locator('#shapes-list .area')).not.toContainText('...', { timeout: 5000 });
   await page.keyboard.press('Escape');
 
-  await page.locator('#btn-export-measurements').click();
   const before = await downloadPoints(page);
 
   await page.locator('#btn-rotate-cw').click();
@@ -151,15 +150,15 @@ test('Ctrl+Z undoes an image rotation, restoring exact shape coordinates', async
   await expect(page.locator('#status-text')).toContainText('Transform undone', { timeout: 8000 });
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(1);
 
-  await page.locator('#btn-export-measurements').click();
   const after = await downloadPoints(page);
   expect(after).toEqual(before);
 });
 
 async function downloadPoints(page) {
+  await page.locator('#btn-file-menu').click();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.locator('#export-menu button[data-export="json"]').click(),
+    page.locator('#btn-export-json').click(),
   ]);
   const { readFileSync } = await import('fs');
   const data = JSON.parse(readFileSync(await download.path(), 'utf-8'));

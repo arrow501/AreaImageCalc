@@ -145,7 +145,7 @@ export function createTab(label, imgDataUrl, imgElement, docInfo) {
   if (newIdx === 1 && $('#sidebar').hasClass('collapsed')) {
     // Second document opened — reveal the sidebar automatically
     $('#sidebar').removeClass('collapsed');
-    $('#btn-toggle-docs').addClass('active');
+    $('#btn-toggle-sidebar').addClass('active');
     emit(EVT.LAYOUT_CHANGE);
   }
   return newIdx;

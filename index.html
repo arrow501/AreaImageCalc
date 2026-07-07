@@ -155,35 +155,6 @@
     .sl-val::-webkit-outer-spin-button { -webkit-appearance: none; }
     .sl-val:focus { outline: none; border-color: #FF6B35; cursor: text; background: #1a1a1a; }
 
-    /* ========== PANEL REVEAL STRIP ========== */
-    #panel-reveal {
-      display: flex;
-      width: 0;
-      overflow: hidden;
-      background: #252525;
-      border-left: 1px solid #333;
-      flex-shrink: 0;
-      cursor: pointer;
-      align-items: center;
-      justify-content: center;
-      color: #555;
-      font-size: 11px;
-      transition: background 0.1s, color 0.1s, width 0.15s ease;
-    }
-    #panel-reveal:hover { background: #2e2e2e; color: #bbb; }
-
-    /* ========== SHAPES PANEL ========== */
-    #shapes-panel {
-      width: 220px;
-      background: #222;
-      border-left: 1px solid #333;
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      transition: width 0.15s;
-    }
-    #shapes-panel.collapsed { width: 0; overflow: hidden; border: none; }
-
     /* ========== HIDDEN SHAPES NOTICE ========== */
     #hidden-notice {
       display: none;
@@ -206,22 +177,15 @@
       white-space: nowrap;
     }
     #btn-showall:hover { color: #7ab8ff; text-decoration: underline; }
-    #shapes-header {
-      padding: 8px 10px;
-      font-weight: 600;
-      font-size: 12px;
-      border-bottom: 1px solid #333;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    #shapes-list { flex: 1; overflow-y: auto; padding: 4px; }
+    #shapes-list { padding: 4px; min-width: 229px; }
     #shapes-total {
       padding: 8px 10px;
       border-top: 1px solid #333;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: #4A9EFF;
+      min-width: 229px;
+      flex-shrink: 0;
     }
     .shape-item {
       padding: 6px 8px;
@@ -506,9 +470,9 @@
     }
     #sq-calib-apply.disabled { opacity: 0.35; pointer-events: none; }
 
-    /* ========== DOCUMENT SIDEBAR ========== */
+    /* ========== SIDEBAR (paned) ========== */
     #sidebar {
-      width: 200px;
+      width: 230px;
       background: #1e1e1e;
       border-right: 1px solid #333;
       display: flex;
@@ -518,16 +482,38 @@
       transition: width 0.15s ease;
     }
     #sidebar.collapsed { width: 0; border-right-width: 0; }
-    #sidebar-header {
-      padding: 8px 6px 8px 10px;
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-bottom: 1px solid #333;
+    }
+    #pane-docs { flex: 0 1 auto; max-height: 45%; }
+    #pane-shapes { flex: 1 1 auto; border-bottom: none; }
+    .pane.collapsed { flex: 0 0 auto; max-height: none; }
+    .pane.collapsed .pane-body,
+    .pane.collapsed #hidden-notice,
+    .pane.collapsed #shapes-total { display: none; }
+    .pane-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 6px 7px 8px;
       font-weight: 600;
       font-size: 12px;
-      border-bottom: 1px solid #333;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      min-width: 199px;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+      min-width: 229px;
+      border-bottom: 1px solid #2a2a2a;
     }
+    .pane-header:hover { background: #242424; }
+    .pane-caret { color: #666; font-size: 10px; width: 12px; text-align: center; }
+    .pane-title { flex: 1; }
+    .pane-body { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+    .pane-body::-webkit-scrollbar { width: 6px; }
+    .pane-body::-webkit-scrollbar-track { background: #1e1e1e; }
+    .pane-body::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
     #btn-new-doc {
       background: none;
       border: none;
@@ -539,10 +525,7 @@
       border-radius: 3px;
     }
     #btn-new-doc:hover { color: #ccc; background: #333; }
-    #doc-list { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px; min-width: 199px; }
-    #doc-list::-webkit-scrollbar { width: 6px; }
-    #doc-list::-webkit-scrollbar-track { background: #1e1e1e; }
-    #doc-list::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    #doc-list { padding: 4px; min-width: 229px; }
     .doc-item { border-radius: 3px; margin-bottom: 1px; }
     .doc-row {
       display: flex;
@@ -745,8 +728,8 @@
     #pdf-modal-load:hover { background: #e55a20; }
     #pdf-modal-load.disabled { opacity: 0.35; pointer-events: none; }
 
-    /* ========== EXPORT MENU ========== */
-    #export-menu {
+    /* ========== DROPDOWN MENUS ========== */
+    .dropdown-menu {
       position: fixed;
       z-index: 400;
       display: none;
@@ -755,9 +738,9 @@
       border-radius: 4px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.5);
       padding: 4px;
-      min-width: 180px;
+      min-width: 200px;
     }
-    #export-menu button {
+    .dropdown-menu button {
       display: block;
       width: 100%;
       text-align: left;
@@ -768,8 +751,12 @@
       font-size: 12px;
       cursor: pointer;
       border-radius: 3px;
+      white-space: nowrap;
     }
-    #export-menu button:hover { background: #333; color: #fff; }
+    .dropdown-menu button:hover { background: #333; color: #fff; }
+    .menu-sep { height: 1px; background: #3a3a3a; margin: 4px 6px; }
+    .dropdown-menu button.storage-warn { box-shadow: inset 3px 0 0 #e6a817; }
+    .dropdown-menu button.storage-full { box-shadow: inset 3px 0 0 #e84040; }
 
     /* ========== SHORTCUTS MODAL ========== */
     #shortcuts-modal {
@@ -867,10 +854,7 @@
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
-    <button class="tb-btn" id="btn-new" title="New project — clears all tabs" aria-label="New project — clears all tabs">New</button>
-    <button class="tb-btn" id="btn-open" title="Open image, PDF, or .arcalc project" aria-label="Open image, PDF, or .arcalc project">Open</button>
-    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc file" aria-label="Save project as .arcalc file">Save</button>
-    <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON" aria-label="Export measurements as JSON">Export</button>
+    <button class="tb-btn" id="btn-file-menu" title="File menu" aria-label="File menu" aria-haspopup="true">&#9776; File</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]" aria-label="Scale tool (shortcut S) — click 2 known points">Scale</button>
     <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]" aria-label="Polygon tool (shortcut P) — click vertices, close to finish">Polygon</button>
@@ -890,7 +874,7 @@
     <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)">Perspective</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-toggle-docs" title="Show/hide document sidebar" aria-label="Show or hide document sidebar">Docs</button>
+    <button class="tb-btn active" id="btn-toggle-sidebar" title="Show/hide sidebar" aria-label="Show or hide sidebar">Panel</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -920,13 +904,32 @@
 
   <!-- ========== MAIN CONTENT ========== -->
   <div id="main">
-    <!-- ========== DOCUMENT SIDEBAR ========== -->
-    <div id="sidebar" class="collapsed">
-      <div id="sidebar-header">
-        <span>Documents</span>
-        <button id="btn-new-doc" title="New document tab" aria-label="New document tab">+</button>
+    <!-- ========== SIDEBAR (documents + shapes + future panes) ========== -->
+    <div id="sidebar">
+      <div class="pane" id="pane-docs">
+        <div class="pane-header" data-pane="docs">
+          <span class="pane-caret">&#9662;</span>
+          <span class="pane-title">Documents</span>
+          <button id="btn-new-doc" title="New document tab" aria-label="New document tab">+</button>
+        </div>
+        <div class="pane-body">
+          <div id="doc-list"></div>
+        </div>
       </div>
-      <div id="doc-list"></div>
+      <div class="pane" id="pane-shapes">
+        <div class="pane-header" data-pane="shapes">
+          <span class="pane-caret">&#9662;</span>
+          <span class="pane-title">Shapes</span>
+        </div>
+        <div id="hidden-notice">
+          <span id="hidden-count-label"></span>
+          <button id="btn-showall">show all</button>
+        </div>
+        <div class="pane-body">
+          <div id="shapes-list"></div>
+        </div>
+        <div id="shapes-total"></div>
+      </div>
     </div>
 
     <div id="canvas-wrap">
@@ -1005,22 +1008,6 @@
       </div>
     </div>
 
-    <!-- ========== PANEL REVEAL STRIP ========== -->
-    <div id="panel-reveal" title="Show shapes panel">&#187;</div>
-
-    <!-- ========== SHAPES PANEL ========== -->
-    <div id="shapes-panel">
-      <div id="shapes-header">
-        <span>Shapes</span>
-        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&laquo;</button>
-      </div>
-      <div id="hidden-notice">
-        <span id="hidden-count-label"></span>
-        <button id="btn-showall">show all</button>
-      </div>
-      <div id="shapes-list"></div>
-      <div id="shapes-total"></div>
-    </div>
   </div>
 
   <!-- ========== STATUS BAR ========== -->
@@ -1037,9 +1024,13 @@
 
 <input type="file" id="file-input" accept="image/*,.pdf,.arcalc" multiple style="display:none">
 
-<div id="export-menu">
-  <button data-export="csv">Measurements (CSV)</button>
-  <button data-export="json">Measurements (JSON)</button>
+<div id="file-menu" class="dropdown-menu">
+  <button id="btn-new">New Project</button>
+  <button id="btn-open">Open&hellip;</button>
+  <button id="btn-export-project">Save Project (.arcalc)</button>
+  <div class="menu-sep"></div>
+  <button id="btn-export-csv">Export Measurements (CSV)</button>
+  <button id="btn-export-json">Export Measurements (JSON)</button>
 </div>
 
 <div id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="sc-title">

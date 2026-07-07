@@ -27,8 +27,14 @@ async function downloadText(page, trigger) {
   return { name: download.suggestedFilename(), text: readFileSync(path, 'utf-8') };
 }
 
+async function fileMenuDownload(page, itemId) {
+  await page.locator('#btn-file-menu').click();
+  await expect(page.locator('#file-menu')).toBeVisible();
+  return downloadText(page, () => page.locator(itemId).click());
+}
+
 test('saved .arcalc is a self-describing HTML file', async ({ page }) => {
-  const { name, text } = await downloadText(page, () => page.locator('#btn-export-project').click());
+  const { name, text } = await fileMenuDownload(page, '#btn-export-project');
 
   expect(name).toMatch(/\.arcalc$/);
   expect(text.startsWith('<!DOCTYPE html>')).toBe(true);
@@ -37,7 +43,7 @@ test('saved .arcalc is a self-describing HTML file', async ({ page }) => {
 });
 
 test('.arcalc round-trip restores shapes', async ({ page }) => {
-  const { text } = await downloadText(page, () => page.locator('#btn-export-project').click());
+  const { text } = await fileMenuDownload(page, '#btn-export-project');
 
   // Fresh session: beforeunload flushes a save, so clear storage from an
   // init script that runs before the app boots on the reloaded page
@@ -82,12 +88,8 @@ test('legacy plain-JSON .arcalc still imports', async ({ page }) => {
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(1);
 });
 
-test('Export menu offers CSV with header and data rows', async ({ page }) => {
-  await page.locator('#btn-export-measurements').click();
-  await expect(page.locator('#export-menu')).toBeVisible();
-
-  const { name, text } = await downloadText(page,
-    () => page.locator('#export-menu button[data-export="csv"]').click());
+test('File menu offers CSV with header and data rows', async ({ page }) => {
+  const { name, text } = await fileMenuDownload(page, '#btn-export-csv');
 
   expect(name).toMatch(/\.csv$/);
   const lines = text.replace(/^﻿/, '').trim().split('\r\n');
@@ -96,10 +98,8 @@ test('Export menu offers CSV with header and data rows', async ({ page }) => {
   expect(lines[1]).toContain('polygon');
 });
 
-test('Export menu JSON contains named measurements', async ({ page }) => {
-  await page.locator('#btn-export-measurements').click();
-  const { text } = await downloadText(page,
-    () => page.locator('#export-menu button[data-export="json"]').click());
+test('File menu JSON contains named measurements', async ({ page }) => {
+  const { text } = await fileMenuDownload(page, '#btn-export-json');
 
   const data = JSON.parse(text);
   expect(data.source).toBe('AreaImageCalc');

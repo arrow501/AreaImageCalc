@@ -1154,9 +1154,6 @@ function doNewProject() {
   S.tabs.length = 0;
   S.currentTabIdx = -1;
   switchToTab(createTab('Untitled', null, null));
-  $('#sidebar').addClass('collapsed');
-  $('#btn-toggle-docs').removeClass('active');
-  emit(EVT.LAYOUT_CHANGE);
   scheduleSave();
 }
 
@@ -1228,25 +1225,20 @@ $('#btn-fit').on('click', function() {
   if (S.img) fitView();
 });
 
-// ---- Panel Toggles (shared logic) ----
+// ---- Sidebar toggle + pane collapse ----
 
-function toggleShapesPanel() {
-  const $p = $('#shapes-panel');
-  $p.toggleClass('collapsed');
-  const col = $p.hasClass('collapsed');
-  $('#panel-reveal').css('width', col ? '14px' : '0');
-  $('#btn-toggle-panel').html(col ? '&#187;' : '&#171;');
-  setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
-}
-
-$('#btn-toggle-panel').on('click', toggleShapesPanel);
-$('#panel-reveal').on('click', toggleShapesPanel);
-
-$('#btn-toggle-docs').on('click', function() {
+$('#btn-toggle-sidebar').on('click', function() {
   const $p = $('#sidebar');
   $p.toggleClass('collapsed');
   $(this).toggleClass('active', !$p.hasClass('collapsed'));
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
+});
+
+$('.pane-header').on('click', function(e) {
+  if ($(e.target).closest('#btn-new-doc').length) return;
+  const $pane = $(this).closest('.pane');
+  $pane.toggleClass('collapsed');
+  $(this).find('.pane-caret').html($pane.hasClass('collapsed') ? '&#9656;' : '&#9662;');
 });
 
 // ---- Scale Popup ----
@@ -1440,28 +1432,36 @@ $('#page-next').on('click', function() { navPage(1); });
 
 // ---- Export Buttons ----
 
-$('#btn-export-project').on('click', function() {
-  exportProject();
-});
+// ---- File menu ----
 
-$('#btn-export-measurements').on('click', function(e) {
+$('#btn-file-menu').on('click', function(e) {
   e.stopPropagation();
-  const $m = $('#export-menu');
+  const $m = $('#file-menu');
   if ($m.is(':visible')) { $m.hide(); return; }
   const r = this.getBoundingClientRect();
   $m.css({ left: r.left + 'px', top: (r.bottom + 4) + 'px' }).show();
 });
 
-$('#export-menu button').on('click', function() {
-  $('#export-menu').hide();
-  if ($(this).data('export') === 'csv') exportMeasurementsCsv();
-  else exportMeasurements();
+$('#file-menu').on('click', 'button', function() {
+  $('#file-menu').hide();
 });
 
 $(document).on('click', function(e) {
-  if (!$(e.target).closest('#export-menu, #btn-export-measurements').length) {
-    $('#export-menu').hide();
+  if (!$(e.target).closest('#file-menu, #btn-file-menu').length) {
+    $('#file-menu').hide();
   }
+});
+
+$('#btn-export-project').on('click', function() {
+  exportProject();
+});
+
+$('#btn-export-csv').on('click', function() {
+  exportMeasurementsCsv();
+});
+
+$('#btn-export-json').on('click', function() {
+  exportMeasurements();
 });
 
 // ---- Rotate Buttons ----
