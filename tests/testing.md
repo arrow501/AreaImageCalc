@@ -32,7 +32,8 @@ Runs in Node.js — no browser, no DOM, no mocks needed.
 | `constants.test.js` | `js/constants.js` | palette validity, save-version ordering (legacy < compat < current), storage limits |
 | `handles.test.js` | `js/handles.js` | grab-ring layout: no displacement when apart, collision push-apart, control point never exits its ring, deterministic coincident separation, hit-testing against displaced ring centres |
 | `arcalcFormat.test.js` | `js/arcalcFormat.js` | HTML polyglot structure, `<`-escaping, round-trips (incl. hostile strings), legacy JSON + BOM acceptance, rejection of unrelated/truncated files |
-| `csv.test.js` | `js/csv.js` | escaping, number formatting, scaled/unscaled rows, segment and note rows, CRLF |
+| `csv.test.js` | `js/csv.js` | escaping, number formatting, scaled/unscaled rows, segment and note rows, group column, CRLF |
+| `color.test.js` | `js/color.js` | hex expansion/normalisation, rgb()/rgba() forms, named colors, rejection of garbage |
 
 ### Adding unit tests
 
@@ -72,10 +73,11 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chrome npm run test:e2e
 
 | File | Covers |
 |------|--------|
-| `smoke.spec.js` | App boot without errors, initial UI state, image load enables tools, polygon draw + area, delete, document sidebar add/close, tool hotkeys, zoom keys, backup-key recovery, visibilitychange save flush |
-| `interactions.spec.js` | Sticky tools, Backspace point removal, right-click path finish, undo/redo (add, delete, clear), scale-endpoint drag in edit mode, double-click scale re-calibration, freehand trace |
-| `export.spec.js` | .arcalc is self-describing HTML, .arcalc round-trip, legacy JSON import, CSV export content, JSON export content |
+| `smoke.spec.js` | App boot without errors, initial UI state, image load enables tools, polygon draw + area, delete, sidebar add/close/toggle, pane collapse, tool hotkeys, zoom keys, backup-key recovery, visibilitychange save flush |
+| `interactions.spec.js` | Sticky tools, Backspace point removal, right-click path finish, undo/redo (add, delete, clear), transform undo restores exact coordinates, scale-endpoint drag in edit mode, double-click scale re-calibration, freehand trace |
+| `export.spec.js` | .arcalc is self-describing HTML, .arcalc round-trip, legacy JSON import, File-menu CSV export content, JSON export content |
 | `notes.spec.js` | Note pinning via hotkey, cancel leaves no shape, double-click text editing, note undo |
+| `shapespane.spec.js` | Inline rename, color popover (rgb() input + palette), grouping with subtotal/collapse, drag reorder, move tool, overlap selection cycling |
 
 ### Common patterns
 
