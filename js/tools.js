@@ -478,49 +478,52 @@ export function delShape(id) {
   scheduleSave();
 }
 
-export function selectAt(ip) {
-  let found = null;
+function shapeHit(sh, ip, thr) {
+  if (sh.type === 'note') {
+    return Math.hypot(ip.x - sh.points[0].x, ip.y - sh.points[0].y) <= thr;
+  }
+  if (sh.closed && pip(ip, sh.points)) return true;
+  const pts = sh.points;
+  const edgeCount = sh.closed ? pts.length : pts.length - 1;
+  for (let j = 0; j < edgeCount; j++) {
+    const k = sh.closed ? (j + 1) % pts.length : j + 1;
+    if (distSeg(ip, pts[j], pts[k]) <= thr) return true;
+  }
+  return false;
+}
 
+// All visible shapes under an image-space point, top-most first.
+export function hitsAt(ip) {
+  const thr = 15 / (S.view.zoom * S.view.fit);
+  const hits = [];
   for (let i = S.shapes.length - 1; i >= 0; i--) {
     const sh = S.shapes[i];
     if (sh.hidden) continue;
-    if (sh.closed && pip(ip, sh.points)) {
-      found = sh.id;
-      break;
-    }
+    if (shapeHit(sh, ip, thr)) hits.push(sh.id);
   }
+  return hits;
+}
 
-  if (!found) {
-    let best = Infinity;
-    const thr = 15 / (S.view.zoom * S.view.fit);
+function statusForShape(sh, suffix) {
+  if (sh.type === 'segment') {
+    status('Length: ' + fmtLen(sh.length) + suffix);
+  } else if (sh.type === 'note') {
+    status('Note: ' + (sh.text || '') + suffix);
+  } else if (sh.area != null) {
+    status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter) + suffix);
+  } else {
+    status(suffix ? suffix.replace(/^ — /, '') : '');
+  }
+}
 
-    for (let i = 0; i < S.shapes.length; i++) {
-      const sh = S.shapes[i];
-      if (sh.hidden) continue;
-
-      if (sh.type === 'note') {
-        const d = Math.hypot(ip.x - sh.points[0].x, ip.y - sh.points[0].y);
-        if (d < best) {
-          best = d;
-          found = sh.id;
-        }
-        continue;
-      }
-
-      const pts = sh.points;
-      const edgeCount = sh.closed ? pts.length : pts.length - 1;
-
-      for (let j = 0; j < edgeCount; j++) {
-        const k = sh.closed ? (j + 1) % pts.length : j + 1;
-        const d = distSeg(ip, pts[j], pts[k]);
-        if (d < best) {
-          best = d;
-          found = sh.id;
-        }
-      }
-    }
-
-    if (best > thr) found = null;
+// Repeated clicks on overlapping measurements cycle through the stack; the
+// selected shape renders on top.
+export function selectAt(ip) {
+  const hits = hitsAt(ip);
+  let found = null;
+  if (hits.length) {
+    const cur = hits.indexOf(S.selId);
+    found = cur >= 0 ? hits[(cur + 1) % hits.length] : hits[0];
   }
 
   S.selId = found;
@@ -530,17 +533,23 @@ export function selectAt(ip) {
   if (found) {
     const sh = findShape(found);
     if (sh) {
-      if (sh.type === 'segment') {
-        status('Length: ' + fmtLen(sh.length));
-      } else if (sh.type === 'note') {
-        status('Note: ' + (sh.text || ''));
-      } else if (sh.area != null) {
-        status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
-      }
+      const suffix = hits.length > 1
+        ? ' — ' + (hits.indexOf(found) + 1) + '/' + hits.length + ', click again to cycle'
+        : '';
+      statusForShape(sh, suffix);
     }
   } else {
     status('Select a tool or click a shape');
   }
+}
+
+// ---- Move Tool ----
+
+export function translateShape(sh, dx, dy) {
+  for (let i = 0; i < sh.points.length; i++) {
+    sh.points[i] = { x: sh.points[i].x + dx, y: sh.points[i].y + dy };
+  }
+  sh._centroid = null;
 }
 
 // ---- Image Rotation ----

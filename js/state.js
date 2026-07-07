@@ -47,6 +47,10 @@ export const S = {
   dragScaleIdx: -1,
   dragScaleReal: 0,
 
+  // Move tool drag state
+  moveShape: null,
+  moveLast: null,
+
   // Rendering flags
   imageDirty: true,
   overlayDirty: true,

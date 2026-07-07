@@ -109,13 +109,14 @@ export function hasWork() {
 
 // Grab indicator: a weighted ring (dark under-stroke + light stroke). When
 // the ring centre was displaced by collision, a faint leader ties it back to
-// its control point.
+// its control point. The active ring also highlights its control point so
+// it is unambiguous which point the ring grabs.
 export function drawGrabRing(ctx, h, active, ringR) {
   if (Math.hypot(h.rx - h.x, h.ry - h.y) > 0.5) {
     ctx.beginPath();
     ctx.moveTo(h.rx, h.ry);
     ctx.lineTo(h.x, h.y);
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.strokeStyle = active ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -129,6 +130,13 @@ export function drawGrabRing(ctx, h, active, ringR) {
   ctx.strokeStyle = active ? '#fff' : 'rgba(255,255,255,0.55)';
   ctx.lineWidth = active ? 1.8 : 1.2;
   ctx.stroke();
+  if (active) {
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+  }
 }
 
 export function dot(ctx, x, y, r, c) {

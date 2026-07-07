@@ -118,6 +118,8 @@ export function applyTabToState(idx) {
   S.touchIsPan = false;
   S.dragScaleIdx = -1;
   S.dragScaleReal = 0;
+  S.moveShape = null;
+  S.moveLast = null;
 
   S.imageDirty = S.overlayDirty = true;
 }

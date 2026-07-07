@@ -18,6 +18,8 @@ export function cancelTool() {
   S.dragIdx = -1;
   S.dragScaleIdx = -1;
   S.dragScaleReal = 0;
+  S.moveShape = null;
+  S.moveLast = null;
   S.touchId = null;
   S.touchIsPan = false;
   S.labelShapeId = null;
@@ -45,7 +47,7 @@ export function setTool(t) {
   if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal' || t === 'segment' || t === 'note') {
     $('body').addClass('cursor-crosshair');
   }
-  if (t === 'edit') {
+  if (t === 'edit' || t === 'move') {
     $('body').addClass('cursor-move');
   }
 
@@ -67,6 +69,9 @@ export function setTool(t) {
       break;
     case 'edit':
       status('Drag control points to adjust shapes and the scale line. ESC to exit.');
+      break;
+    case 'move':
+      status('Drag a shape to move it. Arrow keys nudge the selected shape (Shift = 10x). ESC to exit.');
       break;
     case 'label':
       status('Click a shape to rename it, or a note to edit its text.');
@@ -91,7 +96,7 @@ export function status(t) {
 // ---- Toolbar State ----
 
 export function enableTools(on) {
-  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
+  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-move, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 

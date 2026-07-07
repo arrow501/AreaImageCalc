@@ -162,17 +162,38 @@ function drawShapes(ctx, inv) {
     if (S.scaleP2) dot(ctx, S.scaleP2.x, S.scaleP2.y, 4 * inv, '#4A9EFF');
   }
 
-  // Shapes (closed polygons + open segments)
+  // Shapes (closed polygons + open segments); the selected shape draws last
+  // so it sits on top of overlapping measurements
+  let selShape = null;
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
     if (sh.hidden) continue;
-    const sel = sh.id === S.selId;
+    if (sh.id === S.selId) { selShape = sh; continue; }
     if (sh.type === 'segment') {
-      _drawSegment(ctx, sh, sel, inv);
+      _drawSegment(ctx, sh, false, inv);
     } else {
-      _drawClosedShape(ctx, sh, sel, inv);
+      _drawClosedShape(ctx, sh, false, inv);
     }
   }
+  if (selShape) {
+    if (selShape.type === 'segment') {
+      _drawSegment(ctx, selShape, true, inv);
+    } else {
+      _drawClosedShape(ctx, selShape, true, inv);
+    }
+  }
+}
+
+// Iteration order that gives the selected shape first claim on label space
+function labelOrder() {
+  if (!S.selId) return S.shapes;
+  const rest = [];
+  let sel = null;
+  for (let i = 0; i < S.shapes.length; i++) {
+    if (S.shapes[i].id === S.selId) sel = S.shapes[i];
+    else rest.push(S.shapes[i]);
+  }
+  return sel ? [sel].concat(rest) : S.shapes;
 }
 
 function drawActiveTool(ctx, inv) {
@@ -372,8 +393,9 @@ function drawActivePolySideLabels(ctx) {
 
 function drawNotes(ctx, boxes) {
   ctx.font = FONT_RUN;
-  for (let si = 0; si < S.shapes.length; si++) {
-    const sh = S.shapes[si];
+  const order = labelOrder();
+  for (let si = 0; si < order.length; si++) {
+    const sh = order[si];
     if (sh.hidden || sh.type !== 'note') continue;
 
     const sel = sh.id === S.selId;
@@ -424,8 +446,9 @@ function drawNotes(ctx, boxes) {
 function drawAreaLabels(ctx, boxes) {
   const zoomFont = areaFont(S.view.zoom);
   ctx.font = zoomFont;
-  for (let si = 0; si < S.shapes.length; si++) {
-    const sh = S.shapes[si];
+  const order = labelOrder();
+  for (let si = 0; si < order.length; si++) {
+    const sh = order[si];
     if (sh.hidden || sh.type === 'note') continue;
 
     if (sh.type === 'segment') {

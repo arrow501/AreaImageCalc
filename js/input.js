@@ -2,7 +2,7 @@ import { S, worker, oCvs } from './state.js';
 import { s2i, i2s, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip, hitHandle } from './geometry.js';
 import { resize, refreshCanvasRect } from './render.js';
 import {
-  closePoly, closeSegment, finishFH, delShape, selectAt,
+  closePoly, closeSegment, finishFH, delShape, selectAt, hitsAt, translateShape,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
   rotateImage, renameShape, hideShape, showAllShapes,
   showLabelPopup, confirmLabel, beginNoteAt
@@ -165,6 +165,10 @@ $(oCvs).on('mousedown', function(e) {
       break;
     }
 
+    case 'move':
+      startMoveDrag(ip);
+      break;
+
     case 'note':
       beginNoteAt(ip);
       break;
@@ -258,6 +262,11 @@ $(document).on('mousemove', function(e) {
     return;
   }
 
+  if (S.moveShape) {
+    dragMoveShape();
+    return;
+  }
+
   if (S.dragPt && S.dragShape) {
     S.dragPt.x = S.mix;
     S.dragPt.y = S.miy;
@@ -270,6 +279,9 @@ $(document).on('mousemove', function(e) {
     oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
     S.overlayDirty = true;
   }
+  if (S.tool === 'move') {
+    oCvs.style.cursor = hitsAt({ x: S.mix, y: S.miy }).length ? 'grab' : '';
+  }
   if (S.tool === 'scale' && S.scaleState === 2) {
     oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
     S.overlayDirty = true;
@@ -279,6 +291,62 @@ $(document).on('mousemove', function(e) {
   if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
 });
+
+function startMoveDrag(ip) {
+  const hits = hitsAt(ip);
+  if (!hits.length) {
+    S.selId = null;
+    updatePanel();
+    S.overlayDirty = true;
+    return;
+  }
+  const id = hits.indexOf(S.selId) >= 0 ? S.selId : hits[0];
+  const sh = findShape(id);
+  if (!sh) return;
+  recordHistory();
+  S.selId = id;
+  S.moveShape = sh;
+  S.moveLast = { x: ip.x, y: ip.y };
+  oCvs.style.cursor = 'grabbing';
+  updatePanel();
+  S.overlayDirty = true;
+}
+
+function dragMoveShape() {
+  const dx = S.mix - S.moveLast.x;
+  const dy = S.miy - S.moveLast.y;
+  if (dx || dy) {
+    translateShape(S.moveShape, dx, dy);
+    S.moveLast = { x: S.mix, y: S.miy };
+    S.overlayDirty = true;
+  }
+}
+
+function endMoveDrag() {
+  S.moveShape = null;
+  S.moveLast = null;
+  oCvs.style.cursor = '';
+  S.overlayDirty = true;
+  status('Shape moved — Ctrl+Z to undo.');
+  scheduleSave();
+}
+
+// Arrow-key nudging records one history entry per burst, not per keypress
+let _lastNudgeTs = 0;
+
+function nudgeSelected(key, big) {
+  const sh = findShape(S.selId);
+  if (!sh) return;
+  const step = (big ? 10 : 1) / (S.view.zoom * S.view.fit);
+  const dx = key === 'ArrowLeft' ? -step : key === 'ArrowRight' ? step : 0;
+  const dy = key === 'ArrowUp' ? -step : key === 'ArrowDown' ? step : 0;
+  const now = Date.now();
+  if (now - _lastNudgeTs > 1000) recordHistory();
+  _lastNudgeTs = now;
+  translateShape(sh, dx, dy);
+  S.overlayDirty = true;
+  scheduleSave();
+}
 
 // Freehand sampling: fixed screen-space step, so trace detail follows what
 // the user actually sees regardless of zoom or pointer speed.
@@ -342,6 +410,11 @@ $(document).on('mouseup', function(e) {
       status('Scale line adjusted.');
       scheduleSave();
     }
+    return;
+  }
+
+  if (S.moveShape) {
+    endMoveDrag();
     return;
   }
 
@@ -446,6 +519,11 @@ oCvs.addEventListener('touchstart', function(e) {
     if (S.dragScaleIdx >= 0) {
       S.dragScaleIdx = -1;
       S.dragScaleReal = 0;
+      S.overlayDirty = true;
+    }
+    if (S.moveShape) {
+      S.moveShape = null;
+      S.moveLast = null;
       S.overlayDirty = true;
     }
     S.touchId = null;
@@ -561,6 +639,10 @@ oCvs.addEventListener('touchstart', function(e) {
       break;
     }
 
+    case 'move':
+      startMoveDrag(ip);
+      break;
+
     case 'note':
       beginNoteAt(ip);
       break;
@@ -628,6 +710,11 @@ oCvs.addEventListener('touchmove', function(e) {
     return;
   }
 
+  if (S.moveShape) {
+    dragMoveShape();
+    return;
+  }
+
   if (S.dragPt && S.dragShape) {
     S.dragPt.x = S.mix;
     S.dragPt.y = S.miy;
@@ -676,6 +763,11 @@ function touchEnd(e) {
       status('Scale line adjusted.');
       scheduleSave();
     }
+    return;
+  }
+
+  if (S.moveShape) {
+    endMoveDrag();
     return;
   }
 
@@ -811,6 +903,20 @@ $(document).on('keydown', function(e) {
     case 'n':
     case 'N':
       if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'note' ? 'idle' : 'note');
+      break;
+    case 'm':
+    case 'M':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'move' ? 'idle' : 'move');
+      break;
+
+    case 'ArrowLeft':
+    case 'ArrowRight':
+    case 'ArrowUp':
+    case 'ArrowDown':
+      if (S.tool === 'move' && S.selId) {
+        nudgeSelected(e.key, e.shiftKey);
+        e.preventDefault();
+      }
       break;
     case 'h':
     case 'H':
