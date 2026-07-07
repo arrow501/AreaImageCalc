@@ -7,14 +7,14 @@ A browser-based tool for measuring areas and distances on images. Load any image
 ## Features
 
 - **Image loading**: drag & drop, paste from clipboard, or file picker — JPEG, PNG, GIF, WebP; multiple files at once
-- **Integrated sidebar**: Documents and Shapes live in one left sidebar as collapsible panes; multi-page PDFs group their pages under one expandable node; file actions sit in a compact File menu
+- **Integrated sidebar**: Documents and Shapes live in one sidebar as collapsible panes with a draggable height splitter; dock it left or right (File menu, persisted); multi-page PDFs group their pages under one expandable node; file actions sit in a compact File menu
 - **Shape organisation**: drag rows to reorder (z-order follows), group shapes with subtotals and collapse, rename inline with a double-click, and recolor via a palette or free-text input (hex, rgb(), names)
 - **Move tool**: drag a whole shape to reposition it (handy for comparing outlines); arrow keys nudge
 - **Selection cycling**: repeated clicks on overlapping measurements cycle through the stack; the selected shape renders on top
 - **PDF support**: thumbnail picker to choose pages (click, All/None, or type a range); pages render lazily at 150 DPI; PageUp/PageDown and a statusbar pager navigate within a document
 - **Project save / load**: `.arcalc` files are self-describing HTML — the recipient can double-click one to see what it is and where to open it; all tabs, WebP-compressed images, shapes, notes, and scale round-trip
 - **Measurements export**: CSV (spreadsheet-ready) or JSON, with calibrated values when a scale is set
-- **Scale calibration**: click two points of known distance (mm, cm, m, in, ft, yd); endpoints stay adjustable — drag them in Edit mode (the entered distance is kept) or double-click the scale line to re-calibrate
+- **Scale calibration**: click two points of known distance (mm, cm, m, in, ft, yd); endpoints stay adjustable — drag them in Edit mode (the entered distance is kept) or double-click the scale line to re-calibrate. Alternatively, calibrate from a shape of known area via the shape menu
 - **Drawing tools**: polygon, freehand tracing with live fill preview, and open-path distance measurement — tools stay active so you can measure repeatedly; Esc exits
 - **Undo / redo**: per-document history for adding, deleting, moving, renaming, regrouping, recoloring, and clearing shapes and scale changes (`Ctrl+Z` / `Ctrl+Shift+Z`); the most recent image transform (rotate / perspective) is also undoable via a snapshot slot in localStorage
 - **Notes**: pin text annotations anywhere on the image; they export with measurements
@@ -101,6 +101,8 @@ A browser-based tool for measuring areas and distances on images. Load any image
 4. All measurements update immediately to calibrated units
 
 To correct later: drag an endpoint in **Edit** mode (the entered distance is kept and pixels-per-unit recalculates), or double-click the line to re-enter the value.
+
+**Scale by area**: draw a closed shape around a region of known real-world area, open its shape menu (⋮ in the Shapes pane) → **Set scale from area…**, and enter the area. Pixels-per-unit derives from `sqrt(px_area / real_area)`.
 
 Supported units: `mm` `cm` `m` `in` `ft` `yd`
 

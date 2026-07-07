@@ -6,7 +6,7 @@ import {
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
   rotateImage, renameShape, hideShape, showAllShapes,
   showLabelPopup, confirmLabel, beginNoteAt,
-  setShapeColor, setShapeGroup, existingGroups, reorderShape
+  setShapeColor, setShapeGroup, existingGroups, reorderShape, setScaleFromArea
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, updatePanelSelection, status, updateFilters, updateScaleDisp,
@@ -1239,7 +1239,80 @@ $('.pane-header').on('click', function(e) {
   if ($(e.target).closest('#btn-new-doc').length) return;
   const $pane = $(this).closest('.pane');
   $pane.toggleClass('collapsed');
+  // A splitter-dragged inline height would defeat the collapse — park it
+  if ($pane.hasClass('collapsed')) {
+    $pane.data('splitH', $pane[0].style.height);
+    $pane.css('height', '');
+  } else if ($pane.data('splitH')) {
+    $pane.css('height', $pane.data('splitH'));
+  }
   $(this).find('.pane-caret').html($pane.hasClass('collapsed') ? '&#9656;' : '&#9662;');
+});
+
+// ---- Pane splitter: drag to resize Documents vs Shapes ----
+
+(function initPaneSplitter() {
+  const $splitter = $('#pane-splitter');
+  let dragging = false;
+  let startY = 0;
+  let startH = 0;
+
+  function startDrag(clientY) {
+    dragging = true;
+    startY = clientY;
+    startH = $('#pane-docs').outerHeight();
+    $splitter.addClass('dragging');
+    $('body').css('cursor', 'ns-resize');
+  }
+
+  function moveDrag(clientY) {
+    if (!dragging) return;
+    const max = $('#sidebar').height() - 120;
+    const h = Math.max(36, Math.min(max, startH + (clientY - startY)));
+    $('#pane-docs').css({ height: h + 'px', maxHeight: 'none', flex: '0 0 auto' });
+  }
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    $splitter.removeClass('dragging');
+    $('body').css('cursor', '');
+  }
+
+  $splitter.on('mousedown', function(e) {
+    e.preventDefault();
+    startDrag(e.clientY);
+  });
+  $(document).on('mousemove', function(e) { moveDrag(e.clientY); });
+  $(document).on('mouseup', endDrag);
+
+  $splitter.on('touchstart', function(e) {
+    e.preventDefault();
+    startDrag(e.originalEvent.touches[0].clientY);
+  });
+  $(document).on('touchmove', function(e) {
+    if (dragging) moveDrag(e.originalEvent.touches[0].clientY);
+  });
+  $(document).on('touchend touchcancel', endDrag);
+})();
+
+// ---- Panel side (left/right dock), persisted ----
+
+const PANEL_SIDE_KEY = 'areaCalcPanelSide';
+
+function applyPanelSide(side) {
+  $('#main').toggleClass('sidebar-right', side === 'right');
+  $('#btn-dock-side').text(side === 'right' ? 'Move Panel to Left' : 'Move Panel to Right');
+}
+
+applyPanelSide(localStorage.getItem(PANEL_SIDE_KEY) === 'right' ? 'right' : 'left');
+
+$('#btn-dock-side').on('click', function() {
+  const side = $('#main').hasClass('sidebar-right') ? 'left' : 'right';
+  try { localStorage.setItem(PANEL_SIDE_KEY, side); } catch (e) { /* preference only */ }
+  applyPanelSide(side);
+  resize();
+  if (S.img) fitView();
 });
 
 // ---- Scale Popup ----
@@ -1354,7 +1427,7 @@ function positionPopover($m, el) {
 }
 
 function closePopovers() {
-  $('#shape-menu, #color-popover, #group-popover').hide();
+  $('#shape-menu, #color-popover, #group-popover, #areascale-popover').hide();
 }
 
 function openColorPopover(id, anchor) {
@@ -1424,6 +1497,42 @@ $('#group-input').on('keydown', function(e) {
   e.stopPropagation();
 });
 
+// ---- Shapes panel: scale-from-area popover ----
+
+let _areaScaleShapeId = null;
+
+function openAreaScalePopover(id, anchor) {
+  closePopovers();
+  _areaScaleShapeId = id;
+  $('#areascale-input').val('');
+  $('#areascale-unit').val(S.scaleUnit || 'cm');
+  positionPopover($('#areascale-popover'), anchor);
+  $('#areascale-input').focus();
+}
+
+function applyAreaScale() {
+  const val = parseFloat($('#areascale-input').val());
+  if (_areaScaleShapeId && val > 0) {
+    if (setScaleFromArea(_areaScaleShapeId, val, $('#areascale-unit').val())) {
+      $('#areascale-popover').hide();
+      _areaScaleShapeId = null;
+    }
+  } else {
+    status('Enter a valid area > 0');
+  }
+}
+
+$('#areascale-apply').on('click', function(e) {
+  e.stopPropagation();
+  applyAreaScale();
+});
+
+$('#areascale-input').on('keydown', function(e) {
+  if (e.key === 'Enter') applyAreaScale();
+  if (e.key === 'Escape') { $('#areascale-popover').hide(); _areaScaleShapeId = null; }
+  e.stopPropagation();
+});
+
 // ---- Shapes panel: per-shape menu ----
 
 let _menuShapeId = null;
@@ -1438,6 +1547,9 @@ $('#shapes-list').on('click', '.shape-menu', function(e) {
   const $m = $('#shape-menu').empty();
   $m.append($('<button data-act="rename">').text('Rename'));
   $m.append($('<button data-act="color">').text('Change color…'));
+  if (sh.closed && sh.area != null) {
+    $m.append($('<button data-act="areascale">').text('Set scale from area…'));
+  }
   $m.append($('<div class="menu-sep">'));
   const groups = existingGroups();
   for (let i = 0; i < groups.length; i++) {
@@ -1462,6 +1574,7 @@ $('#shape-menu').on('click', 'button', function(e) {
 
   if (act === 'rename') startInlineRename(id);
   else if (act === 'color') openColorPopover(id, rowAnchor || this);
+  else if (act === 'areascale') openAreaScalePopover(id, rowAnchor || this);
   else if (act === 'group') setShapeGroup(id, $(this).data('group'));
   else if (act === 'newgroup') openGroupPopover(id, rowAnchor || this);
   else if (act === 'ungroup') setShapeGroup(id, null);
@@ -1677,6 +1790,7 @@ $(document).on('click', function(e) {
   if (!$t.closest('#shape-menu, .shape-menu').length) $('#shape-menu').hide();
   if (!$t.closest('#color-popover, .shape-swatch').length) $('#color-popover').hide();
   if (!$t.closest('#group-popover').length) $('#group-popover').hide();
+  if (!$t.closest('#areascale-popover').length) $('#areascale-popover').hide();
 });
 
 $('#btn-export-project').on('click', function() {

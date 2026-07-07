@@ -77,7 +77,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chrome npm run test:e2e
 | `interactions.spec.js` | Sticky tools, Backspace point removal, right-click path finish, undo/redo (add, delete, clear), transform undo restores exact coordinates, scale-endpoint drag in edit mode, double-click scale re-calibration, freehand trace |
 | `export.spec.js` | .arcalc is self-describing HTML, .arcalc round-trip, legacy JSON import, File-menu CSV export content, JSON export content |
 | `notes.spec.js` | Note pinning via hotkey, cancel leaves no shape, double-click text editing, note undo |
-| `shapespane.spec.js` | Inline rename, color popover (rgb() input + palette), grouping with subtotal/collapse, drag reorder, move tool, overlap selection cycling |
+| `shapespane.spec.js` | Inline rename, color popover (rgb() input + palette), grouping with subtotal/collapse, drag reorder, move tool, pane splitter resize, dock-right persistence, scale-from-area calibration, overlap selection cycling |
 
 ### Common patterns
 

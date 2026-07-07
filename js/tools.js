@@ -273,6 +273,30 @@ export function confirmScale() {
   scheduleSave();
 }
 
+// Calibrate scale from a closed shape of known real-world area — the
+// alternative to the two-point known-distance line.
+export function setScaleFromArea(id, realArea, unit) {
+  const sh = findShape(id);
+  if (!sh || !sh.closed || !sh.area || !(realArea > 0)) return false;
+  recordHistory();
+  S.scalePPU = Math.sqrt(sh.area / realArea);
+  S.scaleUnit = unit;
+  S.scaleLine = null; // any previous reference line no longer matches this scale
+  updateScaleDisp();
+  S.overlayDirty = true;
+  updatePanel();
+
+  for (let i = 0; i < S.shapes.length; i++) {
+    if (S.shapes[i].type !== 'segment' && S.shapes[i].closed && S.shapes[i].area == null) {
+      worker.postMessage({ type: 'calcArea', id: S.shapes[i].id, points: S.shapes[i].points, tabIdx: S.currentTabIdx });
+    }
+  }
+
+  status('Scale set from "' + (sh.name || 'shape') + '": ' + realArea + ' ' + unit + '²');
+  scheduleSave();
+  return true;
+}
+
 // ---- Shape Operations ----
 
 export function closePoly() {

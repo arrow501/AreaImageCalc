@@ -112,6 +112,59 @@ test('move tool drags a whole shape without changing its area', async ({ page })
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(2);
 });
 
+test('pane splitter drag resizes the Documents pane', async ({ page }) => {
+  const before = await page.locator('#pane-docs').boundingBox();
+  const splitter = await page.locator('#pane-splitter').boundingBox();
+
+  await page.mouse.move(splitter.x + splitter.width / 2, splitter.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(splitter.x + splitter.width / 2, splitter.y + 82, { steps: 4 });
+  await page.mouse.up();
+
+  const after = await page.locator('#pane-docs').boundingBox();
+  expect(after.height).toBeGreaterThan(before.height + 40);
+});
+
+test('File menu docks the panel to the right and persists', async ({ page }) => {
+  await page.locator('#btn-file-menu').click();
+  await page.locator('#btn-dock-side').click();
+  await expect(page.locator('#main')).toHaveClass(/sidebar-right/);
+
+  const sidebar = await page.locator('#sidebar').boundingBox();
+  const canvas = await page.locator('#canvas-wrap').boundingBox();
+  expect(sidebar.x).toBeGreaterThan(canvas.x);
+
+  await page.reload();
+  await expect(page.locator('#main')).toHaveClass(/sidebar-right/);
+
+  // Toggle back to the left
+  await page.locator('#btn-file-menu').click();
+  await page.locator('#btn-dock-side').click();
+  await expect(page.locator('#main')).not.toHaveClass(/sidebar-right/);
+});
+
+test('scale can be calibrated from a shape of known area', async ({ page }) => {
+  await expect(page.locator('#scale-display')).toContainText('No scale');
+
+  const first = page.locator('#shapes-list .shape-item').first();
+  await first.hover();
+  await first.locator('.shape-menu').click();
+  await page.locator('#shape-menu button[data-act="areascale"]').click();
+
+  await expect(page.locator('#areascale-popover')).toBeVisible();
+  await page.locator('#areascale-input').fill('50');
+  await page.locator('#areascale-unit').selectOption('m');
+  await page.locator('#areascale-apply').click();
+
+  await expect(page.locator('#scale-display')).not.toContainText('No scale');
+  // The calibrating shape must now read exactly its known area
+  await expect(first.locator('.area')).toContainText('50.00 m²');
+
+  // Undoable
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('#scale-display')).toContainText('No scale');
+});
+
 test('clicking overlapping shapes cycles the selection', async ({ page }) => {
   // Draw a third triangle overlapping the first
   await page.keyboard.press('p');

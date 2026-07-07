@@ -548,14 +548,30 @@
       transition: width 0.15s ease;
     }
     #sidebar.collapsed { width: 0; border-right-width: 0; }
+    #main.sidebar-right #sidebar {
+      order: 1;
+      border-right: none;
+      border-left: 1px solid #333;
+    }
+    #main.sidebar-right #sidebar.collapsed { border-left-width: 0; }
     .pane {
       display: flex;
       flex-direction: column;
       min-height: 0;
-      border-bottom: 1px solid #333;
     }
     #pane-docs { flex: 0 1 auto; max-height: 45%; }
-    #pane-shapes { flex: 1 1 auto; border-bottom: none; }
+    #pane-shapes { flex: 1 1 auto; }
+    #pane-splitter {
+      height: 5px;
+      flex-shrink: 0;
+      cursor: ns-resize;
+      background: #333;
+      background-clip: content-box;
+      padding: 2px 0;
+      min-width: 229px;
+    }
+    #pane-splitter:hover, #pane-splitter.dragging { background-color: #FF6B35; }
+    #pane-docs.collapsed + #pane-splitter { display: none; }
     .pane.collapsed { flex: 0 0 auto; max-height: none; }
     .pane.collapsed .pane-body,
     .pane.collapsed #hidden-notice,
@@ -845,6 +861,15 @@
       font-size: 11px;
     }
     .color-row input:focus { outline: none; border-color: #FF6B35; }
+    .color-row select {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px;
+      border-radius: 3px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
     .color-row button {
       background: #FF6B35;
       color: #fff;
@@ -1019,6 +1044,7 @@
           <div id="doc-list"></div>
         </div>
       </div>
+      <div id="pane-splitter" title="Drag to resize panes" aria-label="Drag to resize panes"></div>
       <div class="pane" id="pane-shapes">
         <div class="pane-header" data-pane="shapes">
           <span class="pane-caret">&#9662;</span>
@@ -1134,6 +1160,8 @@
   <div class="menu-sep"></div>
   <button id="btn-export-csv">Export Measurements (CSV)</button>
   <button id="btn-export-json">Export Measurements (JSON)</button>
+  <div class="menu-sep"></div>
+  <button id="btn-dock-side">Move Panel to Right</button>
 </div>
 
 <div id="shape-menu" class="dropdown-menu"></div>
@@ -1151,6 +1179,22 @@
   <div class="color-row">
     <input type="text" id="group-input" placeholder="e.g. Roof" aria-label="Group name">
     <button id="group-apply">Set</button>
+  </div>
+</div>
+
+<div id="areascale-popover" class="dropdown-menu">
+  <label for="areascale-input">Known real area of this shape:</label>
+  <div class="color-row">
+    <input type="number" id="areascale-input" min="0.000001" step="any" placeholder="0.00" aria-label="Known area">
+    <select id="areascale-unit" aria-label="Area unit">
+      <option value="mm">mm&sup2;</option>
+      <option value="cm" selected>cm&sup2;</option>
+      <option value="m">m&sup2;</option>
+      <option value="in">in&sup2;</option>
+      <option value="ft">ft&sup2;</option>
+      <option value="yd">yd&sup2;</option>
+    </select>
+    <button id="areascale-apply">Set</button>
   </div>
 </div>
 
