@@ -1,4 +1,8 @@
-export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_COMPAT, SAVE_VER_LEGACY, TRANSFORM_UNDO_KEY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+
+// Session nonce: scopes the transform-undo slot to this page load so a
+// stale slot can never restore into an unrelated tab of a later session
+export const SESSION = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 // Shared mutable state — every module imports S and reads/writes S.xxx
 export const S = {
@@ -32,11 +36,6 @@ export const S = {
   polyPts: [],
   fhPts: [],
   isFH: false,
-  fhLastTime: 0,
-
-  // Freehand sampling thresholds (image-space px)
-  FH_MIN_DIST: 0,
-  FH_MAX_DIST: 100,
 
   // Pan state
   isPan: false,
@@ -47,6 +46,14 @@ export const S = {
   dragPt: null,
   dragShape: null,
   dragIdx: -1,
+
+  // Scale-line endpoint drag state (edit tool)
+  dragScaleIdx: -1,
+  dragScaleReal: 0,
+
+  // Move tool drag state
+  moveShape: null,
+  moveLast: null,
 
   // Rendering flags
   imageDirty: true,
@@ -92,6 +99,7 @@ export const S = {
   tabs: [],          // array of tab state objects
   currentTabIdx: -1, // index of active tab
   tabN: 0,           // tab ID counter (monotonically increasing)
+  docN: 0,           // document group ID counter (multi-page PDFs)
 
   // Storage UI state
   hardLimitDialogShown: false,
@@ -99,7 +107,10 @@ export const S = {
   saveErrored: false,
 
   // Label tool state
-  labelShapeId: null
+  labelShapeId: null,
+
+  // Note tool: anchor point awaiting text confirmation
+  pendingNotePt: null
 };
 
 // DOM references (module scripts are deferred, so DOM exists)

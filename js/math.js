@@ -39,6 +39,16 @@ export function segmentLength(pts) {
   return len;
 }
 
+// Uniform scale k <= 1 that fits a w×h raster into a total pixel budget and
+// a max side length. Returns 1 when it already fits.
+export function fitScale(w, h, maxPixels, maxSide) {
+  let k = 1;
+  if (w * h > maxPixels) k = Math.sqrt(maxPixels / (w * h));
+  if (w * k > maxSide) k = maxSide / w;
+  if (h * k > maxSide) k = maxSide / h;
+  return Math.min(1, k);
+}
+
 // Nearest hit-testable point across a set of shapes. Returns { shape, idx, dist }
 // or null if none within `thr`. A shape is hit-testable if it is closed or a
 // segment; hidden shapes are skipped.

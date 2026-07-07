@@ -4,6 +4,7 @@ export const EVT = {
   TAB_SWITCH:     'tab:switch',
   TAB_RENDER_PDF: 'tab:renderPdf',
   SQCAL_CANCEL:   'squarecal:cancel',
+  LAYOUT_CHANGE:  'layout:change',
 };
 
 const $doc = $(document);

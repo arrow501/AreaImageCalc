@@ -201,35 +201,53 @@ test('deleting a shape removes it from the panel', async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Tab operations
+// 6. Document sidebar operations
 // ---------------------------------------------------------------------------
-test('new-tab button creates a second tab', async ({ page }) => {
+test('new-document button adds an entry to the sidebar', async ({ page }) => {
   await page.goto('/');
   await loadTestImage(page);
 
-  // Tab bar starts collapsed; expand it before clicking the new-tab button.
-  await page.locator('#btn-toggle-tabs').click();
-  await expect(page.locator('#tab-bar')).not.toHaveClass(/collapsed/);
+  // Sidebar is visible by default
+  await expect(page.locator('#sidebar')).not.toHaveClass(/collapsed/);
 
-  const before = await page.locator('.tab-item').count();
-  await page.locator('#btn-new-tab').click();
-  await expect(page.locator('.tab-item')).toHaveCount(before + 1);
+  const before = await page.locator('.doc-item').count();
+  await page.locator('#btn-new-doc').click();
+  await expect(page.locator('.doc-item')).toHaveCount(before + 1);
 });
 
-test('closing a tab removes it from the tab bar', async ({ page }) => {
+test('closing a document removes it from the sidebar', async ({ page }) => {
   await page.goto('/');
   await loadTestImage(page);
 
-  // Tab bar starts collapsed; expand it before interacting.
-  await page.locator('#btn-toggle-tabs').click();
-  await expect(page.locator('#tab-bar')).not.toHaveClass(/collapsed/);
+  await page.locator('#btn-new-doc').click();
+  const before = await page.locator('.doc-item').count();
 
-  await page.locator('#btn-new-tab').click();
-  const before = await page.locator('.tab-item').count();
+  // Close the newly created document (close button appears on hover)
+  const lastRow = page.locator('.doc-item').last().locator('.doc-row');
+  await lastRow.hover();
+  await lastRow.locator('.doc-close').click();
+  await expect(page.locator('.doc-item')).toHaveCount(before - 1);
+});
 
-  // Close the newly created tab (last one)
-  await page.locator('.tab-item').last().locator('.tab-close').click();
-  await expect(page.locator('.tab-item')).toHaveCount(before - 1);
+test('sidebar toggle collapses and restores the panel', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page);
+
+  await page.locator('#btn-toggle-sidebar').click();
+  await expect(page.locator('#sidebar')).toHaveClass(/collapsed/);
+  await page.locator('#btn-toggle-sidebar').click();
+  await expect(page.locator('#sidebar')).not.toHaveClass(/collapsed/);
+});
+
+test('pane headers collapse their sections', async ({ page }) => {
+  await page.goto('/');
+  await loadTestImage(page);
+
+  await expect(page.locator('#doc-list')).toBeVisible();
+  await page.locator('#pane-docs .pane-header').click();
+  await expect(page.locator('#doc-list')).toBeHidden();
+  await page.locator('#pane-docs .pane-header').click();
+  await expect(page.locator('#doc-list')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

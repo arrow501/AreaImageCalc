@@ -1,10 +1,13 @@
 import { S, worker, imgWorker } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
+import { parseColor } from './color.js';
+import { encodeCanvas } from './canvasUtil.js';
 import { scheduleSave } from './storage.js';
-import { createTab, switchToTab, renderTabBar, getActiveTab } from './tabs.js';
+import { createTab, switchToTab, renderSidebar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
-import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
+import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updatePanelSelection, updateFilters } from './ui.js';
+import { recordHistory, recordTransformHistory, clearHistory } from './history.js';
 import { EVT, emit } from './events.js';
 
 // Routes a worker shape result to either the active tab (shown) or a background
@@ -138,7 +141,6 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   S.img = ni;
   S.view.iw = ni.naturalWidth;
   S.view.ih = ni.naturalHeight;
-  S.FH_MIN_DIST = Math.max(1, Math.log2(S.view.iw + S.view.ih) - 8.5);
   S.imgDataUrl = dataUrl;
 
   // Update current tab metadata
@@ -147,6 +149,8 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
     curTab.label = filename || 'Image';
     curTab.img = ni;
     curTab.imgDataUrl = dataUrl;
+    curTab.baseImg = ni;
+    curTab.baseRotation = 0;
   }
 
   fitView();
@@ -157,6 +161,7 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   S.shapeN = 0;
   S.scaleLine = null;
   S.scalePPU = 0;
+  clearHistory(curTab);
 
   updateScaleDisp();
   setTool('idle');
@@ -165,7 +170,7 @@ function _loadIntoCurrentTab(ni, dataUrl, filename) {
   $('#dropzone').css('pointer-events', 'none').find('.dz-content').hide();
   enableTools(true);
   status('Image loaded (' + S.view.iw + '\u00d7' + S.view.ih + '). Pick a tool to begin.');
-  renderTabBar();
+  renderSidebar();
   scheduleSave();
 }
 
@@ -199,14 +204,29 @@ export function setInteract() {
 
 // ---- Scale Popup ----
 
-export function showScalePopup() {
+export function showScalePopup(prefillVal) {
   const mp = i2s((S.scaleP1.x + S.scaleP2.x) / 2, (S.scaleP1.y + S.scaleP2.y) / 2);
   const l = Math.min(Math.max(mp.x + 12, 10), S.cw - 250);
   const t = Math.min(Math.max(mp.y - 30, 10), S.ch - 60);
 
   $('#scale-popup').css({ left: l, top: t }).show();
-  $('#scale-value').val('').focus();
-  status('Enter real-world distance');
+  $('#scale-value').val(prefillVal != null ? prefillVal : '').focus().select();
+  status('Enter real-world distance — drag the endpoints to fine-tune');
+}
+
+// Re-open the calibration popup on an already committed scale line so both
+// the value and the endpoints can be corrected.
+export function reopenScalePopup() {
+  if (!S.scaleLine) return;
+  setTool('scale');
+  S.scaleP1 = { x: S.scaleLine.p1.x, y: S.scaleLine.p1.y };
+  S.scaleP2 = { x: S.scaleLine.p2.x, y: S.scaleLine.p2.y };
+  S.scaleState = 2;
+  const px = Math.hypot(S.scaleP2.x - S.scaleP1.x, S.scaleP2.y - S.scaleP1.y);
+  const val = S.scalePPU > 0 ? Math.round(px / S.scalePPU * 10000) / 10000 : null;
+  $('#scale-unit').val(S.scaleUnit);
+  showScalePopup(val);
+  S.overlayDirty = true;
 }
 
 export function confirmScale() {
@@ -229,6 +249,7 @@ export function confirmScale() {
     return;
   }
 
+  recordHistory();
   S.scalePPU = px / val;
   S.scaleUnit = unit;
   S.scaleLine = {
@@ -252,11 +273,36 @@ export function confirmScale() {
   scheduleSave();
 }
 
+// Calibrate scale from a closed shape of known real-world area — the
+// alternative to the two-point known-distance line.
+export function setScaleFromArea(id, realArea, unit) {
+  const sh = findShape(id);
+  if (!sh || !sh.closed || !sh.area || !(realArea > 0)) return false;
+  recordHistory();
+  S.scalePPU = Math.sqrt(sh.area / realArea);
+  S.scaleUnit = unit;
+  S.scaleLine = null; // any previous reference line no longer matches this scale
+  updateScaleDisp();
+  S.overlayDirty = true;
+  updatePanel();
+
+  for (let i = 0; i < S.shapes.length; i++) {
+    if (S.shapes[i].type !== 'segment' && S.shapes[i].closed && S.shapes[i].area == null) {
+      worker.postMessage({ type: 'calcArea', id: S.shapes[i].id, points: S.shapes[i].points, tabIdx: S.currentTabIdx });
+    }
+  }
+
+  status('Scale set from "' + (sh.name || 'shape') + '": ' + realArea + ' ' + unit + '²');
+  scheduleSave();
+  return true;
+}
+
 // ---- Shape Operations ----
 
 export function closePoly() {
   if (S.polyPts.length < 3) return;
 
+  recordHistory();
   const id = 's' + (++S.shapeN);
   S.shapes.push({
     id: id,
@@ -275,11 +321,12 @@ export function closePoly() {
   worker.postMessage({ type: 'calcArea', id: id, points: S.shapes[S.shapes.length - 1].points, tabIdx: S.currentTabIdx });
   S.overlayDirty = true;
   updatePanel();
-  setTool('idle');
+  status('Area added — keep clicking to draw another, or press Esc to finish.');
   scheduleSave();
 }
 
 export function finishFH() {
+  recordHistory();
   const id = 's' + (++S.shapeN);
   const pts = S.fhPts.slice();
   S.fhPts = [];
@@ -302,13 +349,14 @@ export function finishFH() {
 
   S.overlayDirty = true;
   updatePanel();
-  setTool('idle');
+  status('Region added — drag to trace another, or press Esc to finish.');
   scheduleSave();
 }
 
 export function closeSegment() {
   if (S.polyPts.length < 2) return;
 
+  recordHistory();
   const id = 's' + (++S.shapeN);
   const pts = S.polyPts.slice();
 
@@ -328,14 +376,17 @@ export function closeSegment() {
   S.polyPts = [];
   S.overlayDirty = true;
   updatePanel();
-  setTool('idle');
+  status('Distance added — keep clicking to measure another, or press Esc to finish.');
   scheduleSave();
 }
 
 export function renameShape(id, newName) {
   const sh = findShape(id);
   if (!sh) return;
-  sh.name = newName.trim() || sh.name;
+  const name = newName.trim();
+  if (!name || name === sh.name) return;
+  recordHistory();
+  sh.name = name;
   S.overlayDirty = true;
   updatePanel();
   scheduleSave();
@@ -361,117 +412,314 @@ export function showAllShapes() {
   scheduleSave();
 }
 
+function positionLabelPopup(sp) {
+  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
+  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
+  $('#label-popup').css({ left: l, top: t }).show();
+}
+
 export function showLabelPopup(shapeId) {
   const sh = findShape(shapeId);
   if (!sh) return;
   S.labelShapeId = shapeId;
+  S.pendingNotePt = null;
+  const isNote = sh.type === 'note';
   const sp = i2s(
     sh.points.reduce(function(s, p) { return s + p.x; }, 0) / sh.points.length,
     sh.points.reduce(function(s, p) { return s + p.y; }, 0) / sh.points.length
   );
-  const l = Math.min(Math.max(sp.x - 80, 10), S.cw - 260);
-  const t = Math.min(Math.max(sp.y - 20, 10), S.ch - 60);
-  $('#label-popup').css({ left: l, top: t }).show();
-  $('#label-value').val(sh.name || '').focus().select();
+  positionLabelPopup(sp);
+  $('#label-popup label').text(isNote ? 'Note text:' : 'Shape name:');
+  $('#label-value').val(isNote ? (sh.text || '') : (sh.name || '')).focus().select();
+}
+
+// Note tool: the note is only created once its text is confirmed, so
+// cancelling leaves no empty shape behind.
+export function beginNoteAt(ip) {
+  S.pendingNotePt = ip;
+  S.labelShapeId = null;
+  positionLabelPopup(i2s(ip.x, ip.y));
+  $('#label-popup label').text('Note text:');
+  $('#label-value').val('').focus();
+  status('Type the note text and press Enter.');
 }
 
 export function confirmLabel() {
   const val = $('#label-value').val().trim();
-  if (S.labelShapeId && val) renameShape(S.labelShapeId, val);
+
+  if (S.pendingNotePt) {
+    if (val) {
+      recordHistory();
+      const id = 's' + (++S.shapeN);
+      S.shapes.push({
+        id: id,
+        type: 'note',
+        points: [S.pendingNotePt],
+        closed: false,
+        color: '#FFD740',
+        name: 'Note ' + S.shapeN,
+        text: val
+      });
+      S.selId = id;
+      S.overlayDirty = true;
+      updatePanel();
+      status('Note added — click to pin another, or press Esc to finish.');
+      scheduleSave();
+    }
+    S.pendingNotePt = null;
+    $('#label-popup').hide();
+    $('#label-value').blur();
+    return;
+  }
+
+  if (S.labelShapeId && val) {
+    const sh = findShape(S.labelShapeId);
+    if (sh && sh.type === 'note') {
+      if (val !== sh.text) {
+        recordHistory();
+        sh.text = val;
+        S.overlayDirty = true;
+        updatePanel();
+        scheduleSave();
+      }
+    } else {
+      renameShape(S.labelShapeId, val);
+    }
+  }
   S.labelShapeId = null;
   $('#label-popup').hide();
+  $('#label-value').blur();
 }
 
 export function delShape(id) {
+  if (!findShape(id)) return;
+  recordHistory();
   S.shapes = S.shapes.filter(function(s) { return s.id !== id; });
   if (S.selId === id) S.selId = null;
 
   S.overlayDirty = true;
   updatePanel();
-  status('Shape deleted');
+  status('Shape deleted — Ctrl+Z to undo');
   scheduleSave();
 }
 
-export function selectAt(ip) {
-  let found = null;
+function shapeHit(sh, ip, thr) {
+  if (sh.type === 'note') {
+    return Math.hypot(ip.x - sh.points[0].x, ip.y - sh.points[0].y) <= thr;
+  }
+  if (sh.closed && pip(ip, sh.points)) return true;
+  const pts = sh.points;
+  const edgeCount = sh.closed ? pts.length : pts.length - 1;
+  for (let j = 0; j < edgeCount; j++) {
+    const k = sh.closed ? (j + 1) % pts.length : j + 1;
+    if (distSeg(ip, pts[j], pts[k]) <= thr) return true;
+  }
+  return false;
+}
 
+// All visible shapes under an image-space point, top-most first.
+export function hitsAt(ip) {
+  const thr = 15 / (S.view.zoom * S.view.fit);
+  const hits = [];
   for (let i = S.shapes.length - 1; i >= 0; i--) {
     const sh = S.shapes[i];
     if (sh.hidden) continue;
-    if (sh.closed && pip(ip, sh.points)) {
-      found = sh.id;
-      break;
-    }
+    if (shapeHit(sh, ip, thr)) hits.push(sh.id);
   }
+  return hits;
+}
 
-  if (!found) {
-    let best = Infinity;
-    const thr = 15 / (S.view.zoom * S.view.fit);
+function statusForShape(sh, suffix) {
+  if (sh.type === 'segment') {
+    status('Length: ' + fmtLen(sh.length) + suffix);
+  } else if (sh.type === 'note') {
+    status('Note: ' + (sh.text || '') + suffix);
+  } else if (sh.area != null) {
+    status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter) + suffix);
+  } else {
+    status(suffix ? suffix.replace(/^ — /, '') : '');
+  }
+}
 
-    for (let i = 0; i < S.shapes.length; i++) {
-      const sh = S.shapes[i];
-      if (sh.hidden) continue;
-
-      const pts = sh.points;
-      const edgeCount = sh.closed ? pts.length : pts.length - 1;
-
-      for (let j = 0; j < edgeCount; j++) {
-        const k = sh.closed ? (j + 1) % pts.length : j + 1;
-        const d = distSeg(ip, pts[j], pts[k]);
-        if (d < best) {
-          best = d;
-          found = sh.id;
-        }
-      }
-    }
-
-    if (best > thr) found = null;
+// Repeated clicks on overlapping measurements cycle through the stack; the
+// selected shape renders on top.
+export function selectAt(ip) {
+  const hits = hitsAt(ip);
+  let found = null;
+  if (hits.length) {
+    const cur = hits.indexOf(S.selId);
+    found = cur >= 0 ? hits[(cur + 1) % hits.length] : hits[0];
   }
 
   S.selId = found;
   S.overlayDirty = true;
-  updatePanel();
+  updatePanelSelection();
 
   if (found) {
     const sh = findShape(found);
     if (sh) {
-      if (sh.type === 'segment') {
-        status('Length: ' + fmtLen(sh.length));
-      } else if (sh.area != null) {
-        status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
-      }
+      const suffix = hits.length > 1
+        ? ' — ' + (hits.indexOf(found) + 1) + '/' + hits.length + ', click again to cycle'
+        : '';
+      statusForShape(sh, suffix);
     }
   } else {
     status('Select a tool or click a shape');
   }
 }
 
+// ---- Move Tool ----
+
+export function translateShape(sh, dx, dy) {
+  for (let i = 0; i < sh.points.length; i++) {
+    sh.points[i] = { x: sh.points[i].x + dx, y: sh.points[i].y + dy };
+  }
+  sh._centroid = null;
+}
+
+// ---- Shape organisation (color, groups, order) ----
+
+// Pure parse first; canvas normalisation catches everything else the
+// browser understands (extended names, hsl(), ...)
+export function resolveColor(str) {
+  const p = parseColor(str);
+  if (p) return p;
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.fillStyle = '#010203';
+  ctx.fillStyle = String(str);
+  const v = ctx.fillStyle;
+  if (v === '#010203') return null; // invalid input leaves the sentinel untouched
+  return typeof v === 'string' && v[0] === '#' ? v.toUpperCase() : parseColor(v);
+}
+
+export function setShapeColor(id, colorStr) {
+  const sh = findShape(id);
+  if (!sh) return false;
+  const c = resolveColor(colorStr);
+  if (!c) {
+    status('Unrecognised color — try #hex, rgb(), or a color name');
+    return false;
+  }
+  if (c !== sh.color) {
+    recordHistory();
+    sh.color = c;
+    S.overlayDirty = true;
+    updatePanel();
+    scheduleSave();
+  }
+  return true;
+}
+
+// Keeps group members contiguous while preserving relative order; ungrouped
+// shapes hold their individual positions.
+function regroupShapes() {
+  const buckets = [];
+  const index = {};
+  for (let i = 0; i < S.shapes.length; i++) {
+    const sh = S.shapes[i];
+    const key = sh.group ? 'g:' + sh.group : 'u:' + sh.id;
+    if (index[key] !== undefined) {
+      buckets[index[key]].push(sh);
+    } else {
+      index[key] = buckets.length;
+      buckets.push([sh]);
+    }
+  }
+  const flat = [];
+  for (let i = 0; i < buckets.length; i++) {
+    for (let j = 0; j < buckets[i].length; j++) flat.push(buckets[i][j]);
+  }
+  S.shapes.length = 0;
+  Array.prototype.push.apply(S.shapes, flat);
+}
+
+export function setShapeGroup(id, groupName) {
+  const sh = findShape(id);
+  if (!sh) return;
+  const g = (groupName || '').trim() || null;
+  if ((sh.group || null) === g) return;
+  recordHistory();
+  if (g) sh.group = g;
+  else delete sh.group;
+  regroupShapes();
+  S.overlayDirty = true;
+  updatePanel();
+  scheduleSave();
+}
+
+export function existingGroups() {
+  const seen = {};
+  const out = [];
+  for (let i = 0; i < S.shapes.length; i++) {
+    const g = S.shapes[i].group;
+    if (g && !seen[g]) {
+      seen[g] = true;
+      out.push(g);
+    }
+  }
+  return out;
+}
+
+// Reorder within the list (z-order): the dragged shape adopts the group of
+// its drop position so groups stay contiguous.
+export function reorderShape(id, targetId, before) {
+  if (id === targetId) return;
+  const from = S.shapes.findIndex(function(s) { return s.id === id; });
+  const target = findShape(targetId);
+  if (from < 0 || !target) return;
+  recordHistory();
+  const sh = S.shapes.splice(from, 1)[0];
+  if (target.group) sh.group = target.group;
+  else delete sh.group;
+  let to = S.shapes.findIndex(function(s) { return s.id === targetId; });
+  if (!before) to++;
+  S.shapes.splice(to, 0, sh);
+  S.overlayDirty = true;
+  updatePanel();
+  scheduleSave();
+}
+
 // ---- Image Rotation ----
 
+// Rotation always recomposes from the tab's base image at the cumulative
+// angle: repeated rotations neither accumulate resampling blur nor grow the
+// canvas beyond the true rotated bounding box of the original.
 export function rotateImage(angleDeg) {
   if (!S.img || angleDeg === 0) return;
 
-  const rad = angleDeg * Math.PI / 180;
-  const cos_t = Math.cos(rad);
-  const sin_t = Math.sin(rad);
-  const abs_cos = Math.abs(cos_t);
-  const abs_sin = Math.abs(sin_t);
+  recordTransformHistory();
+  const tab = getActiveTab();
+  if (tab && !tab.baseImg) {
+    tab.baseImg = S.img;
+    tab.baseRotation = 0;
+  }
+  const base = tab ? tab.baseImg : S.img;
+  const oldRot = tab ? (tab.baseRotation || 0) : 0;
+  const newRot = (oldRot + angleDeg) % 360;
+
+  const bw = base.naturalWidth || base.width;
+  const bh = base.naturalHeight || base.height;
+  const newRad = newRot * Math.PI / 180;
+  const new_w = Math.round(bw * Math.abs(Math.cos(newRad)) + bh * Math.abs(Math.sin(newRad)));
+  const new_h = Math.round(bw * Math.abs(Math.sin(newRad)) + bh * Math.abs(Math.cos(newRad)));
 
   const old_w = S.view.iw;
   const old_h = S.view.ih;
-  const new_w = Math.round(old_w * abs_cos + old_h * abs_sin);
-  const new_h = Math.round(old_w * abs_sin + old_h * abs_cos);
 
-  // Draw the rotated image onto a new canvas
   const cvs = document.createElement('canvas');
   cvs.width = new_w;
   cvs.height = new_h;
   const ctx = cvs.getContext('2d');
   ctx.translate(new_w / 2, new_h / 2);
-  ctx.rotate(rad);
-  ctx.drawImage(S.img, -old_w / 2, -old_h / 2);
+  ctx.rotate(newRad);
+  ctx.drawImage(base, -bw / 2, -bh / 2);
 
-  // Forward transform: old image coords → new image coords (matches canvas rendering)
+  // Geometry moves by the delta step: rotate about the old canvas centre,
+  // then re-centre on the new canvas
+  const rad = angleDeg * Math.PI / 180;
+  const cos_t = Math.cos(rad);
+  const sin_t = Math.sin(rad);
+
   function transformPt(p) {
     const dx = p.x - old_w / 2;
     const dy = p.y - old_h / 2;
@@ -485,6 +733,7 @@ export function rotateImage(angleDeg) {
   for (let si = 0; si < S.shapes.length; si++) {
     const shape = S.shapes[si];
     shape.points = shape.points.map(transformPt);
+    shape._centroid = null;
     if (shape.type === 'segment') {
       shape.length = segmentLength(shape.points);
     } else if (shape.closed) {
@@ -499,14 +748,14 @@ export function rotateImage(angleDeg) {
   }
 
   // Load updated image
-  const dataUrl = cvs.toDataURL('image/png');
+  const dataUrl = encodeCanvas(cvs);
   const newImg = new Image();
   newImg.onload = function() {
     S.img = newImg;
     S.view.iw = new_w;
     S.view.ih = new_h;
     S.imgDataUrl = dataUrl;
-    S.FH_MIN_DIST = Math.max(1, Math.log2(new_w + new_h) - 8.5);
+    if (tab) tab.baseRotation = newRot;
 
     S.imageDirty = S.overlayDirty = true;
     fitView();
@@ -515,7 +764,6 @@ export function rotateImage(angleDeg) {
     // Clear stale pre-rotation WebP and re-encode the rotated image.
     // Without this, serializeTab() would save the old WebP while shapes
     // are already in post-rotation coordinates, corrupting reloaded state.
-    const tab = getActiveTab();
     if (tab) {
       tab.imgWebpUrl = null;
       tab.webpPending = true;
