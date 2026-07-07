@@ -838,8 +838,11 @@ $(document).on('keydown', function(e) {
       e.preventDefault();
       break;
 
-    case 'Escape':
-      if (S.tool === 'squarecal') {
+    case 'Escape': {
+      const $open = $('#file-menu, #shape-menu, #color-popover, #group-popover, #areascale-popover').filter(':visible');
+      if ($open.length) {
+        $open.hide();
+      } else if (S.tool === 'squarecal') {
         cancelSqCalib();
       } else if (S.perspActive) {
         cancelPerspective();
@@ -848,9 +851,10 @@ $(document).on('keydown', function(e) {
       } else {
         S.selId = null;
         S.overlayDirty = true;
-        updatePanel();
+        updatePanelSelection();
       }
       break;
+    }
 
     case 'Enter':
       if (S.tool === 'squarecal' && S.polyPts.length === 4) {
@@ -1420,10 +1424,13 @@ let _colorShapeId = null;
 
 function positionPopover($m, el) {
   const r = el.getBoundingClientRect();
+  // Show first so the real width is measurable, then clamp into the viewport
+  $m.css({ left: 0, top: 0 }).show();
+  const w = $m.outerWidth();
   $m.css({
-    left: Math.min(r.left, window.innerWidth - 240) + 'px',
+    left: Math.max(4, Math.min(r.left, window.innerWidth - w - 8)) + 'px',
     top: (r.bottom + 4) + 'px'
-  }).show();
+  });
 }
 
 function closePopovers() {
