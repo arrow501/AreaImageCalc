@@ -27,6 +27,43 @@ self.onmessage = function(e) {
       points: rdp(d.points, d.epsilon)
     });
   }
+  else if (type === 'warp') {
+    var src = new Uint8ClampedArray(d.buf);
+    var iw = d.iw, ih = d.ih;
+    var outW = d.outW, outH = d.outH, offX = d.offX, offY = d.offY;
+    var H = d.Hinv;
+    var out = new Uint8ClampedArray(outW * outH * 4);
+
+    for (var oy = 0; oy < outH; oy++) {
+      var py = oy + offY;
+      for (var ox = 0; ox < outW; ox++) {
+        var px = ox + offX;
+        var w = H[6] * px + H[7] * py + H[8];
+        var sx = (H[0] * px + H[1] * py + H[2]) / w;
+        var sy = (H[3] * px + H[4] * py + H[5]) / w;
+        if (sx < 0 || sx >= iw - 1 || sy < 0 || sy >= ih - 1) continue;
+
+        var x0 = Math.floor(sx), y0 = Math.floor(sy);
+        var fx = sx - x0, fy = sy - y0;
+        var x1 = x0 + 1 < iw ? x0 + 1 : iw - 1;
+        var y1 = y0 + 1 < ih ? y0 + 1 : ih - 1;
+        var i00 = (y0 * iw + x0) * 4, i10 = (y0 * iw + x1) * 4;
+        var i01 = (y1 * iw + x0) * 4, i11 = (y1 * iw + x1) * 4;
+        var outIdx = (oy * outW + ox) * 4;
+
+        for (var c = 0; c < 4; c++) {
+          out[outIdx + c] =
+            src[i00 + c] * (1 - fx) * (1 - fy) + src[i10 + c] * fx * (1 - fy) +
+            src[i01 + c] * (1 - fx) * fy + src[i11 + c] * fx * fy;
+        }
+      }
+    }
+
+    self.postMessage(
+      { type: 'warpResult', reqId: d.reqId, buf: out.buffer, outW: outW, outH: outH },
+      [out.buffer]
+    );
+  }
 };
 
 function rdp(pts, eps) {

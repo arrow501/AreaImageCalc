@@ -1,14 +1,18 @@
-import { S, fn, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
+import { S, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
+import { exportProject } from './export.js';
+import { EVT, on } from './events.js';
 
 function updateBadge(bytes) {
+  const title = bytes >= STORAGE_HARD_LIMIT
+    ? 'Auto-save FULL — save your project to a file!'
+    : bytes >= STORAGE_SOFT_LIMIT
+      ? 'Auto-save limited — some tab images not saved (project too large)'
+      : 'Save project as .arcalc';
   $('#btn-export-project')
     .toggleClass('storage-warn', bytes >= STORAGE_SOFT_LIMIT && bytes < STORAGE_HARD_LIMIT)
     .toggleClass('storage-full', bytes >= STORAGE_HARD_LIMIT)
-    .attr('title', bytes >= STORAGE_HARD_LIMIT
-      ? 'Auto-save FULL — save your project to a file!'
-      : bytes >= STORAGE_SOFT_LIMIT
-        ? 'Auto-save limited — some tab images not saved (project too large)'
-        : 'Save project as .arcalc');
+    .attr('title', title)
+    .attr('aria-label', title);
 }
 
 function showHardLimitDialog() {
@@ -20,7 +24,7 @@ function showHardLimitDialog() {
         .append('<p><strong>Auto-save is full.</strong><br>Your work is no longer being saved to this browser — the images are too large for local storage.</p>')
         .append(
           $('<button class="btn-primary">').text('Save Project File').on('click', function() {
-            if (fn.exportProject) fn.exportProject();
+            exportProject();
             $(this).closest('.storage-modal-overlay').remove();
           })
         )
@@ -34,7 +38,8 @@ function showHardLimitDialog() {
 }
 
 // storage.js fires this event after every save attempt
-$(document).on('storage:update', function(e, bytes) {
+on(EVT.STORAGE_UPDATE, function(e, bytes) {
+  S.storageFull = bytes >= STORAGE_HARD_LIMIT;
   updateBadge(bytes);
   if (bytes >= STORAGE_HARD_LIMIT) showHardLimitDialog();
 });

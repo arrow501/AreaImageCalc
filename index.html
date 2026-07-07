@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://code.jquery.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Area Calculator</title>
+  <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -43,7 +45,7 @@
       border-bottom: 1px solid #333;
       min-height: 40px;
       flex-shrink: 0;
-      overflow-x: auto;
+      flex-wrap: wrap;
     }
     .tb-btn {
       background: none;
@@ -58,10 +60,12 @@
       gap: 4px;
       white-space: nowrap;
       line-height: 1.4;
+      flex-shrink: 0;
     }
     .tb-btn:hover { background: #333; color: #fff; }
     .tb-btn.active { background: #FF6B35; color: #fff; border-color: #e55a20; }
     .tb-btn.disabled { opacity: 0.35; pointer-events: none; }
+    .tb-icon { font-size: 17px; padding: 2px 8px; line-height: 1; }
     .tb-btn.storage-warn { box-shadow: inset 0 -2px 0 #e6a817; }
     .tb-btn.storage-warn::after { content: ' ⚠'; font-size: 0.85em; color: #e6a817; }
     .tb-btn.storage-full { box-shadow: inset 0 -2px 0 #e84040; }
@@ -74,17 +78,17 @@
     .storage-modal button.btn-primary { background: #FF6B35; border-color: #e55a20; color: #fff; font-weight: 600; }
     .tb-sep { width: 1px; height: 20px; background: #444; margin: 0 4px; flex-shrink: 0; }
     .tb-info {
-      margin-left: auto;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: #888;
       display: flex;
       gap: 12px;
       flex-shrink: 0;
+      margin-left: 8px;
     }
 
     /* ========== SLIDERS (Brightness/Contrast) ========== */
-    .tb-sliders { display: flex; gap: 2px; margin-left: auto; align-items: stretch; height: 28px; }
+    .tb-sliders { display: flex; gap: 2px; margin-left: auto; align-items: stretch; height: 28px; flex-shrink: 0; }
     .sl-group {
       display: flex;
       align-items: center;
@@ -151,6 +155,23 @@
     .sl-val::-webkit-outer-spin-button { -webkit-appearance: none; }
     .sl-val:focus { outline: none; border-color: #FF6B35; cursor: text; background: #1a1a1a; }
 
+    /* ========== PANEL REVEAL STRIP ========== */
+    #panel-reveal {
+      display: flex;
+      width: 0;
+      overflow: hidden;
+      background: #252525;
+      border-left: 1px solid #333;
+      flex-shrink: 0;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-size: 11px;
+      transition: background 0.1s, color 0.1s, width 0.15s ease;
+    }
+    #panel-reveal:hover { background: #2e2e2e; color: #bbb; }
+
     /* ========== SHAPES PANEL ========== */
     #shapes-panel {
       width: 220px;
@@ -162,6 +183,29 @@
       transition: width 0.15s;
     }
     #shapes-panel.collapsed { width: 0; overflow: hidden; border: none; }
+
+    /* ========== HIDDEN SHAPES NOTICE ========== */
+    #hidden-notice {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      background: #1e1e1e;
+      border-bottom: 1px solid #333;
+      font-size: 10px;
+      color: #888;
+      gap: 6px;
+    }
+    #btn-showall {
+      background: none;
+      border: none;
+      color: #4A9EFF;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0;
+      white-space: nowrap;
+    }
+    #btn-showall:hover { color: #7ab8ff; text-decoration: underline; }
     #shapes-header {
       padding: 8px 10px;
       font-weight: 600;
@@ -205,6 +249,25 @@
       color: #666;
       font-size: 10px;
     }
+    .shape-name {
+      font-size: 10px;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 1px;
+    }
+    .shape-eye {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .shape-eye:hover { color: #ccc; }
     .shape-del {
       background: none;
       border: none;
@@ -215,6 +278,7 @@
       line-height: 1;
     }
     .shape-del:hover { color: #ff4444; }
+    .shape-item.shape-hidden { opacity: 0.4; }
 
     /* ========== STATUS BAR ========== */
     #statusbar {
@@ -271,6 +335,42 @@
       margin-left: 4px;
     }
     #scale-popup button:hover { background: #e55a20; }
+
+    /* ========== LABEL POPUP ========== */
+    #label-popup {
+      position: absolute;
+      background: #2a2a2a;
+      border: 1px solid #FF6B35;
+      border-radius: 4px;
+      padding: 10px;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      white-space: nowrap;
+    }
+    #label-popup label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    #label-popup input[type=text] {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 4px 8px;
+      width: 160px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    #label-popup input:focus { outline: none; border-color: #FF6B35; }
+    #label-popup button {
+      background: #FF6B35;
+      color: #fff;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+    #label-popup button:hover { background: #e55a20; }
 
     /* ========== DROPZONE ========== */
     #dropzone {
@@ -406,69 +506,130 @@
     }
     #sq-calib-apply.disabled { opacity: 0.35; pointer-events: none; }
 
-    /* ========== TAB BAR ========== */
-    #tab-bar {
-      display: flex;
-      align-items: flex-end;
+    /* ========== DOCUMENT SIDEBAR ========== */
+    #sidebar {
+      width: 200px;
       background: #1e1e1e;
-      border-bottom: 1px solid #333;
-      overflow-x: auto;
-      overflow-y: hidden;
+      border-right: 1px solid #333;
+      display: flex;
+      flex-direction: column;
       flex-shrink: 0;
-      min-height: 28px;
-      padding: 0 4px;
-      max-height: 60px;
-      transition: max-height 0.15s ease, min-height 0.15s ease, padding 0.15s ease;
+      overflow: hidden;
+      transition: width 0.15s ease;
     }
-    #tab-bar.collapsed { max-height: 0; min-height: 0; padding: 0; border-bottom-width: 0; }
-    #tab-bar::-webkit-scrollbar { height: 4px; }
-    #tab-bar::-webkit-scrollbar-track { background: #1e1e1e; }
-    #tab-bar::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
-    .tab-item {
+    #sidebar.collapsed { width: 0; border-right-width: 0; }
+    #sidebar-header {
+      padding: 8px 6px 8px 10px;
+      font-weight: 600;
+      font-size: 12px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-width: 199px;
+    }
+    #btn-new-doc {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 8px;
+      line-height: 1;
+      border-radius: 3px;
+    }
+    #btn-new-doc:hover { color: #ccc; background: #333; }
+    #doc-list { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px; min-width: 199px; }
+    #doc-list::-webkit-scrollbar { width: 6px; }
+    #doc-list::-webkit-scrollbar-track { background: #1e1e1e; }
+    #doc-list::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    .doc-item { border-radius: 3px; margin-bottom: 1px; }
+    .doc-row {
       display: flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 6px 4px 12px;
+      padding: 5px 4px 5px 6px;
       cursor: pointer;
-      border-radius: 3px 3px 0 0;
-      background: #252525;
-      color: #888;
-      white-space: nowrap;
+      border-radius: 3px;
+      color: #999;
       font-size: 11px;
-      flex-shrink: 0;
-      border: 1px solid transparent;
-      border-bottom: none;
-      margin-right: 1px;
-      max-width: 160px;
       user-select: none;
     }
-    .tab-item:hover { background: #2e2e2e; color: #bbb; }
-    .tab-item.active { background: #2a2a2a; color: #e0e0e0; border-color: #444; border-bottom: 2px solid #FF6B35; }
-    .tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    .tab-close {
+    .doc-row:hover { background: #2a2a2a; color: #ccc; }
+    .doc-item.active > .doc-row {
+      background: #2e2e2e;
+      color: #e8e8e8;
+      box-shadow: inset 2px 0 0 #FF6B35;
+    }
+    .doc-caret {
+      width: 14px;
+      text-align: center;
+      color: #666;
+      flex-shrink: 0;
+      font-size: 10px;
+    }
+    .doc-caret:not(.doc-caret-empty):hover { color: #fff; }
+    .doc-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .doc-count { color: #555; font-size: 10px; flex-shrink: 0; }
+    .doc-close {
       background: none;
       border: none;
       color: #555;
       cursor: pointer;
       font-size: 14px;
-      padding: 0 2px;
+      padding: 0 4px;
       line-height: 1;
       flex-shrink: 0;
-    }
-    .tab-close:hover { color: #ff4444; }
-    #btn-new-tab {
-      background: none;
-      border: none;
-      color: #666;
-      cursor: pointer;
-      font-size: 18px;
-      padding: 2px 10px;
-      line-height: 1;
-      align-self: center;
       border-radius: 3px;
-      flex-shrink: 0;
+      visibility: hidden;
     }
-    #btn-new-tab:hover { color: #ccc; background: #333; }
+    .doc-row:hover .doc-close, .doc-page:hover .doc-close { visibility: visible; }
+    .doc-close:hover { color: #ff4444; }
+    .doc-pages { padding: 1px 0 3px; }
+    .doc-page {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 4px 3px 26px;
+      cursor: pointer;
+      border-radius: 3px;
+      color: #888;
+      font-size: 11px;
+      user-select: none;
+    }
+    .doc-page:hover { background: #2a2a2a; color: #ccc; }
+    .doc-page.active { background: #333; color: #e8e8e8; box-shadow: inset 2px 0 0 #FF6B35; }
+
+    /* ========== PAGE NAV (status bar) ========== */
+    #page-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #888;
+    }
+    #page-nav button {
+      background: none;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 3px;
+      width: 20px;
+      height: 18px;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+    }
+    #page-nav button:hover { color: #fff; border-color: #666; }
+    #page-nav button.disabled { opacity: 0.3; pointer-events: none; }
 
     /* ========== PDF MODAL ========== */
     #pdf-modal {
@@ -481,23 +642,100 @@
       background: #2a2a2a;
       border: 1px solid #FF6B35;
       border-radius: 6px;
-      padding: 18px 20px;
-      min-width: 290px;
+      padding: 14px 16px;
+      width: min(560px, calc(100vw - 40px));
       box-shadow: 0 8px 32px rgba(0,0,0,0.7);
       font-size: 13px;
       color: #ccc;
     }
-    #pdf-modal label { font-size: 11px; color: #aaa; display: block; margin-bottom: 6px; }
+    .pdf-modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    #pdf-modal-title {
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    #pdf-page-count { font-size: 11px; color: #888; flex-shrink: 0; }
+    #pdf-thumbs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 8px;
+      max-height: min(340px, 50vh);
+      overflow-y: auto;
+      padding: 2px;
+      margin-bottom: 10px;
+    }
+    #pdf-thumbs::-webkit-scrollbar { width: 6px; }
+    #pdf-thumbs::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    .pdf-thumb {
+      position: relative;
+      border: 2px solid #3a3a3a;
+      border-radius: 3px;
+      cursor: pointer;
+      background: #222;
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pdf-thumb:hover { border-color: #666; }
+    .pdf-thumb.selected { border-color: #FF6B35; }
+    .pdf-thumb.selected::after {
+      content: '\2713';
+      position: absolute;
+      top: 3px;
+      right: 4px;
+      font-size: 11px;
+      color: #fff;
+      background: #FF6B35;
+      border-radius: 2px;
+      width: 15px;
+      height: 15px;
+      line-height: 15px;
+      text-align: center;
+    }
+    .pdf-thumb-box { width: 100%; display: flex; align-items: center; justify-content: center; }
+    .pdf-thumb-box canvas { max-width: 100%; height: auto; display: block; border-radius: 1px; }
+    .pdf-thumb-num {
+      position: absolute;
+      bottom: 3px;
+      left: 4px;
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ddd;
+      background: rgba(0,0,0,0.65);
+      padding: 0 4px;
+      border-radius: 2px;
+    }
+    .pdf-modal-tools { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+    .pdf-modal-tools button {
+      background: #333;
+      color: #ccc;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .pdf-modal-tools button:hover { background: #444; color: #fff; }
     #pdf-modal input[type=text] {
       background: #1a1a1a;
       border: 1px solid #444;
       color: #e0e0e0;
-      padding: 5px 8px;
-      width: 100%;
+      padding: 4px 8px;
+      flex: 1;
+      min-width: 0;
       border-radius: 3px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      margin-bottom: 12px;
+      font-size: 11px;
     }
     #pdf-modal input:focus { outline: none; border-color: #FF6B35; }
     .pdf-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
@@ -505,6 +743,69 @@
     #pdf-modal-cancel:hover { background: #555; }
     #pdf-modal-load { background: #FF6B35; color: #fff; border: none; padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600; }
     #pdf-modal-load:hover { background: #e55a20; }
+    #pdf-modal-load.disabled { opacity: 0.35; pointer-events: none; }
+
+    /* ========== EXPORT MENU ========== */
+    #export-menu {
+      position: fixed;
+      z-index: 400;
+      display: none;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      padding: 4px;
+      min-width: 180px;
+    }
+    #export-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: #ccc;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    #export-menu button:hover { background: #333; color: #fff; }
+
+    /* ========== SHORTCUTS MODAL ========== */
+    #shortcuts-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 9000; display: none; align-items: center; justify-content: center;
+    }
+    #shortcuts-modal.open { display: flex; }
+    #shortcuts-modal .sc-panel {
+      background: #2a2a2a; border: 1px solid #444; border-radius: 4px;
+      padding: 16px 20px; min-width: 300px; max-width: 420px; color: #e0e0e0;
+      font-size: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+    }
+    #shortcuts-modal h3 { margin: 0 0 10px; font-size: 13px; color: #FF6B35; }
+    #shortcuts-modal table { width: 100%; border-collapse: collapse; }
+    #shortcuts-modal td { padding: 3px 6px; }
+    #shortcuts-modal td:first-child { color: #999; width: 40%; }
+    #shortcuts-modal td:last-child { text-align: right; }
+    #shortcuts-modal kbd {
+      background: #1a1a1a; border: 1px solid #444; border-radius: 3px;
+      padding: 1px 6px; font-size: 11px; color: #ddd;
+    }
+    #shortcuts-modal .sc-close {
+      margin-top: 12px; background: #444; color: #ccc; border: none;
+      padding: 5px 14px; border-radius: 3px; cursor: pointer; font-size: 12px;
+    }
+    #shortcuts-modal .sc-close:hover { background: #555; }
+    #btn-shortcuts {
+      background: none; border: 1px solid #444; color: #aaa;
+      border-radius: 50%; width: 18px; height: 18px; font-size: 11px;
+      line-height: 1; padding: 0; cursor: pointer; margin-left: auto;
+    }
+    #btn-shortcuts:hover { color: #FF6B35; border-color: #FF6B35; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+    }
 
     /* ========== ROTATE POPUP ========== */
     #rotate-popup {
@@ -566,27 +867,29 @@
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar">
-    <button class="tb-btn" id="btn-new" title="New project — clears all tabs">New</button>
-    <button class="tb-btn" id="btn-open" title="Open image, PDF, or project [Ctrl+O]">Open</button>
-    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc">Save</button>
-    <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON">Export</button>
+    <button class="tb-btn" id="btn-new" title="New project — clears all tabs" aria-label="New project — clears all tabs">New</button>
+    <button class="tb-btn" id="btn-open" title="Open image, PDF, or .arcalc project" aria-label="Open image, PDF, or .arcalc project">Open</button>
+    <button class="tb-btn" id="btn-export-project" title="Save project as .arcalc file" aria-label="Save project as .arcalc file">Save</button>
+    <button class="tb-btn" id="btn-export-measurements" title="Export measurements as JSON" aria-label="Export measurements as JSON">Export</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Set scale [1]">Scale</button>
-    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon lasso [2]">Polygon</button>
-    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand trace [3]">Freehand</button>
-    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points [4]">Edit</button>
+    <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]" aria-label="Scale tool (shortcut S) — click 2 known points">Scale</button>
+    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]" aria-label="Polygon tool (shortcut P) — click vertices, close to finish">Polygon</button>
+    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]" aria-label="Freehand tool (shortcut F) — drag to trace">Freehand</button>
+    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]" aria-label="Distance tool (shortcut D) — click points, finish with double-click or Enter">Distance</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-delete" title="Delete selected [Del]">Delete</button>
-    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes">Clear All</button>
+    <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points — drag to move [E]" aria-label="Edit tool (shortcut E) — drag control points to move">Edit</button>
+    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]" aria-label="Label tool (shortcut L) — click a shape to rename it">Label</button>
+    <button class="tb-btn disabled" id="btn-note" data-tool="note" title="Pin a text note [N]" aria-label="Note tool (shortcut N) — click to pin a text note">Note</button>
+    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]" aria-label="Delete selected shape (Delete key)">Delete</button>
+    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes" aria-label="Remove all shapes">Clear</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-fit" title="Fit image [Ctrl+0]">Fit</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [5]">Perspective</button>
+    <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]" aria-label="Fit image to view (Ctrl+0)">Fit</button>
+    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle" aria-label="Rotate by custom angle">Rotate&hellip;</button>
+    <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise" aria-label="Rotate 90 degrees clockwise">&#8635;</button>
+    <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)">Perspective</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise">&#8634; 90°</button>
-    <button class="tb-btn disabled" id="btn-rotate-cw" title="Rotate 90° clockwise">&#8635; 90°</button>
-    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle">Rotate&hellip;</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-toggle-tabs" title="Show/hide tab bar">&#9662; Tabs</button>
+    <button class="tb-btn" id="btn-toggle-docs" title="Show/hide document sidebar" aria-label="Show or hide document sidebar">Docs</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders">
@@ -614,11 +917,17 @@
     </div>
   </div>
 
-  <!-- ========== TAB BAR ========== -->
-  <div id="tab-bar"></div>
-
   <!-- ========== MAIN CONTENT ========== -->
   <div id="main">
+    <!-- ========== DOCUMENT SIDEBAR ========== -->
+    <div id="sidebar" class="collapsed">
+      <div id="sidebar-header">
+        <span>Documents</span>
+        <button id="btn-new-doc" title="New document tab" aria-label="New document tab">+</button>
+      </div>
+      <div id="doc-list"></div>
+    </div>
+
     <div id="canvas-wrap">
       <canvas id="image-canvas"></canvas>
       <canvas id="overlay-canvas"></canvas>
@@ -655,6 +964,12 @@
         </div>
       </div>
 
+      <div id="label-popup">
+        <label>Shape name:</label>
+        <input type="text" id="label-value" placeholder="Name...">
+        <button id="label-confirm">Set</button>
+      </div>
+
       <div id="persp-bar">
         <div class="persp-tabs">
           <button class="persp-tab active" data-persp-mode="manual">Manual</button>
@@ -689,11 +1004,18 @@
       </div>
     </div>
 
+    <!-- ========== PANEL REVEAL STRIP ========== -->
+    <div id="panel-reveal" title="Show shapes panel">&#187;</div>
+
     <!-- ========== SHAPES PANEL ========== -->
     <div id="shapes-panel">
       <div id="shapes-header">
         <span>Shapes</span>
-        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&raquo;</button>
+        <button class="tb-btn" id="btn-toggle-panel" style="padding:2px 6px;font-size:10px" title="Collapse panel">&laquo;</button>
+      </div>
+      <div id="hidden-notice">
+        <span id="hidden-count-label"></span>
+        <button id="btn-showall">show all</button>
       </div>
       <div id="shapes-list"></div>
       <div id="shapes-total"></div>
@@ -701,17 +1023,62 @@
   </div>
 
   <!-- ========== STATUS BAR ========== -->
-  <div id="statusbar">
+  <div id="statusbar" role="status" aria-live="polite" aria-atomic="true">
     <span id="status-text">Drop an image, click Open, or paste to start</span>
+    <div id="page-nav" style="display:none">
+      <button id="page-prev" title="Previous page [PgUp]" aria-label="Previous page">&#8249;</button>
+      <span id="page-nav-label"></span>
+      <button id="page-next" title="Next page [PgDn]" aria-label="Next page">&#8250;</button>
+    </div>
+    <button id="btn-shortcuts" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
   </div>
 </div>
 
 <input type="file" id="file-input" accept="image/*,.pdf,.arcalc" multiple style="display:none">
 
+<div id="export-menu">
+  <button data-export="csv">Measurements (CSV)</button>
+  <button data-export="json">Measurements (JSON)</button>
+</div>
+
+<div id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="sc-title">
+  <div class="sc-panel">
+    <h3 id="sc-title">Keyboard Shortcuts</h3>
+    <table>
+      <tr><td>Scale</td><td><kbd>S</kbd> / <kbd>1</kbd></td></tr>
+      <tr><td>Polygon</td><td><kbd>P</kbd> / <kbd>2</kbd></td></tr>
+      <tr><td>Freehand</td><td><kbd>F</kbd> / <kbd>3</kbd></td></tr>
+      <tr><td>Distance</td><td><kbd>D</kbd> / <kbd>4</kbd></td></tr>
+      <tr><td>Edit points</td><td><kbd>E</kbd> / <kbd>5</kbd></td></tr>
+      <tr><td>Perspective</td><td><kbd>W</kbd> / <kbd>6</kbd></td></tr>
+      <tr><td>Label / rename</td><td><kbd>L</kbd></td></tr>
+      <tr><td>Pin note</td><td><kbd>N</kbd></td></tr>
+      <tr><td>Hide/show shape</td><td><kbd>H</kbd></td></tr>
+      <tr><td>Undo / redo</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td></tr>
+      <tr><td>Delete shape / last point</td><td><kbd>Del</kbd> / <kbd>Backspace</kbd></td></tr>
+      <tr><td>Finish path</td><td><kbd>Enter</kbd> / double-click / right-click</td></tr>
+      <tr><td>Exit tool / cancel</td><td><kbd>Esc</kbd></td></tr>
+      <tr><td>Pan image</td><td><kbd>Space</kbd> + drag</td></tr>
+      <tr><td>Zoom in / out</td><td><kbd>+</kbd> / <kbd>-</kbd></td></tr>
+      <tr><td>Fit to view</td><td><kbd>Ctrl</kbd> + <kbd>0</kbd></td></tr>
+      <tr><td>Previous / next page</td><td><kbd>PgUp</kbd> / <kbd>PgDn</kbd></td></tr>
+      <tr><td>Show this help</td><td><kbd>?</kbd></td></tr>
+    </table>
+    <button class="sc-close">Close</button>
+  </div>
+</div>
+
 <div id="pdf-modal">
-  <div style="margin-bottom:10px">PDF loaded &mdash; <span id="pdf-page-count"></span></div>
-  <label>Pages to load (e.g. 1-5, 1,3,5 or leave blank for all):</label>
-  <input type="text" id="pdf-page-range" placeholder="all">
+  <div class="pdf-modal-head">
+    <span id="pdf-modal-title"></span>
+    <span id="pdf-page-count"></span>
+  </div>
+  <div id="pdf-thumbs"></div>
+  <div class="pdf-modal-tools">
+    <button id="pdf-select-all">All</button>
+    <button id="pdf-select-none">None</button>
+    <input type="text" id="pdf-page-range" placeholder="or type a range: 1-5, 8, 11">
+  </div>
   <div class="pdf-modal-actions">
     <button id="pdf-modal-cancel">Cancel</button>
     <button id="pdf-modal-load">Load Pages</button>

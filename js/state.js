@@ -1,5 +1,7 @@
+export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_COMPAT, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+
 // Shared mutable state — every module imports S and reads/writes S.xxx
-export var S = {
+export const S = {
   // Color palette
   colorIdx: 0,
 
@@ -30,11 +32,6 @@ export var S = {
   polyPts: [],
   fhPts: [],
   isFH: false,
-  fhLastTime: 0,
-
-  // Freehand sampling thresholds (image-space px)
-  FH_MIN_DIST: 0,
-  FH_MAX_DIST: 100,
 
   // Pan state
   isPan: false,
@@ -46,6 +43,10 @@ export var S = {
   dragShape: null,
   dragIdx: -1,
 
+  // Scale-line endpoint drag state (edit tool)
+  dragScaleIdx: -1,
+  dragScaleReal: 0,
+
   // Rendering flags
   imageDirty: true,
   overlayDirty: true,
@@ -56,6 +57,7 @@ export var S = {
   dpr: window.devicePixelRatio || 1,
   cw: 0,
   ch: 0,
+  canvasRect: { left: 0, top: 0 },
 
   // Mouse position (screen and image space)
   mx: 0, my: 0,
@@ -89,29 +91,27 @@ export var S = {
   tabs: [],          // array of tab state objects
   currentTabIdx: -1, // index of active tab
   tabN: 0,           // tab ID counter (monotonically increasing)
+  docN: 0,           // document group ID counter (multi-page PDFs)
 
   // Storage UI state
-  hardLimitDialogShown: false
+  hardLimitDialogShown: false,
+  storageFull: false,
+  saveErrored: false,
+
+  // Label tool state
+  labelShapeId: null,
+
+  // Note tool: anchor point awaiting text confirmation
+  pendingNotePt: null
 };
 
-// Constants
-export var COLORS = ['#FF6B35', '#4A9EFF', '#22D88E', '#FF4081', '#FFD740', '#7C4DFF'];
-export var SAVE_KEY = 'areaCalcState';
-export var SAVE_VER = 3;
-export var SAVE_VER_LEGACY = 2;
-export var STORAGE_SOFT_LIMIT = 5 * 1024 * 1024;   // 5 MB — drop background-tab images from save
-export var STORAGE_HARD_LIMIT = 10 * 1024 * 1024;  // 10 MB — drop all images; warn user
-
 // DOM references (module scripts are deferred, so DOM exists)
-export var $wrap = $('#canvas-wrap');
-export var iCvs = document.getElementById('image-canvas');
-export var oCvs = document.getElementById('overlay-canvas');
-export var iCtx = iCvs.getContext('2d');
-export var oCtx = oCvs.getContext('2d');
+export const $wrap = $('#canvas-wrap');
+export const iCvs = document.getElementById('image-canvas');
+export const oCvs = document.getElementById('overlay-canvas');
+export const iCtx = iCvs.getContext('2d');
+export const oCtx = oCvs.getContext('2d');
 
 // Workers
-export var worker = new Worker('./js/worker.js');
-export var imgWorker = new Worker('./js/imageWorker.js');
-
-// Late-bound cross-module function references (breaks import cycles)
-export var fn = {};
+export const worker = new Worker('./js/worker.js');
+export const imgWorker = new Worker('./js/imageWorker.js');

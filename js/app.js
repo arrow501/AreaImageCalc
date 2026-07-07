@@ -1,28 +1,11 @@
-import { S, fn } from './state.js';
+import { S } from './state.js';
 import { resize, startRenderLoop } from './render.js';
-import { enableTools } from './tools.js';
+import { enableTools } from './ui.js';
 import { scheduleSave, doSave, restoreState } from './storage.js';
-import { createTab, switchToTab, closeTab, renderTabBar, snapshotCurrentTab, newCurrentTab } from './tabs.js';
-import { loadPdf, renderPdfTabPage } from './pdf.js';
-import { exportProject, importProject, exportMeasurements } from './export.js';
+import { createTab, switchToTab } from './tabs.js';
+import { importProject } from './export.js';
 import './input.js';
 import './storageUI.js';
-
-// Register tab lifecycle functions on fn before restoreState is called
-fn.scheduleSave = scheduleSave;
-fn.createTab = createTab;
-fn.switchToTab = switchToTab;
-fn.closeTab = closeTab;
-fn.renderTabBar = renderTabBar;
-fn.snapshotCurrentTab = snapshotCurrentTab;
-fn.newCurrentTab = newCurrentTab;
-
-// Register PDF and export functions
-fn.loadPdf = loadPdf;
-fn.renderPdfTabPage = renderPdfTabPage;
-fn.exportProject = exportProject;
-fn.importProject = importProject;
-fn.exportMeasurements = exportMeasurements;
 
 resize();
 enableTools(false);
@@ -34,6 +17,19 @@ if (!restoreState()) {
 
 startRenderLoop();
 
+if ('launchQueue' in window) {
+  window.launchQueue.setConsumer(async function(launchParams) {
+    if (!launchParams.files.length) return;
+    const file = await launchParams.files[0].getFile();
+    importProject(file);
+  });
+}
+
 window.addEventListener('beforeunload', function() {
   if (S.pendingSave) doSave();
+});
+
+// Mobile browsers may kill the page on backgrounding without firing beforeunload.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden' && S.pendingSave) doSave();
 });

@@ -1,7 +1,9 @@
 import { S, COLORS } from './state.js';
+import { layoutHandles, hitTestHandles } from './handles.js';
+export { centroid, distSeg, pip, segmentLength } from './math.js';
 
 export function findShape(id) {
-  for (var i = 0; i < S.shapes.length; i++) {
+  for (let i = 0; i < S.shapes.length; i++) {
     if (S.shapes[i].id === id) return S.shapes[i];
   }
   return null;
@@ -12,27 +14,18 @@ export function nextColor() {
 }
 
 export function s2i(sx, sy) {
-  var s = S.view.zoom * S.view.fit;
+  const s = S.view.zoom * S.view.fit;
   return { x: (sx - S.view.ox) / s, y: (sy - S.view.oy) / s };
 }
 
 export function i2s(ix, iy) {
-  var s = S.view.zoom * S.view.fit;
+  const s = S.view.zoom * S.view.fit;
   return { x: ix * s + S.view.ox, y: iy * s + S.view.oy };
-}
-
-export function centroid(pts) {
-  var cx = 0, cy = 0;
-  for (var i = 0; i < pts.length; i++) {
-    cx += pts[i].x;
-    cy += pts[i].y;
-  }
-  return { x: cx / pts.length, y: cy / pts.length };
 }
 
 export function fmtArea(a) {
   if (S.scalePPU > 0) {
-    var u = a / (S.scalePPU * S.scalePPU);
+    const u = a / (S.scalePPU * S.scalePPU);
     if (u >= 1e6) return (u / 1e6).toFixed(2) + ' ' + S.scaleUnit + '\u00b2(M)';
     if (u >= 1e3) return u.toFixed(1) + ' ' + S.scaleUnit + '\u00b2';
     if (u >= 1)   return u.toFixed(2) + ' ' + S.scaleUnit + '\u00b2';
@@ -43,7 +36,7 @@ export function fmtArea(a) {
 
 export function fmtPerim(p) {
   if (S.scalePPU > 0) {
-    var u = p / S.scalePPU;
+    const u = p / S.scalePPU;
     if (u >= 1e3) return u.toFixed(1) + ' ' + S.scaleUnit;
     if (u >= 1)   return u.toFixed(2) + ' ' + S.scaleUnit;
     return u.toFixed(4) + ' ' + S.scaleUnit;
@@ -53,7 +46,7 @@ export function fmtPerim(p) {
 
 export function fmtLen(px) {
   if (S.scalePPU > 0) {
-    var u = px / S.scalePPU;
+    const u = px / S.scalePPU;
     if (u >= 100) return u.toFixed(1) + S.scaleUnit;
     if (u >= 1)   return u.toFixed(2) + S.scaleUnit;
     return u.toFixed(3) + S.scaleUnit;
@@ -61,43 +54,81 @@ export function fmtLen(px) {
   return Math.round(px) + 'px';
 }
 
-export function findNearestPt(ip, thr) {
-  var best = Infinity, sh = null, idx = -1;
-  for (var i = 0; i < S.shapes.length; i++) {
-    var s = S.shapes[i];
-    if (!s.closed) continue;
-    for (var j = 0; j < s.points.length; j++) {
-      var p = s.points[j];
-      var d = Math.hypot(p.x - ip.x, p.y - ip.y);
-      if (d < best) { best = d; sh = s; idx = j; }
+// Interaction handles near a screen point, laid out with grab-ring collision
+// avoidance. Content is tool-aware:
+//  - scale tool while the popup is open: the two pending calibration points
+//  - otherwise: visible shape vertices plus committed scale-line endpoints
+const HANDLE_RANGE = 56;
+
+export function handlesNear(sx, sy) {
+  const hs = [];
+
+  function push(kind, idx, shapeId, ipt) {
+    const sp = i2s(ipt.x, ipt.y);
+    if (Math.abs(sp.x - sx) > HANDLE_RANGE || Math.abs(sp.y - sy) > HANDLE_RANGE) return;
+    hs.push({ kind: kind, idx: idx, shapeId: shapeId, x: sp.x, y: sp.y });
+  }
+
+  if (S.tool === 'scale') {
+    if (S.scaleState === 2 && S.scaleP1 && S.scaleP2) {
+      push('scalePt', 0, null, S.scaleP1);
+      push('scalePt', 1, null, S.scaleP2);
+    }
+    return layoutHandles(hs);
+  }
+
+  if (S.tool === 'squarecal') {
+    if (S.polyPts.length === 4) {
+      for (let j = 0; j < 4; j++) push('sqcal', j, null, S.polyPts[j]);
+    }
+    return layoutHandles(hs);
+  }
+
+  for (let i = 0; i < S.shapes.length; i++) {
+    const sh = S.shapes[i];
+    if (sh.hidden) continue;
+    for (let j = 0; j < sh.points.length; j++) {
+      push('shape', j, sh.id, sh.points[j]);
     }
   }
-  if (best <= thr) return { shape: sh, idx: idx, dist: best };
-  return null;
-}
-
-export function distSeg(p, a, b) {
-  var dx = b.x - a.x, dy = b.y - a.y;
-  var l2 = dx * dx + dy * dy;
-  if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  var t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
-
-export function pip(p, pts) {
-  var inside = false;
-  for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    if ((pts[i].y > p.y) !== (pts[j].y > p.y) &&
-        p.x < (pts[j].x - pts[i].x) * (p.y - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x) {
-      inside = !inside;
-    }
+  if (S.scaleLine) {
+    push('scale', 0, null, S.scaleLine.p1);
+    push('scale', 1, null, S.scaleLine.p2);
   }
-  return inside;
+  return layoutHandles(hs);
+}
+
+export function hitHandle(sx, sy, hitR) {
+  return hitTestHandles(handlesNear(sx, sy), sx, sy, hitR);
 }
 
 export function hasWork() {
   if (S.img && (S.shapes.length > 0 || S.scaleLine)) return true;
   return S.tabs.some(function(t) { return t.imgDataUrl && (t.shapes.length > 0 || t.scaleLine); });
+}
+
+// Grab indicator: a weighted ring (dark under-stroke + light stroke). When
+// the ring centre was displaced by collision, a faint leader ties it back to
+// its control point.
+export function drawGrabRing(ctx, h, active, ringR) {
+  if (Math.hypot(h.rx - h.x, h.ry - h.y) > 0.5) {
+    ctx.beginPath();
+    ctx.moveTo(h.rx, h.ry);
+    ctx.lineTo(h.x, h.y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(h.rx, h.ry, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = active ? 3.5 : 3;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(h.rx, h.ry, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = active ? '#fff' : 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = active ? 1.8 : 1.2;
+  ctx.stroke();
 }
 
 export function dot(ctx, x, y, r, c) {

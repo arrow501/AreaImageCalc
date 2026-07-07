@@ -1,41 +1,53 @@
-import { S, fn, worker, oCvs } from './state.js';
-import { s2i, i2s, findNearestPt, findShape, fmtArea, fmtPerim } from './geometry.js';
-import { resize } from './render.js';
+import { S, worker, oCvs } from './state.js';
+import { s2i, i2s, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip, hitHandle } from './geometry.js';
+import { resize, refreshCanvasRect } from './render.js';
 import {
-  setTool, cancelTool, closePoly, finishFH, delShape, selectAt,
-  loadImg, fitView, zoomAt, setInteract, showScalePopup, confirmScale,
-  updatePanel, status, updateFilters, rotateImage
+  closePoly, closeSegment, finishFH, delShape, selectAt,
+  loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
+  rotateImage, renameShape, hideShape, showAllShapes,
+  showLabelPopup, confirmLabel, beginNoteAt
 } from './tools.js';
+import {
+  setTool, cancelTool, fitView, updatePanel, status, updateFilters, updateScaleDisp,
+  setSlider, syncToolbarLabels
+} from './ui.js';
+import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
+import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
+import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
+import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage } from './tabs.js';
+import { loadPdf } from './pdf.js';
+import { exportProject, importProject, exportMeasurements, exportMeasurementsCsv } from './export.js';
+import { EVT, emit, on } from './events.js';
 
-// Expose slider sync for tabs.js to call on tab switch
-fn.syncSliders = function() {
-  setSlider('bright', S.brightness);
-  setSlider('contrast', S.contrast);
-};
+// Sidebar reveal/collapse animates width; re-fit once the transition settles
+on(EVT.LAYOUT_CHANGE, function() {
+  setTimeout(function() {
+    resize();
+    if (S.img) fitView();
+  }, 170);
+});
 
 // ---- Coordinate Helpers ----
 
 function canvasXY(e) {
-  var r = oCvs.getBoundingClientRect();
-  S.mx = e.clientX - r.left;
-  S.my = e.clientY - r.top;
-  var ip = s2i(S.mx, S.my);
+  S.mx = e.clientX - S.canvasRect.left;
+  S.my = e.clientY - S.canvasRect.top;
+  const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
 }
 
 function touchXY(touch) {
-  var r = oCvs.getBoundingClientRect();
-  S.mx = touch.clientX - r.left;
-  S.my = touch.clientY - r.top;
-  var ip = s2i(S.mx, S.my);
+  S.mx = touch.clientX - S.canvasRect.left;
+  S.my = touch.clientY - S.canvasRect.top;
+  const ip = s2i(S.mx, S.my);
   S.mix = ip.x;
   S.miy = ip.y;
 }
 
 function findTouch(touches, id) {
-  for (var i = 0; i < touches.length; i++) {
+  for (let i = 0; i < touches.length; i++) {
     if (touches[i].identifier === id) return touches[i];
   }
   return null;
@@ -57,7 +69,7 @@ $(oCvs).on('mousedown', function(e) {
   if (e.button !== 0 || !S.img) return;
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    const hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
       S.perspDragIdx = hi;
       S.perspDragOffset = {
@@ -69,23 +81,18 @@ $(oCvs).on('mousedown', function(e) {
     return;
   }
 
-  var ip = { x: S.mix, y: S.miy };
+  const ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
     case 'squarecal':
       if (S.polyPts.length === 4) {
-        // Click near an existing corner → start dragging it
-        var grabR = 12 / (S.view.zoom * S.view.fit);
-        S.dragIdx = -1;
-        for (var ci = 0; ci < 4; ci++) {
-          if (Math.hypot(S.mix - S.polyPts[ci].x, S.miy - S.polyPts[ci].y) <= grabR) {
-            S.dragIdx = ci; break;
-          }
-        }
+        // Click a corner's grab ring → start dragging it
+        const h = hitHandle(S.mx, S.my);
+        S.dragIdx = h && h.kind === 'sqcal' ? h.idx : -1;
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
-        fn.onSqCalibPoint();
+        onSqCalibPoint();
       }
       break;
 
@@ -98,13 +105,19 @@ $(oCvs).on('mousedown', function(e) {
         S.scaleP2 = ip;
         S.scaleState = 2;
         showScalePopup();
+      } else if (S.scaleState === 2) {
+        const h = hitHandle(S.mx, S.my);
+        if (h && h.kind === 'scalePt') {
+          S.dragScaleIdx = h.idx;
+          oCvs.style.cursor = 'grabbing';
+        }
       }
       S.overlayDirty = true;
       break;
 
     case 'polygon':
       if (S.polyPts.length >= 3) {
-        var fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
+        const fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
         if (Math.hypot(S.mx - fp.x, S.my - fp.y) < 15) {
           closePoly();
           return;
@@ -117,23 +130,75 @@ $(oCvs).on('mousedown', function(e) {
     case 'freehand':
       S.isFH = true;
       S.fhPts = [ip];
-      S.fhLastTime = Date.now();
       S.overlayDirty = true;
       break;
 
-    case 'edit':
-      var thr = 10 / (S.view.zoom * S.view.fit);
-      var hp = findNearestPt(ip, thr);
-      if (hp) {
-        S.dragShape = hp.shape;
-        S.dragIdx = hp.idx;
-        S.dragPt = { x: hp.shape.points[hp.idx].x, y: hp.shape.points[hp.idx].y };
-        S.selId = hp.shape.id;
+    case 'segment':
+      S.polyPts.push(ip);
+      S.overlayDirty = true;
+      break;
+
+    case 'edit': {
+      const h = hitHandle(S.mx, S.my);
+      if (h && h.kind === 'shape') {
+        const shp = findShape(h.shapeId);
+        if (!shp) break;
+        recordHistory();
+        S.dragShape = shp;
+        S.dragIdx = h.idx;
+        S.dragPt = { x: shp.points[h.idx].x, y: shp.points[h.idx].y };
+        S.selId = shp.id;
+        oCvs.style.cursor = 'grabbing';
         S.overlayDirty = true;
         updatePanel();
         status('Drag to move point');
+      } else if (h && h.kind === 'scale') {
+        recordHistory();
+        S.dragScaleIdx = h.idx;
+        S.dragScaleReal = S.scalePPU > 0
+          ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
+          : 0;
+        oCvs.style.cursor = 'grabbing';
+        S.overlayDirty = true;
+        status('Drag to adjust the scale line — the entered distance is kept');
       }
       break;
+    }
+
+    case 'note':
+      beginNoteAt(ip);
+      break;
+
+    case 'label': {
+      let clickedId = null;
+      for (let li = S.shapes.length - 1; li >= 0; li--) {
+        const lsh = S.shapes[li];
+        if (!lsh.hidden && lsh.closed && pip(ip, lsh.points)) { clickedId = lsh.id; break; }
+      }
+      if (!clickedId) {
+        const lthr = 15 / (S.view.zoom * S.view.fit);
+        let lbest = Infinity;
+        for (let li = 0; li < S.shapes.length; li++) {
+          const lsh = S.shapes[li];
+          if (lsh.hidden) continue;
+          if (lsh.type === 'note') {
+            const ld = Math.hypot(ip.x - lsh.points[0].x, ip.y - lsh.points[0].y);
+            if (ld < lbest) { lbest = ld; clickedId = lsh.id; }
+            continue;
+          }
+          const lpts = lsh.points;
+          const ledge = lsh.closed ? lpts.length : lpts.length - 1;
+          for (let lj = 0; lj < ledge; lj++) {
+            const lk = lsh.closed ? (lj + 1) % lpts.length : lj + 1;
+            const ld = distSeg(ip, lpts[lj], lpts[lk]);
+            if (ld < lbest) { lbest = ld; clickedId = lsh.id; }
+          }
+        }
+        if (lbest > lthr) clickedId = null;
+      }
+      if (clickedId) showLabelPopup(clickedId);
+      break;
+    }
 
     case 'idle':
       selectAt(ip);
@@ -148,20 +213,20 @@ $(document).on('mousemove', function(e) {
     S.view.ox = S.panSt.ox + (e.clientX - S.panSt.x);
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) fn.updatePerspPreview();
+    if (S.perspActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    fn.updatePerspPreview();
+    emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
   }
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    const hi = findPerspHandle(S.mx, S.my);
     $('body').removeClass('cursor-move cursor-crosshair cursor-grab');
     if (hi >= 0) {
       oCvs.style.cursor = 'grab';
@@ -177,34 +242,19 @@ $(document).on('mousemove', function(e) {
       // Drag placed corner to fine-tune position
       S.polyPts[S.dragIdx] = { x: S.mix, y: S.miy };
     } else if (S.polyPts.length === 4) {
-      // Show grab cursor when hovering near a corner
-      var grabR2 = 12 / (S.view.zoom * S.view.fit);
-      var nearCorner = S.polyPts.some(function(p) {
-        return Math.hypot(S.mix - p.x, S.miy - p.y) <= grabR2;
-      });
-      oCvs.style.cursor = nearCorner ? 'grab' : '';
+      oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
     }
     S.overlayDirty = true;
     return;
   }
 
   if (S.isFH) {
-    var last = S.fhPts[S.fhPts.length - 1];
-    var dx = S.mix - last.x, dy = S.miy - last.y;
-    var dist = Math.sqrt(dx * dx + dy * dy);
+    sampleFreehand();
+    return;
+  }
 
-    var now = Date.now();
-    var dt = (now - S.fhLastTime) / 1000;
-    var speed = dt > 0 ? dist / dt : 0;
-
-    var t = Math.min(speed / 2000, 1);
-    var threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
-
-    if (dist >= threshold) {
-      S.fhPts.push({ x: S.mix, y: S.miy });
-      S.fhLastTime = now;
-      S.overlayDirty = true;
-    }
+  if (S.dragScaleIdx >= 0) {
+    moveScaleHandle();
     return;
   }
 
@@ -216,10 +266,49 @@ $(document).on('mousemove', function(e) {
     return;
   }
 
+  if (S.tool === 'edit') {
+    oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
+    S.overlayDirty = true;
+  }
+  if (S.tool === 'scale' && S.scaleState === 2) {
+    oCvs.style.cursor = hitHandle(S.mx, S.my) ? 'grab' : '';
+    S.overlayDirty = true;
+  }
+
   if (S.tool === 'polygon' && S.polyPts.length > 0) S.overlayDirty = true;
+  if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
-  if (S.tool === 'edit') S.overlayDirty = true;
 });
+
+// Freehand sampling: fixed screen-space step, so trace detail follows what
+// the user actually sees regardless of zoom or pointer speed.
+function sampleFreehand() {
+  const last = S.fhPts[S.fhPts.length - 1];
+  const scale = S.view.zoom * S.view.fit;
+  if (Math.hypot(S.mix - last.x, S.miy - last.y) * scale >= 2) {
+    S.fhPts.push({ x: S.mix, y: S.miy });
+    S.overlayDirty = true;
+  }
+}
+
+function moveScaleHandle() {
+  const p = { x: S.mix, y: S.miy };
+  if (S.tool === 'scale') {
+    if (S.dragScaleIdx === 0) S.scaleP1 = p;
+    else S.scaleP2 = p;
+  } else if (S.scaleLine) {
+    if (S.dragScaleIdx === 0) S.scaleLine.p1 = p;
+    else S.scaleLine.p2 = p;
+    if (S.dragScaleReal > 0) {
+      const px = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
+      if (px > 1e-6) {
+        S.scalePPU = px / S.dragScaleReal;
+        updateScaleDisp();
+      }
+    }
+  }
+  S.overlayDirty = true;
+}
 
 $(document).on('mouseup', function(e) {
   if (S.isPan) {
@@ -242,6 +331,20 @@ $(document).on('mouseup', function(e) {
     return;
   }
 
+  if (S.dragScaleIdx >= 0) {
+    const committed = S.tool === 'edit';
+    S.dragScaleIdx = -1;
+    S.dragScaleReal = 0;
+    oCvs.style.cursor = '';
+    S.overlayDirty = true;
+    if (committed) {
+      updatePanel();
+      status('Scale line adjusted.');
+      scheduleSave();
+    }
+    return;
+  }
+
   if (S.isFH) {
     S.isFH = false;
     if (S.fhPts.length > 5) {
@@ -254,21 +357,53 @@ $(document).on('mouseup', function(e) {
   }
 
   if (S.dragPt && S.dragShape) {
-    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    if (S.dragShape.type === 'segment') {
+      S.dragShape.length = segmentLength(S.dragShape.points);
+    } else if (S.dragShape.type !== 'note') {
+      S.dragShape._centroid = null;
+      worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    }
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
+    oCvs.style.cursor = '';
     S.overlayDirty = true;
     updatePanel();
-    status('Point moved. Drag control points to edit shapes.');
+    status('Point moved \u2014 Ctrl+Z to undo.');
     scheduleSave();
   }
 });
 
 $(oCvs).on('dblclick', function(e) {
+  canvasXY(e);
   if (S.tool === 'polygon' && S.polyPts.length >= 3) {
     S.polyPts.pop();
     closePoly();
+    return;
+  }
+  if (S.tool === 'segment' && S.polyPts.length >= 2) {
+    S.polyPts.pop();
+    closeSegment();
+    return;
+  }
+  if (S.tool === 'idle' || S.tool === 'edit') {
+    const thr = 12 / (S.view.zoom * S.view.fit);
+
+    // Double-click a note pin to edit its text
+    for (let i = S.shapes.length - 1; i >= 0; i--) {
+      const sh = S.shapes[i];
+      if (sh.hidden || sh.type !== 'note') continue;
+      if (Math.hypot(S.mix - sh.points[0].x, S.miy - sh.points[0].y) <= thr) {
+        showLabelPopup(sh.id);
+        return;
+      }
+    }
+
+    // Double-click the committed scale line to re-calibrate it
+    if (S.scaleLine && S.scalePPU > 0 &&
+        distSeg({ x: S.mix, y: S.miy }, S.scaleLine.p1, S.scaleLine.p2) <= thr) {
+      reopenScalePopup();
+    }
   }
 });
 
@@ -276,16 +411,19 @@ oCvs.addEventListener('wheel', function(e) {
   e.preventDefault();
   if (!S.img) return;
 
-  var r = oCvs.getBoundingClientRect();
-  var sx = e.clientX - r.left;
-  var sy = e.clientY - r.top;
-  var d = e.ctrlKey ? -e.deltaY * 3 : -e.deltaY;
+  const r = oCvs.getBoundingClientRect();
+  const sx = e.clientX - r.left;
+  const sy = e.clientY - r.top;
+  const d = e.ctrlKey ? -e.deltaY * 3 : -e.deltaY;
 
   zoomAt(d > 0 ? 1.1 : 1 / 1.1, sx, sy);
 }, { passive: false });
 
 $(oCvs).on('contextmenu', function(e) {
   e.preventDefault();
+  // Right-click finishes an in-progress path; otherwise clears it
+  if (S.tool === 'polygon' && S.polyPts.length >= 3) { closePoly(); return; }
+  if (S.tool === 'segment' && S.polyPts.length >= 2) { closeSegment(); return; }
   if (S.tool !== 'idle') {
     cancelTool();
     setTool(S.tool);
@@ -297,7 +435,7 @@ $(oCvs).on('contextmenu', function(e) {
 oCvs.addEventListener('touchstart', function(e) {
   e.preventDefault();
 
-  var touches = e.touches;
+  const touches = e.touches;
 
   if (touches.length >= 2) {
     if (S.isFH) { S.isFH = false; S.fhPts = []; S.overlayDirty = true; }
@@ -305,13 +443,18 @@ oCvs.addEventListener('touchstart', function(e) {
       S.dragPt = null; S.dragShape = null; S.dragIdx = -1;
       S.overlayDirty = true;
     }
+    if (S.dragScaleIdx >= 0) {
+      S.dragScaleIdx = -1;
+      S.dragScaleReal = 0;
+      S.overlayDirty = true;
+    }
     S.touchId = null;
     S.touchIsPan = true;
 
-    var t0 = touches[0], t1 = touches[1];
-    var r = oCvs.getBoundingClientRect();
-    var mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
-    var mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
+    const t0 = touches[0], t1 = touches[1];
+    const r = oCvs.getBoundingClientRect();
+    const mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
+    const mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
 
     S.touchPinchDist = Math.hypot(mx1 - mx0, my1 - my0);
     S.touchPinchMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
@@ -321,14 +464,14 @@ oCvs.addEventListener('touchstart', function(e) {
 
   if (S.touchId !== null) return;
 
-  var touch = touches[0];
+  const touch = touches[0];
   S.touchId = touch.identifier;
   touchXY(touch);
 
   if (!S.img) return;
 
   if (S.perspActive) {
-    var hi = fn.findPerspHandle(S.mx, S.my);
+    const hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
       S.perspDragIdx = hi;
       S.perspDragOffset = {
@@ -340,22 +483,17 @@ oCvs.addEventListener('touchstart', function(e) {
     return;
   }
 
-  var ip = { x: S.mix, y: S.miy };
+  const ip = { x: S.mix, y: S.miy };
 
   switch (S.tool) {
     case 'squarecal':
       if (S.polyPts.length === 4) {
-        var grabRT = 18 / (S.view.zoom * S.view.fit);
-        S.dragIdx = -1;
-        for (var cit = 0; cit < 4; cit++) {
-          if (Math.hypot(S.mix - S.polyPts[cit].x, S.miy - S.polyPts[cit].y) <= grabRT) {
-            S.dragIdx = cit; break;
-          }
-        }
+        const h = hitHandle(S.mx, S.my, 20);
+        S.dragIdx = h && h.kind === 'sqcal' ? h.idx : -1;
       } else {
         S.polyPts.push(ip);
         S.overlayDirty = true;
-        fn.onSqCalibPoint();
+        onSqCalibPoint();
       }
       break;
 
@@ -368,13 +506,16 @@ oCvs.addEventListener('touchstart', function(e) {
         S.scaleP2 = ip;
         S.scaleState = 2;
         showScalePopup();
+      } else if (S.scaleState === 2) {
+        const ht = hitHandle(S.mx, S.my, 20);
+        if (ht && ht.kind === 'scalePt') S.dragScaleIdx = ht.idx;
       }
       S.overlayDirty = true;
       break;
 
     case 'polygon':
       if (S.polyPts.length >= 3) {
-        var fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
+        const fp = i2s(S.polyPts[0].x, S.polyPts[0].y);
         if (Math.hypot(S.mx - fp.x, S.my - fp.y) < 25) {
           closePoly();
           return;
@@ -387,22 +528,41 @@ oCvs.addEventListener('touchstart', function(e) {
     case 'freehand':
       S.isFH = true;
       S.fhPts = [ip];
-      S.fhLastTime = Date.now();
       S.overlayDirty = true;
       break;
 
-    case 'edit':
-      var thrScreen = 20 / (S.view.zoom * S.view.fit);
-      var hp = findNearestPt(ip, thrScreen);
-      if (hp) {
-        S.dragShape = hp.shape;
-        S.dragIdx = hp.idx;
-        S.dragPt = { x: hp.shape.points[hp.idx].x, y: hp.shape.points[hp.idx].y };
-        S.selId = hp.shape.id;
+    case 'segment':
+      S.polyPts.push(ip);
+      S.overlayDirty = true;
+      break;
+
+    case 'edit': {
+      const h = hitHandle(S.mx, S.my, 20);
+      if (h && h.kind === 'shape') {
+        const shp = findShape(h.shapeId);
+        if (!shp) break;
+        recordHistory();
+        S.dragShape = shp;
+        S.dragIdx = h.idx;
+        S.dragPt = { x: shp.points[h.idx].x, y: shp.points[h.idx].y };
+        S.selId = shp.id;
         S.overlayDirty = true;
         updatePanel();
         status('Drag to move point');
+      } else if (h && h.kind === 'scale') {
+        recordHistory();
+        S.dragScaleIdx = h.idx;
+        S.dragScaleReal = S.scalePPU > 0
+          ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
+          : 0;
+        S.overlayDirty = true;
+        status('Drag to adjust the scale line');
       }
+      break;
+    }
+
+    case 'note':
+      beginNoteAt(ip);
       break;
 
     case 'idle':
@@ -414,19 +574,19 @@ oCvs.addEventListener('touchstart', function(e) {
 oCvs.addEventListener('touchmove', function(e) {
   e.preventDefault();
 
-  var touches = e.touches;
+  const touches = e.touches;
 
   if (S.touchIsPan && touches.length >= 2) {
-    var t0 = touches[0], t1 = touches[1];
-    var r = oCvs.getBoundingClientRect();
-    var mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
-    var mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
+    const t0 = touches[0], t1 = touches[1];
+    const r = oCvs.getBoundingClientRect();
+    const mx0 = t0.clientX - r.left, my0 = t0.clientY - r.top;
+    const mx1 = t1.clientX - r.left, my1 = t1.clientY - r.top;
 
-    var newDist = Math.hypot(mx1 - mx0, my1 - my0);
-    var newMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
+    const newDist = Math.hypot(mx1 - mx0, my1 - my0);
+    const newMid = { x: (mx0 + mx1) / 2, y: (my0 + my1) / 2 };
 
     if (S.touchPinchDist > 0) {
-      var factor = newDist / S.touchPinchDist;
+      const factor = newDist / S.touchPinchDist;
       zoomAt(factor, S.touchPinchMid.x, S.touchPinchMid.y);
       S.touchPinchDist = newDist;
       S.touchPinchMid = newMid;
@@ -440,41 +600,31 @@ oCvs.addEventListener('touchmove', function(e) {
     S.touchPanSt.oy = S.view.oy;
 
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) fn.updatePerspPreview();
+    if (S.perspActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
 
   if (S.touchId === null) return;
-  var touch = findTouch(touches, S.touchId);
+  const touch = findTouch(touches, S.touchId);
   if (!touch) return;
 
   touchXY(touch);
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
-    fn.updatePerspPreview();
+    emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
   }
 
   if (S.isFH) {
-    var last = S.fhPts[S.fhPts.length - 1];
-    var dx = S.mix - last.x, dy = S.miy - last.y;
-    var dist = Math.sqrt(dx * dx + dy * dy);
+    sampleFreehand();
+    return;
+  }
 
-    var now = Date.now();
-    var dt = (now - S.fhLastTime) / 1000;
-    var speed = dt > 0 ? dist / dt : 0;
-
-    var t = Math.min(speed / 2000, 1);
-    var threshold = S.FH_MIN_DIST + t * (S.FH_MAX_DIST - S.FH_MIN_DIST);
-
-    if (dist >= threshold) {
-      S.fhPts.push({ x: S.mix, y: S.miy });
-      S.fhLastTime = now;
-      S.overlayDirty = true;
-    }
+  if (S.dragScaleIdx >= 0) {
+    moveScaleHandle();
     return;
   }
 
@@ -487,6 +637,7 @@ oCvs.addEventListener('touchmove', function(e) {
   }
 
   if (S.tool === 'polygon' && S.polyPts.length > 0) S.overlayDirty = true;
+  if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
   if (S.tool === 'edit') S.overlayDirty = true;
 }, { passive: false });
@@ -503,7 +654,7 @@ function touchEnd(e) {
   }
 
   if (S.touchId === null) return;
-  var found = findTouch(e.touches, S.touchId);
+  const found = findTouch(e.touches, S.touchId);
   if (found) return;
 
   S.touchId = null;
@@ -512,6 +663,19 @@ function touchEnd(e) {
     S.perspDragIdx = -1;
     S.perspDragOffset = null;
     S.overlayDirty = true;
+    return;
+  }
+
+  if (S.dragScaleIdx >= 0) {
+    const committed = S.tool === 'edit';
+    S.dragScaleIdx = -1;
+    S.dragScaleReal = 0;
+    S.overlayDirty = true;
+    if (committed) {
+      updatePanel();
+      status('Scale line adjusted.');
+      scheduleSave();
+    }
     return;
   }
 
@@ -527,13 +691,18 @@ function touchEnd(e) {
   }
 
   if (S.dragPt && S.dragShape) {
-    worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    if (S.dragShape.type === 'segment') {
+      S.dragShape.length = segmentLength(S.dragShape.points);
+    } else if (S.dragShape.type !== 'note') {
+      S.dragShape._centroid = null;
+      worker.postMessage({ type: 'calcArea', id: S.dragShape.id, points: S.dragShape.points, tabIdx: S.currentTabIdx });
+    }
     S.dragPt = null;
     S.dragShape = null;
     S.dragIdx = -1;
     S.overlayDirty = true;
     updatePanel();
-    status('Point moved. Drag control points to edit shapes.');
+    status('Point moved \u2014 Ctrl+Z to undo.');
     scheduleSave();
   }
 }
@@ -546,6 +715,27 @@ oCvs.addEventListener('touchcancel', touchEnd, { passive: false });
 $(document).on('keydown', function(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
+  // Ctrl/Cmd shortcuts — never let plain letters below double as tool toggles
+  if (e.ctrlKey || e.metaKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      if ((S.tool === 'polygon' || S.tool === 'segment') && S.polyPts.length > 0) {
+        S.polyPts.pop();
+        S.overlayDirty = true;
+      } else if (!S.perspActive && S.tool !== 'squarecal') {
+        undo();
+      }
+    } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+      e.preventDefault();
+      if (!S.perspActive && S.tool !== 'squarecal') redo();
+    } else if (k === '0' && S.img) {
+      e.preventDefault();
+      fitView();
+    }
+    return;
+  }
+
   switch (e.key) {
     case ' ':
       if (!S.spaceHeld) {
@@ -557,9 +747,9 @@ $(document).on('keydown', function(e) {
 
     case 'Escape':
       if (S.tool === 'squarecal') {
-        fn.cancelSqCalib();
+        cancelSqCalib();
       } else if (S.perspActive) {
-        fn.cancelPerspective();
+        cancelPerspective();
       } else if (S.tool !== 'idle') {
         setTool('idle');
       } else {
@@ -571,26 +761,72 @@ $(document).on('keydown', function(e) {
 
     case 'Enter':
       if (S.tool === 'squarecal' && S.polyPts.length === 4) {
-        fn.applySqCalib();
+        applySqCalib();
         e.preventDefault();
       } else if (S.perspActive) {
-        fn.applyPerspective();
+        applyPerspective();
+        e.preventDefault();
+      } else if (S.tool === 'segment' && S.polyPts.length >= 2) {
+        closeSegment();
         e.preventDefault();
       }
       break;
 
     case 'Delete':
     case 'Backspace':
-      if (!S.perspActive && S.tool !== 'squarecal' && S.selId) delShape(S.selId);
+      if ((S.tool === 'polygon' || S.tool === 'segment' || S.tool === 'squarecal') && S.polyPts.length > 0) {
+        S.polyPts.pop();
+        S.overlayDirty = true;
+        if (S.tool === 'squarecal') onSqCalibPoint();
+      } else if (!S.perspActive && S.tool !== 'squarecal' && S.selId) {
+        delShape(S.selId);
+      }
       e.preventDefault();
       break;
 
+    case 's':
+    case 'S':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'scale' ? 'idle' : 'scale');
+      break;
+    case 'p':
+    case 'P':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'polygon' ? 'idle' : 'polygon');
+      break;
+    case 'f':
+    case 'F':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand');
+      break;
+    case 'd':
+    case 'D':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'segment' ? 'idle' : 'segment');
+      break;
+    case 'e':
+    case 'E':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit');
+      break;
+    case 'l':
+    case 'L':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'label' ? 'idle' : 'label');
+      break;
+    case 'n':
+    case 'N':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'note' ? 'idle' : 'note');
+      break;
+    case 'h':
+    case 'H':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal' && S.selId) hideShape(S.selId);
+      break;
+    case 'w':
+    case 'W':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') enterPerspective();
+      break;
     case '1': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'scale' ? 'idle' : 'scale'); break;
     case '2': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'polygon' ? 'idle' : 'polygon'); break;
     case '3': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'freehand' ? 'idle' : 'freehand'); break;
-    case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
-    case '5':
-      if (S.img && !S.perspActive && S.tool !== 'squarecal') fn.enterPerspective();
+    case '4': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'segment' ? 'idle' : 'segment'); break;
+    case '5': if (S.img && !S.perspActive && S.tool !== 'squarecal') setTool(S.tool === 'edit' ? 'idle' : 'edit'); break;
+    case '6':
+      if (S.img && !S.perspActive && S.tool !== 'squarecal') enterPerspective();
       break;
 
     case '=':
@@ -602,20 +838,57 @@ $(document).on('keydown', function(e) {
       if (S.img) zoomAt(1 / 1.2, S.cw / 2, S.ch / 2);
       break;
 
-    case '0':
-      if ((e.ctrlKey || e.metaKey) && S.img) {
+    case 'PageUp':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        navPage(-1);
         e.preventDefault();
-        fitView();
+      }
+      break;
+
+    case 'PageDown':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        navPage(1);
+        e.preventDefault();
+      }
+      break;
+
+    case '?':
+      if (!S.perspActive && S.tool !== 'squarecal') {
+        toggleShortcutsModal();
+        e.preventDefault();
       }
       break;
   }
+});
+
+let _releaseShortcutsFocus = null;
+function toggleShortcutsModal() {
+  const $m = $('#shortcuts-modal');
+  if ($m.hasClass('open')) closeShortcutsModal();
+  else openShortcutsModal();
+}
+function openShortcutsModal() {
+  const $m = $('#shortcuts-modal').addClass('open');
+  _releaseShortcutsFocus = trapFocus($m);
+}
+function closeShortcutsModal() {
+  $('#shortcuts-modal').removeClass('open');
+  if (_releaseShortcutsFocus) { _releaseShortcutsFocus(); _releaseShortcutsFocus = null; }
+}
+
+$('#btn-shortcuts').on('click', openShortcutsModal);
+$('#shortcuts-modal').on('click', function(e) {
+  if (e.target === this || $(e.target).hasClass('sc-close')) closeShortcutsModal();
+});
+$(document).on('keydown', function(e) {
+  if (e.key === 'Escape' && $('#shortcuts-modal').hasClass('open')) closeShortcutsModal();
 });
 
 $(document).on('keyup', function(e) {
   if (e.key === ' ') {
     S.spaceHeld = false;
     $('body').removeClass('cursor-grab cursor-grabbing');
-    if (S.tool === 'scale' || S.tool === 'polygon' || S.tool === 'freehand') {
+    if (S.tool === 'scale' || S.tool === 'polygon' || S.tool === 'freehand' || S.tool === 'segment') {
       $('body').addClass('cursor-crosshair');
     }
     if (S.tool === 'edit') {
@@ -628,8 +901,8 @@ $(document).on('keyup', function(e) {
 // PDFs need user interaction (page selector modal) before the next file
 // can safely be loaded. Images are dispatched immediately and load async.
 
-var _fileQueue = [];
-var _fileQueueBusy = false;
+const _fileQueue = [];
+let _fileQueueBusy = false;
 
 function queueFile(file) {
   if (!file) return;
@@ -640,23 +913,18 @@ function queueFile(file) {
 function _drainFileQueue() {
   if (_fileQueueBusy || _fileQueue.length === 0) return;
   _fileQueueBusy = true;
-  var file = _fileQueue.shift();
-  var name = file.name || '';
-  var ext = name.split('.').pop().toLowerCase();
+  const file = _fileQueue.shift();
+  const name = file.name || '';
+  const ext = name.split('.').pop().toLowerCase();
 
   if (ext === 'pdf' || file.type === 'application/pdf') {
     // PDF: pause the queue until the page-selector modal is dismissed
-    if (fn.loadPdf) {
-      fn.loadPdf(file, function() {
-        _fileQueueBusy = false;
-        _drainFileQueue();
-      });
-    } else {
+    loadPdf(file, function() {
       _fileQueueBusy = false;
       _drainFileQueue();
-    }
+    });
   } else if (ext === 'arcalc') {
-    if (fn.importProject) fn.importProject(file);
+    importProject(file);
     _fileQueueBusy = false;
     _drainFileQueue();
   } else if (file.type.indexOf('image/') === 0) {
@@ -665,6 +933,7 @@ function _drainFileQueue() {
     _fileQueueBusy = false;
     _drainFileQueue();
   } else {
+    status('Unsupported file: ' + (name || file.type || 'unknown'));
     _fileQueueBusy = false;
     _drainFileQueue();
   }
@@ -681,72 +950,126 @@ $('#canvas-wrap')
     e.preventDefault();
     $('#dropzone').removeClass('drag-over');
     if (e.type === 'drop') {
-      var files = e.originalEvent.dataTransfer.files;
-      for (var i = 0; i < files.length; i++) queueFile(files[i]);
+      const files = e.originalEvent.dataTransfer.files;
+      for (let i = 0; i < files.length; i++) queueFile(files[i]);
     }
   });
 
 $(document).on('paste', function(e) {
-  var items = e.originalEvent.clipboardData.items;
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image/') === 0) {
-      queueFile(items[i].getAsFile());
+  const items = e.originalEvent.clipboardData.items;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.kind !== 'file') continue;
+    if (it.type.indexOf('image/') === 0 || it.type === 'application/pdf') {
+      const f = it.getAsFile();
+      if (f) queueFile(f);
       return;
     }
   }
 });
 
+// ---- Label Popup ----
+
+$('#label-confirm').on('click', confirmLabel);
+
+$('#label-value').on('keydown', function(e) {
+  if (e.key === 'Enter') confirmLabel();
+  if (e.key === 'Escape') {
+    S.labelShapeId = null;
+    S.pendingNotePt = null;
+    $('#label-popup').hide();
+    this.blur();
+  }
+  e.stopPropagation();
+});
+
+// ---- Focus trap: cycle Tab within a modal, restore focus on close ----
+
+const FOCUSABLE_SEL = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function trapFocus($modal) {
+  const prev = document.activeElement;
+  const $focusable = $modal.find(FOCUSABLE_SEL).filter(':visible');
+  if ($focusable.length) $focusable.first().focus();
+
+  function onKey(e) {
+    if (e.key !== 'Tab') return;
+    const items = $modal.find(FOCUSABLE_SEL).filter(':visible').toArray();
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
+    else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
+  }
+  $modal.on('keydown.trap', onKey);
+
+  return function release() {
+    $modal.off('keydown.trap');
+    if (prev && typeof prev.focus === 'function') prev.focus();
+  };
+}
+
 // ---- Shared confirm modal (same style as storage-modal) ----
 
-function showConfirmModal(htmlMessage, confirmLabel, onConfirm) {
-  var $overlay = $('<div class="storage-modal-overlay">')
+// message: string (treated as text) or jQuery node (appended as-is).
+function showConfirmModal(message, confirmLabel, onConfirm) {
+  const $p = $('<p>');
+  if (typeof message === 'string') $p.text(message);
+  else $p.append(message);
+
+  const $overlay = $('<div class="storage-modal-overlay" role="dialog" aria-modal="true">')
     .append(
       $('<div class="storage-modal">')
-        .append($('<p>').html(htmlMessage))
+        .append($p)
         .append(
           $('<button class="btn-primary">').text(confirmLabel).on('click', function() {
+            release();
             $overlay.remove();
             onConfirm();
           })
         )
         .append(
           $('<button>').text('Cancel').on('click', function() {
+            release();
             $overlay.remove();
           })
         )
     )
     .appendTo('body');
+  const release = trapFocus($overlay);
 }
 
 // ---- New button (new project — clears all tabs) ----
 
 function doNewProject() {
-  if (S.perspActive && fn.cancelPerspective) fn.cancelPerspective();
-  if (S.tool === 'squarecal' && fn.cancelSqCalib) fn.cancelSqCalib();
+  if (S.perspActive) cancelPerspective();
+  if (S.tool === 'squarecal') cancelSqCalib();
   cancelTool();
 
   S.tabs.length = 0;
   S.currentTabIdx = -1;
-  if (fn.createTab && fn.switchToTab) {
-    fn.switchToTab(fn.createTab('Untitled', null, null));
-  }
+  switchToTab(createTab('Untitled', null, null));
+  $('#sidebar').addClass('collapsed');
+  $('#btn-toggle-docs').removeClass('active');
+  emit(EVT.LAYOUT_CHANGE);
   scheduleSave();
 }
 
 $('#btn-new').on('click', function() {
   // Check live current-tab state plus every other tab's persisted data
-  var hasContent = !!(S.img || S.shapes.length);
+  let hasContent = !!(S.img || S.shapes.length);
   if (!hasContent) {
-    for (var i = 0; i < S.tabs.length; i++) {
+    for (let i = 0; i < S.tabs.length; i++) {
       if (i === S.currentTabIdx) continue;
-      var t = S.tabs[i];
+      const t = S.tabs[i];
       if (t.img || t.imgDataUrl || (t.shapes && t.shapes.length)) { hasContent = true; break; }
     }
   }
 
   if (hasContent) {
     showConfirmModal(
-      '<strong>Start a new project?</strong><br>All tabs, images, and shapes will be cleared.',
+      $('<span>').append($('<strong>').text('Start a new project?'))
+        .append('<br>')
+        .append(document.createTextNode('All tabs, images, and shapes will be cleared.')),
       'New Project',
       doNewProject
     );
@@ -760,8 +1083,8 @@ $('#btn-open').on('click', function() {
 });
 
 $('#file-input').on('change', function() {
-  var files = this.files;
-  for (var i = 0; i < files.length; i++) queueFile(files[i]);
+  const files = this.files;
+  for (let i = 0; i < files.length; i++) queueFile(files[i]);
   this.value = '';
 });
 
@@ -773,7 +1096,7 @@ $(document).on('dragover drop', function(e) {
 
 $('.tb-btn[data-tool]').on('click', function() {
   if (!S.img) return;
-  var t = $(this).data('tool');
+  const t = $(this).data('tool');
   setTool(S.tool === t ? 'idle' : t);
 });
 
@@ -783,15 +1106,15 @@ $('#btn-delete').on('click', function() {
 
 $('#btn-clear').on('click', function() {
   if (!S.shapes.length) return;
-  if (!confirm('Delete all ' + S.shapes.length + ' shape(s)?')) return;
-
+  recordHistory();
+  const n = S.shapes.length;
   S.shapes = [];
   S.selId = null;
   S.colorIdx = 0;
   S.shapeN = 0;
   S.overlayDirty = true;
   updatePanel();
-  status('Cleared all shapes');
+  status('Cleared ' + n + ' shape' + (n !== 1 ? 's' : '') + ' — Ctrl+Z to undo');
   scheduleSave();
 });
 
@@ -801,19 +1124,23 @@ $('#btn-fit').on('click', function() {
 
 // ---- Panel Toggles (shared logic) ----
 
-function togglePanel(panelSel, $btn, collapseHtml, expandHtml) {
-  var $p = $(panelSel);
+function toggleShapesPanel() {
+  const $p = $('#shapes-panel');
   $p.toggleClass('collapsed');
-  $btn.html($p.hasClass('collapsed') ? expandHtml : collapseHtml);
+  const col = $p.hasClass('collapsed');
+  $('#panel-reveal').css('width', col ? '14px' : '0');
+  $('#btn-toggle-panel').html(col ? '&#187;' : '&#171;');
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 }
 
-$('#btn-toggle-panel').on('click', function() {
-  togglePanel('#shapes-panel', $(this), '&raquo;', '&laquo;');
-});
+$('#btn-toggle-panel').on('click', toggleShapesPanel);
+$('#panel-reveal').on('click', toggleShapesPanel);
 
-$('#btn-toggle-tabs').on('click', function() {
-  togglePanel('#tab-bar', $(this), '&#9662; Tabs', '&#9656; Tabs');
+$('#btn-toggle-docs').on('click', function() {
+  const $p = $('#sidebar');
+  $p.toggleClass('collapsed');
+  $(this).toggleClass('active', !$p.hasClass('collapsed'));
+  setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 
 // ---- Scale Popup ----
@@ -832,32 +1159,37 @@ $('#scale-value').on('keydown', function(e) {
 
 $('#btn-persp').on('click', function() {
   if (!S.img) return;
-  if (S.perspActive)          { fn.cancelPerspective(); return; }
-  if (S.tool === 'squarecal') { fn.cancelSqCalib();    return; }
-  fn.enterPerspective();
+  if (S.perspActive)          { cancelPerspective(); return; }
+  if (S.tool === 'squarecal') { cancelSqCalib();    return; }
+  enterPerspective();
 });
-$('#persp-apply').on('click', function() { fn.applyPerspective(); });
-$('#persp-cancel').on('click', function() { fn.cancelPerspective(); });
-$('#persp-reset').on('click', function() { fn.resetPerspective(); });
+$('#persp-apply').on('click', function() { applyPerspective(); });
+$('#persp-cancel').on('click', function() { cancelPerspective(); });
+$('#persp-reset').on('click', function() { resetPerspective(); });
 
 // ---- Perspective Mode Tabs ----
 
 $('.persp-tab').on('click', function() {
-  fn.switchPerspMode($(this).data('persp-mode'));
+  switchPerspMode($(this).data('persp-mode'));
 });
 
 // ---- Shapes Panel Events ----
 
 $('#shapes-list').on('click', '.shape-item', function(e) {
   if ($(e.target).closest('.shape-del').length) return;
+  if ($(e.target).closest('.shape-eye').length) return;
 
   S.selId = $(this).data('id');
   S.overlayDirty = true;
   updatePanel();
 
-  var sh = findShape(S.selId);
-  if (sh && sh.area != null) {
-    status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
+  const sh = findShape(S.selId);
+  if (sh) {
+    if (sh.type === 'segment') {
+      status('Length: ' + fmtLen(sh.length));
+    } else if (sh.area != null) {
+      status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
+    }
   }
 });
 
@@ -871,46 +1203,20 @@ $('#shapes-list').on('click', '.shape-del', function(e) {
 $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
-  if (S.perspActive) fn.updatePerspPreview();
+  if (S.perspActive) emit(EVT.VIEW_CHANGE);
 });
 
 // ---- Brightness / Contrast Sliders ----
 
-function setSlider(name, val) {
-  val = Math.max(-100, Math.min(100, Math.round(val)));
-
-  if (name === 'bright') {
-    S.brightness = val;
-  } else {
-    S.contrast = val;
-  }
-
-  var $grp = $('.sl-group [data-slider="' + name + '"]').closest('.sl-group');
-  var pct = (val + 100) / 200;
-
-  $grp.find('.sl-thumb').css('left', (pct * 100) + '%');
-
-  var $fill = $grp.find('.sl-fill');
-  if (val >= 0) {
-    $fill.css({ left: '50%', width: (pct * 100 - 50) + '%' });
-  } else {
-    $fill.css({ left: (pct * 100) + '%', width: (50 - pct * 100) + '%' });
-  }
-
-  $grp.find('.sl-val').val(val);
-
-  updateFilters();
-}
-
 $('.sl-track').each(function() {
-  var $track = $(this);
-  var name = $track.data('slider');
-  var dragging = false;
+  const $track = $(this);
+  const name = $track.data('slider');
+  let dragging = false;
 
   function update(e) {
-    var r = $track[0].getBoundingClientRect();
-    var pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-    var val = Math.round(pct * 200 - 100);
+    const r = $track[0].getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    let val = Math.round(pct * 200 - 100);
 
     if (Math.abs(val) < 6) val = 0;
 
@@ -937,9 +1243,9 @@ $('.sl-track').each(function() {
 });
 
 $('.sl-val').each(function() {
-  var $inp = $(this);
-  var name = $inp.data('slider');
-  var startY = 0, startVal = 0, dragging = false, hasMoved = false;
+  const $inp = $(this);
+  const name = $inp.data('slider');
+  let startY = 0, startVal = 0, dragging = false, hasMoved = false;
 
   $inp.on('change', function() {
     setSlider(name, +this.value);
@@ -958,7 +1264,7 @@ $('.sl-val').each(function() {
   $(document).on('mousemove', function(e) {
     if (!dragging) return;
 
-    var dy = startY - e.clientY;
+    const dy = startY - e.clientY;
 
     if (!hasMoved && Math.abs(dy) > 4) {
       hasMoved = true;
@@ -966,7 +1272,7 @@ $('.sl-val').each(function() {
     }
 
     if (hasMoved) {
-      var delta = Math.round(dy / 2);
+      const delta = Math.round(dy / 2);
       setSlider(name, startVal + delta);
     }
   });
@@ -989,35 +1295,67 @@ $('.sl-val').each(function() {
   });
 });
 
-// ---- Tab Bar Events ----
+// ---- Sidebar (documents) Events ----
 
-$(document).on('click', '.tab-item', function(e) {
-  if ($(e.target).hasClass('tab-close') || $(e.target).closest('.tab-close').length) return;
-  var idx = parseInt($(this).data('idx'), 10);
-  if (idx !== S.currentTabIdx && fn.switchToTab) fn.switchToTab(idx);
+$(document).on('click', '#doc-list .doc-row', function(e) {
+  if ($(e.target).closest('.doc-close').length) return;
+  if ($(e.target).hasClass('doc-caret') && $(e.target).data('doc') !== undefined) {
+    toggleDocCollapsed($(e.target).data('doc'));
+    return;
+  }
+  const idx = parseInt($(this).attr('data-idx'), 10);
+  if (!isNaN(idx) && idx !== S.currentTabIdx) switchToTab(idx);
 });
 
-$(document).on('click', '.tab-close', function(e) {
+$(document).on('click', '#doc-list .doc-page', function(e) {
+  if ($(e.target).closest('.doc-close').length) return;
+  const idx = parseInt($(this).attr('data-idx'), 10);
+  if (!isNaN(idx) && idx !== S.currentTabIdx) switchToTab(idx);
+});
+
+$(document).on('click', '#doc-list .doc-close', function(e) {
   e.stopPropagation();
-  var idx = parseInt($(this).data('idx'), 10);
-  if (fn.closeTab) fn.closeTab(idx);
-});
-
-$(document).on('click', '#btn-new-tab', function() {
-  if (fn.createTab && fn.switchToTab) {
-    var idx = fn.createTab('Untitled', null, null);
-    fn.switchToTab(idx);
+  const docAttr = $(this).attr('data-doc');
+  const idxAttr = $(this).attr('data-idx');
+  if (docAttr !== undefined && docAttr !== '') {
+    closeDoc(parseInt(docAttr, 10));
+  } else if (idxAttr !== undefined && idxAttr !== '') {
+    closeTab(parseInt(idxAttr, 10));
   }
 });
+
+$(document).on('click', '#btn-new-doc', function() {
+  const idx = createTab('Untitled', null, null);
+  switchToTab(idx);
+});
+
+$('#page-prev').on('click', function() { navPage(-1); });
+$('#page-next').on('click', function() { navPage(1); });
 
 // ---- Export Buttons ----
 
 $('#btn-export-project').on('click', function() {
-  if (fn.exportProject) fn.exportProject();
+  exportProject();
 });
 
-$('#btn-export-measurements').on('click', function() {
-  if (fn.exportMeasurements) fn.exportMeasurements();
+$('#btn-export-measurements').on('click', function(e) {
+  e.stopPropagation();
+  const $m = $('#export-menu');
+  if ($m.is(':visible')) { $m.hide(); return; }
+  const r = this.getBoundingClientRect();
+  $m.css({ left: r.left + 'px', top: (r.bottom + 4) + 'px' }).show();
+});
+
+$('#export-menu button').on('click', function() {
+  $('#export-menu').hide();
+  if ($(this).data('export') === 'csv') exportMeasurementsCsv();
+  else exportMeasurements();
+});
+
+$(document).on('click', function(e) {
+  if (!$(e.target).closest('#export-menu, #btn-export-measurements').length) {
+    $('#export-menu').hide();
+  }
 });
 
 // ---- Rotate Buttons ----
@@ -1041,7 +1379,7 @@ $('#btn-rotate-custom').on('click', function() {
 });
 
 function applyCustomRotate() {
-  var val = parseFloat($('#rotate-angle-input').val());
+  const val = parseFloat($('#rotate-angle-input').val());
   if (isNaN(val)) { status('Enter a valid angle'); return; }
   if (val === 0) { $('#rotate-popup').hide(); return; }
   $('#rotate-popup').hide();
@@ -1070,6 +1408,34 @@ $('#rotate-cw-small').on('click', function() {
   $('#rotate-popup').hide();
   rotateImage(90);
 });
+
+// ---- Show All Hidden Shapes ----
+
+$('#btn-showall').on('click', function() {
+  showAllShapes();
+});
+
+/// ---- Panel: hide-toggle per shape ----
+
+$('#shapes-list').on('click', '.shape-eye', function(e) {
+  e.stopPropagation();
+  hideShape($(this).data('id'));
+});
+
+// ---- Refresh protection ----
+
+window.addEventListener('beforeunload', function(e) {
+  if (S.storageFull || S.saveErrored) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+// ---- Dynamic toolbar label shortening ----
+
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(syncToolbarLabels).observe(document.getElementById('toolbar'));
+}
 
 // Initialize sliders
 setSlider('bright', 0);
