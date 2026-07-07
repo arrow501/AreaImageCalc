@@ -1,4 +1,8 @@
-export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_COMPAT, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+export { COLORS, SAVE_KEY, SAVE_VER, SAVE_VER_COMPAT, SAVE_VER_LEGACY, TRANSFORM_UNDO_KEY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './constants.js';
+
+// Session nonce: scopes the transform-undo slot to this page load so a
+// stale slot can never restore into an unrelated tab of a later session
+export const SESSION = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 // Shared mutable state — every module imports S and reads/writes S.xxx
 export const S = {

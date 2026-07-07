@@ -6,7 +6,7 @@ import { createTab, switchToTab, renderSidebar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
-import { recordHistory, clearHistory } from './history.js';
+import { recordHistory, recordTransformHistory, clearHistory } from './history.js';
 import { EVT, emit } from './events.js';
 
 // Routes a worker shape result to either the active tab (shown) or a background
@@ -560,6 +560,7 @@ export function translateShape(sh, dx, dy) {
 export function rotateImage(angleDeg) {
   if (!S.img || angleDeg === 0) return;
 
+  recordTransformHistory();
   const tab = getActiveTab();
   if (tab && !tab.baseImg) {
     tab.baseImg = S.img;
@@ -627,10 +628,7 @@ export function rotateImage(angleDeg) {
     S.view.iw = new_w;
     S.view.ih = new_h;
     S.imgDataUrl = dataUrl;
-    if (tab) {
-      tab.baseRotation = newRot;
-      clearHistory(tab);
-    }
+    if (tab) tab.baseRotation = newRot;
 
     S.imageDirty = S.overlayDirty = true;
     fitView();
@@ -639,7 +637,6 @@ export function rotateImage(angleDeg) {
     // Clear stale pre-rotation WebP and re-encode the rotated image.
     // Without this, serializeTab() would save the old WebP while shapes
     // are already in post-rotation coordinates, corrupting reloaded state.
-    const tab = getActiveTab();
     if (tab) {
       tab.imgWebpUrl = null;
       tab.webpPending = true;

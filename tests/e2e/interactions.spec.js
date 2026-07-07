@@ -134,6 +134,38 @@ test('double-clicking the scale line re-opens calibration with the value prefill
   await expect(page.locator('#scale-value')).toHaveValue('10');
 });
 
+test('Ctrl+Z undoes an image rotation, restoring exact shape coordinates', async ({ page }) => {
+  await page.locator('#btn-polygon').click();
+  const { cx, cy } = await canvasCenter(page);
+  await drawTriangle(page, cx, cy);
+  await expect(page.locator('#shapes-list .area')).not.toContainText('...', { timeout: 5000 });
+  await page.keyboard.press('Escape');
+
+  await page.locator('#btn-export-measurements').click();
+  const before = await downloadPoints(page);
+
+  await page.locator('#btn-rotate-cw').click();
+  await expect(page.locator('#status-text')).toContainText('Rotated 90', { timeout: 8000 });
+
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('#status-text')).toContainText('Transform undone', { timeout: 8000 });
+  await expect(page.locator('#shapes-list .shape-item')).toHaveCount(1);
+
+  await page.locator('#btn-export-measurements').click();
+  const after = await downloadPoints(page);
+  expect(after).toEqual(before);
+});
+
+async function downloadPoints(page) {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#export-menu button[data-export="json"]').click(),
+  ]);
+  const { readFileSync } = await import('fs');
+  const data = JSON.parse(readFileSync(await download.path(), 'utf-8'));
+  return data.tabs[0].measurements[0].points;
+}
+
 test('freehand trace creates a closed shape with an area', async ({ page }) => {
   await page.locator('#btn-freehand').click();
   const { cx, cy } = await canvasCenter(page);
