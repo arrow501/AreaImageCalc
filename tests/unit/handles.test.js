@@ -72,6 +72,37 @@ describe('layoutHandles', () => {
     expect(a[1].ry).toBeCloseTo(b[1].ry);
   });
 
+  test('rings never swap sides: each stays on its own point\'s side', () => {
+    const out = layoutHandles([
+      { id: 'left', x: 0, y: 0 },
+      { id: 'right', x: 5, y: 0 }
+    ]);
+    expect(out[0].rx).toBeLessThan(out[1].rx);
+    expect(out[0].rx).toBeLessThanOrEqual(0);
+    expect(out[1].rx).toBeGreaterThanOrEqual(5);
+  });
+
+  test('collinear cluster keeps spatial ordering after relaxation', () => {
+    const out = layoutHandles([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 4, y: 0 },
+      { id: 'c', x: 8, y: 0 }
+    ]);
+    expect(out[0].rx).toBeLessThan(out[1].rx);
+    expect(out[1].rx).toBeLessThan(out[2].rx);
+  });
+
+  test('ring bulges away from its neighbour, point on the inner side', () => {
+    const out = layoutHandles([
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 6, y: 0 }
+    ]);
+    // a's ring centre is left of a's point (away from b), so the point sits
+    // on the edge of the ring closest to the neighbour
+    expect(out[0].rx).toBeLessThan(out[0].x);
+    expect(out[1].rx).toBeGreaterThan(out[1].x);
+  });
+
   test('preserves extra properties on handles', () => {
     const out = layoutHandles([{ id: 'a', x: 0, y: 0, shapeId: 's1', idx: 3 }]);
     expect(out[0].shapeId).toBe('s1');

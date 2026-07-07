@@ -7,13 +7,16 @@ A browser-based tool for measuring areas and distances on images. Load any image
 ## Features
 
 - **Image loading**: drag & drop, paste from clipboard, or file picker — JPEG, PNG, GIF, WebP; multiple files at once
-- **Document sidebar**: every image or PDF is a document in a collapsible left sidebar; multi-page PDFs group their pages under one expandable node
+- **Integrated sidebar**: Documents and Shapes live in one sidebar as collapsible panes with a draggable height splitter; dock it left or right (File menu, persisted); multi-page PDFs group their pages under one expandable node; file actions sit in a compact File menu
+- **Shape organisation**: drag rows to reorder (z-order follows), group shapes with subtotals and collapse, rename inline with a double-click, and recolor via a palette or free-text input (hex, rgb(), names)
+- **Move tool**: drag a whole shape to reposition it (handy for comparing outlines); arrow keys nudge
+- **Selection cycling**: repeated clicks on overlapping measurements cycle through the stack; the selected shape renders on top
 - **PDF support**: thumbnail picker to choose pages (click, All/None, or type a range); pages render lazily at 150 DPI; PageUp/PageDown and a statusbar pager navigate within a document
 - **Project save / load**: `.arcalc` files are self-describing HTML — the recipient can double-click one to see what it is and where to open it; all tabs, WebP-compressed images, shapes, notes, and scale round-trip
 - **Measurements export**: CSV (spreadsheet-ready) or JSON, with calibrated values when a scale is set
-- **Scale calibration**: click two points of known distance (mm, cm, m, in, ft, yd); endpoints stay adjustable — drag them in Edit mode (the entered distance is kept) or double-click the scale line to re-calibrate
+- **Scale calibration**: click two points of known distance (mm, cm, m, in, ft, yd); endpoints stay adjustable — drag them in Edit mode (the entered distance is kept) or double-click the scale line to re-calibrate. Alternatively, calibrate from a shape of known area via the shape menu
 - **Drawing tools**: polygon, freehand tracing with live fill preview, and open-path distance measurement — tools stay active so you can measure repeatedly; Esc exits
-- **Undo / redo**: per-document history for adding, deleting, moving, renaming, and clearing shapes and scale changes (`Ctrl+Z` / `Ctrl+Shift+Z`)
+- **Undo / redo**: per-document history for adding, deleting, moving, renaming, regrouping, recoloring, and clearing shapes and scale changes (`Ctrl+Z` / `Ctrl+Shift+Z`); the most recent image transform (rotate / perspective) is also undoable via a snapshot slot in localStorage
 - **Notes**: pin text annotations anywhere on the image; they export with measurements
 - **Edit mode**: every control point has a minimum-size grab ring; overlapping rings move aside (the point never leaves its ring) so dense vertices stay clickable at any zoom
 - **Label / rename**: click any shape to rename it inline
@@ -45,6 +48,7 @@ A browser-based tool for measuring areas and distances on images. Load any image
 | Polygon | `P` | Click to place vertices; close via first point, double-click, Enter, or right-click |
 | Freehand | `F` | Drag to trace; live fill shows the region; release to finish |
 | Distance | `D` | Click points along a path; finish with double-click, Enter, or right-click |
+| Move | `M` | Drag a whole shape to reposition it; arrow keys nudge (Shift = 10x) |
 | Edit | `E` | Drag grab rings to move shape points, note pins, and scale endpoints |
 | Label | `L` | Click a shape to rename it; click a note to edit its text |
 | Note | `N` | Click to pin a text annotation |
@@ -56,7 +60,7 @@ A browser-based tool for measuring areas and distances on images. Load any image
 
 | Key | Action |
 |-----|--------|
-| `S` / `P` / `F` / `D` / `E` / `L` / `N` | Activate tool (toggle off if already active) |
+| `S` / `P` / `F` / `D` / `M` / `E` / `L` / `N` | Activate tool (toggle off if already active) |
 | `1`–`6` | Numeric aliases for Scale / Polygon / Freehand / Distance / Edit / Perspective |
 | `W` | Enter / exit Perspective mode |
 | `H` | Hide / show selected shape |
@@ -97,6 +101,8 @@ A browser-based tool for measuring areas and distances on images. Load any image
 4. All measurements update immediately to calibrated units
 
 To correct later: drag an endpoint in **Edit** mode (the entered distance is kept and pixels-per-unit recalculates), or double-click the line to re-enter the value.
+
+**Scale by area**: draw a closed shape around a region of known real-world area, open its shape menu (⋮ in the Shapes pane) → **Set scale from area…**, and enter the area. Pixels-per-unit derives from `sqrt(px_area / real_area)`.
 
 Supported units: `mm` `cm` `m` `in` `ft` `yd`
 
@@ -154,6 +160,7 @@ The app is split into ES modules — `index.html` only contains the CSS and HTML
 | `js/handles.js` | Pure grab-ring layout: min hit size, collision displacement |
 | `js/arcalcFormat.js` | Pure `.arcalc` HTML-polyglot encode / decode |
 | `js/csv.js` | Pure measurements CSV builder |
+| `js/color.js` | Pure color parsing (hex, rgb(), names → #RRGGBB) |
 | `js/state.js` | Shared mutable state (`S`), DOM refs, workers |
 | `js/canvasUtil.js` | Canvas encode helper (WebP with PNG fallback) |
 | `js/geometry.js` | State-aware transforms, formatting, handle collection |

@@ -33,19 +33,23 @@ export function layoutHandles(handles, ringR) {
     for (let i = 0; i < out.length; i++) {
       for (let j = i + 1; j < out.length; j++) {
         const a = out[i], b = out[j];
-        let dx = b.rx - a.rx, dy = b.ry - a.ry;
-        let d = Math.hypot(dx, dy);
-        if (d >= target) continue;
+        const rd = Math.hypot(b.rx - a.rx, b.ry - a.ry);
+        if (rd >= target) continue;
 
-        if (d < 1e-6) {
-          // Coincident: deterministic spread direction from index pair
+        // Push along the axis between the CONTROL POINTS, not the ring
+        // centres: each ring bulges away from its neighbour on its own
+        // point's side, so spatial ordering is never inverted.
+        let ax = b.x - a.x, ay = b.y - a.y;
+        let ad = Math.hypot(ax, ay);
+        if (ad < 1e-6) {
+          // Coincident points: deterministic spread direction from index pair
           const ang = (i * 2.399963 + j * 0.71) % (Math.PI * 2);
-          dx = Math.cos(ang);
-          dy = Math.sin(ang);
-          d = 1;
+          ax = Math.cos(ang);
+          ay = Math.sin(ang);
+          ad = 1;
         }
-        const push = (target - d) / 2;
-        const ux = dx / d, uy = dy / d;
+        const push = (target - rd) / 2;
+        const ux = ax / ad, uy = ay / ad;
         shiftClamped(a, -ux * push, -uy * push, maxOff);
         shiftClamped(b, ux * push, uy * push, maxOff);
         moved = true;

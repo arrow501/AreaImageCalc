@@ -5,7 +5,7 @@ import { fitScale, segmentLength } from './math.js';
 import { encodeCanvas } from './canvasUtil.js';
 import { setTool, enableTools, status, updateScaleDisp, fitView, updatePanel } from './ui.js';
 import { scheduleSave } from './storage.js';
-import { clearHistory } from './history.js';
+import { recordTransformHistory } from './history.js';
 import { getActiveTab } from './tabs.js';
 import { EVT, emit, on } from './events.js';
 
@@ -364,7 +364,6 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
       if (tab) {
         tab.baseImg = newImg;
         tab.baseRotation = 0;
-        clearHistory(tab);
         tab.imgWebpUrl = null;
         tab.webpPending = true;
         if (typeof createImageBitmap === 'function') {
@@ -383,6 +382,7 @@ export function applyHomographyToImage(Hfwd, Hinv, onComplete) {
     newImg.src = dataUrl;
   };
 
+  recordTransformHistory();
   worker.postMessage({
     type: 'warp', reqId: reqId, buf: srcData.data.buffer,
     iw: iw, ih: ih, outW: outW, outH: outH, offX: offX, offY: offY, Hinv: Hinv

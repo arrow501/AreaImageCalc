@@ -30,6 +30,7 @@ Layer 0 — zero deps, Node-importable, fully unit-testable
   handles.js      grab-ring layout, collision displacement, hit-testing
   arcalcFormat.js .arcalc HTML-polyglot encode/decode
   csv.js          measurements CSV builder
+  color.js        color string parsing → #RRGGBB
 
 Layer 1 — runtime core (DOM-dependent, no feature imports)
   state.js       S object, DOM refs, workers  ← constants.js
@@ -76,9 +77,10 @@ Cross-layer notifications (tab switch, PDF render, layout change) go through `ev
 
 ## Save Format / .arcalc
 
-- localStorage save format is **v4** (adds `docId`/`docLabel`/`pageNum` per tab); v3 and legacy v2 states still hydrate.
+- localStorage save format is **v4** (adds `docId`/`docLabel`/`pageNum` per tab, `group` per shape); v3 and legacy v2 states still hydrate.
 - `.arcalc` files are **HTML polyglots** (`arcalcFormat.js`) — a standalone page with the project JSON embedded in a script tag. Legacy plain-JSON files still import.
-- Image transforms (rotate, perspective) clear the per-tab undo history; geometry-only mutations record snapshots via `recordHistory()` **before** mutating.
+- Geometry mutations record snapshots via `recordHistory()` **before** mutating. Image transforms record via `recordTransformHistory()`, which persists ONE full pre-transform snapshot (image + geometry) to localStorage; a new transform supersedes the slot and prunes history older than the superseded marker. Transform undo is session-scoped and not redoable.
+- Group members must stay contiguous in `S.shapes`; `setShapeGroup`/`reorderShape` maintain this invariant. Array order = panel order = z-order.
 
 ---
 

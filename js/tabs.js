@@ -118,6 +118,8 @@ export function applyTabToState(idx) {
   S.touchIsPan = false;
   S.dragScaleIdx = -1;
   S.dragScaleReal = 0;
+  S.moveShape = null;
+  S.moveLast = null;
 
   S.imageDirty = S.overlayDirty = true;
 }
@@ -143,7 +145,7 @@ export function createTab(label, imgDataUrl, imgElement, docInfo) {
   if (newIdx === 1 && $('#sidebar').hasClass('collapsed')) {
     // Second document opened — reveal the sidebar automatically
     $('#sidebar').removeClass('collapsed');
-    $('#btn-toggle-docs').addClass('active');
+    $('#btn-toggle-sidebar').addClass('active');
     emit(EVT.LAYOUT_CHANGE);
   }
   return newIdx;
@@ -406,7 +408,7 @@ export function serializeTab(tab) {
     imgDataUrl: tab.imgWebpUrl || tab.imgDataUrl,
     view: { ox: tab.view.ox, oy: tab.view.oy, zoom: tab.view.zoom, fit: tab.view.fit, iw: tab.view.iw, ih: tab.view.ih },
     shapes: tab.shapes.map(function(s) {
-      return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter, length: s.length, name: s.name, hidden: s.hidden, text: s.text };
+      return { id: s.id, type: s.type, points: s.points, closed: s.closed, color: s.color, area: s.area, perimeter: s.perimeter, length: s.length, name: s.name, hidden: s.hidden, text: s.text, group: s.group };
     }),
     colorIdx: tab.colorIdx,
     shapeN: tab.shapeN,

@@ -18,6 +18,8 @@ export function cancelTool() {
   S.dragIdx = -1;
   S.dragScaleIdx = -1;
   S.dragScaleReal = 0;
+  S.moveShape = null;
+  S.moveLast = null;
   S.touchId = null;
   S.touchIsPan = false;
   S.labelShapeId = null;
@@ -45,7 +47,7 @@ export function setTool(t) {
   if (t === 'scale' || t === 'polygon' || t === 'freehand' || t === 'squarecal' || t === 'segment' || t === 'note') {
     $('body').addClass('cursor-crosshair');
   }
-  if (t === 'edit') {
+  if (t === 'edit' || t === 'move') {
     $('body').addClass('cursor-move');
   }
 
@@ -67,6 +69,9 @@ export function setTool(t) {
       break;
     case 'edit':
       status('Drag control points to adjust shapes and the scale line. ESC to exit.');
+      break;
+    case 'move':
+      status('Drag a shape to move it. Arrow keys nudge the selected shape (Shift = 10x). ESC to exit.');
       break;
     case 'label':
       status('Click a shape to rename it, or a note to edit its text.');
@@ -91,7 +96,7 @@ export function status(t) {
 // ---- Toolbar State ----
 
 export function enableTools(on) {
-  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
+  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-move, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -127,8 +132,66 @@ export function updateScaleDisp() {
   }
 }
 
-function _esc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Selection-only refresh: toggles classes in place instead of rebuilding
+// rows, so double-clicks (inline rename) and hover states survive.
+export function updatePanelSelection() {
+  $('#shapes-list .shape-item').each(function() {
+    $(this).toggleClass('selected', $(this).attr('data-id') === S.selId);
+  });
+}
+
+const _collapsedGroups = {};
+
+export function toggleGroupCollapsed(name) {
+  _collapsedGroups[name] = !_collapsedGroups[name];
+  updatePanel();
+}
+
+function shapeMeasureText(s) {
+  if (s.type === 'segment') {
+    return { m: s.length != null ? fmtLen(s.length) : '...', p: '' };
+  }
+  if (s.type === 'note') {
+    return { m: s.text ? (s.text.length > 36 ? s.text.slice(0, 35) + '…' : s.text) : '(empty)', p: '' };
+  }
+  return {
+    m: s.area != null ? fmtArea(s.area) : '...',
+    p: s.perimeter != null ? fmtPerim(s.perimeter) : ''
+  };
+}
+
+function buildShapeRow(s) {
+  const t = shapeMeasureText(s);
+  const hideTip = s.hidden ? 'Show shape [H]' : 'Hide shape [H]';
+
+  const $item = $('<div class="shape-item">')
+    .toggleClass('selected', s.id === S.selId)
+    .toggleClass('shape-hidden', !!s.hidden)
+    .attr('data-id', s.id)
+    .attr('draggable', 'true');
+
+  $item.append(
+    $('<button class="shape-swatch" title="Change color">')
+      .attr('data-id', s.id).css('background', s.color)
+  );
+
+  const $info = $('<div class="shape-info">')
+    .append($('<div class="shape-name" title="Double-click to rename">').text(s.name || ''))
+    .append($('<div class="area">').text(t.m));
+  if (t.p) $info.append($('<div class="perim">').text('P: ' + t.p));
+  $item.append($info);
+
+  $item.append(
+    $('<button class="shape-eye">').attr('data-id', s.id).attr('title', hideTip)
+      .html(s.hidden ? '&#9675;' : '&#9679;')
+  );
+  $item.append(
+    $('<button class="shape-menu" title="Shape options">').attr('data-id', s.id).html('&#8942;')
+  );
+  $item.append(
+    $('<button class="shape-del" title="Delete shape">').attr('data-id', s.id).html('&times;')
+  );
+  return $item;
 }
 
 export function updatePanel() {
@@ -137,37 +200,39 @@ export function updatePanel() {
 
   let total = 0;
   let hasHidden = false;
+  let curGroup = null;
+  let collapsed = false;
 
   for (let i = 0; i < S.shapes.length; i++) {
     const s = S.shapes[i];
     if (s.hidden) hasHidden = true;
+    if (s.type !== 'segment' && s.type !== 'note' && s.area != null) total += s.area;
 
-    let mStr, pStr = '';
-    if (s.type === 'segment') {
-      mStr = s.length != null ? fmtLen(s.length) : '...';
-    } else if (s.type === 'note') {
-      mStr = s.text ? (s.text.length > 36 ? s.text.slice(0, 35) + '…' : s.text) : '(empty)';
-    } else {
-      mStr = s.area != null ? fmtArea(s.area) : '...';
-      pStr = s.perimeter != null ? fmtPerim(s.perimeter) : '';
-      if (s.area != null) total += s.area;
+    const g = s.group || null;
+    if (g !== curGroup) {
+      curGroup = g;
+      collapsed = false;
+      if (g) {
+        let sub = 0, cnt = 0;
+        for (let j = i; j < S.shapes.length && (S.shapes[j].group || null) === g; j++) {
+          cnt++;
+          const sj = S.shapes[j];
+          if (sj.type !== 'segment' && sj.type !== 'note' && sj.area != null) sub += sj.area;
+        }
+        collapsed = !!_collapsedGroups[g];
+        $l.append(
+          $('<div class="group-header">').attr('data-group', g)
+            .append($('<span class="group-caret">').html(collapsed ? '&#9656;' : '&#9662;'))
+            .append($('<span class="group-name">').text(g))
+            .append($('<span class="group-sub">').text(fmtArea(sub) + ' · ' + cnt))
+        );
+      }
     }
 
-    const hideTip = s.hidden ? 'Show shape [H]' : 'Hide shape [H]';
-    const hideChar = s.hidden ? '&#9675;' : '&#9679;';
-
-    $l.append(
-      '<div class="shape-item' + (s.id === S.selId ? ' selected' : '') + (s.hidden ? ' shape-hidden' : '') + '" data-id="' + s.id + '">' +
-        '<div class="shape-swatch" style="background:' + s.color + '"></div>' +
-        '<div class="shape-info">' +
-          '<div class="shape-name">' + _esc(s.name || '') + '</div>' +
-          '<div class="area">' + mStr + '</div>' +
-          (pStr ? '<div class="perim">P: ' + pStr + '</div>' : '') +
-        '</div>' +
-        '<button class="shape-eye" data-id="' + s.id + '" title="' + hideTip + '">' + hideChar + '</button>' +
-        '<button class="shape-del" data-id="' + s.id + '">&times;</button>' +
-      '</div>'
-    );
+    if (g && collapsed) continue;
+    const $row = buildShapeRow(s);
+    if (g) $row.addClass('grouped');
+    $l.append($row);
   }
 
   const tStr = S.shapes.length

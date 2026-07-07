@@ -11,7 +11,7 @@ export function csvNum(v) {
   return String(Math.round(v * 10000) / 10000);
 }
 
-const HEADER = ['document', 'name', 'type', 'area', 'area_unit',
+const HEADER = ['document', 'name', 'group', 'type', 'area', 'area_unit',
                 'length', 'length_unit', 'area_px2', 'length_px', 'text'];
 
 // tabs: [{ label, scalePPU, scaleUnit, shapes: [...] }]
@@ -40,6 +40,7 @@ export function buildMeasurementsCsv(tabs) {
       rows.push([
         csvEscape(tab.label || ''),
         csvEscape(s.name || ''),
+        csvEscape(s.group || ''),
         csvEscape(s.type || ''),
         ppu && areaPx != null ? csvNum(areaPx / (ppu * ppu)) : '',
         ppu && areaPx != null ? csvEscape(unit + '²') : '',

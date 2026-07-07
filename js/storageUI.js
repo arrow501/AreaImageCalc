@@ -7,12 +7,16 @@ function updateBadge(bytes) {
     ? 'Auto-save FULL — save your project to a file!'
     : bytes >= STORAGE_SOFT_LIMIT
       ? 'Auto-save limited — some tab images not saved (project too large)'
-      : 'Save project as .arcalc';
-  $('#btn-export-project')
+      : 'File menu';
+  // Warn on the File menu button (Save lives inside it) and the item itself
+  $('#btn-file-menu')
     .toggleClass('storage-warn', bytes >= STORAGE_SOFT_LIMIT && bytes < STORAGE_HARD_LIMIT)
     .toggleClass('storage-full', bytes >= STORAGE_HARD_LIMIT)
     .attr('title', title)
     .attr('aria-label', title);
+  $('#btn-export-project')
+    .toggleClass('storage-warn', bytes >= STORAGE_SOFT_LIMIT && bytes < STORAGE_HARD_LIMIT)
+    .toggleClass('storage-full', bytes >= STORAGE_HARD_LIMIT);
 }
 
 function showHardLimitDialog() {
