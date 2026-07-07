@@ -46,7 +46,7 @@ describe('buildMeasurementsCsv', () => {
     scalePPU: 10,
     scaleUnit: 'cm',
     shapes: [
-      { id: 's1', name: 'Room', type: 'polygon', area: 40000, perimeter: 800 },
+      { id: 's1', name: 'Room', type: 'polygon', area: 40000, perimeter: 800, group: 'Floor 1' },
       { id: 's2', name: 'Wall', type: 'segment', length: 500 },
       { id: 's3', name: 'Note 1', type: 'note', text: 'check this, later' }
     ]
@@ -55,23 +55,23 @@ describe('buildMeasurementsCsv', () => {
   test('starts with the header row', () => {
     const csv = buildMeasurementsCsv(tabs);
     expect(csv.split('\r\n')[0])
-      .toBe('document,name,type,area,area_unit,length,length_unit,area_px2,length_px,text');
+      .toBe('document,name,group,type,area,area_unit,length,length_unit,area_px2,length_px,text');
   });
 
   test('converts px measurements using the tab scale', () => {
     const lines = buildMeasurementsCsv(tabs).split('\r\n');
     // 40000 px² at 10 px/cm → 400 cm²; 800 px perimeter → 80 cm
-    expect(lines[1]).toBe('"Plan, v2",Room,polygon,400,cm²,80,cm,40000,800,');
+    expect(lines[1]).toBe('"Plan, v2",Room,Floor 1,polygon,400,cm²,80,cm,40000,800,');
   });
 
   test('segments report length but no area', () => {
     const lines = buildMeasurementsCsv(tabs).split('\r\n');
-    expect(lines[2]).toBe('"Plan, v2",Wall,segment,,,50,cm,,500,');
+    expect(lines[2]).toBe('"Plan, v2",Wall,,segment,,,50,cm,,500,');
   });
 
   test('notes carry their text and no measurements', () => {
     const lines = buildMeasurementsCsv(tabs).split('\r\n');
-    expect(lines[3]).toBe('"Plan, v2",Note 1,note,,,,,,,"check this, later"');
+    expect(lines[3]).toBe('"Plan, v2",Note 1,,note,,,,,,,"check this, later"');
   });
 
   test('unscaled tabs leave unit columns empty', () => {
@@ -79,7 +79,7 @@ describe('buildMeasurementsCsv', () => {
       label: 'raw', scalePPU: 0, scaleUnit: 'cm',
       shapes: [{ id: 's1', name: 'A', type: 'polygon', area: 100, perimeter: 40 }]
     }]);
-    expect(csv.split('\r\n')[1]).toBe('raw,A,polygon,,,,,100,40,');
+    expect(csv.split('\r\n')[1]).toBe('raw,A,,polygon,,,,,100,40,');
   });
 
   test('ends with a trailing CRLF', () => {

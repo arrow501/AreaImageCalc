@@ -93,7 +93,7 @@ test('File menu offers CSV with header and data rows', async ({ page }) => {
 
   expect(name).toMatch(/\.csv$/);
   const lines = text.replace(/^﻿/, '').trim().split('\r\n');
-  expect(lines[0]).toBe('document,name,type,area,area_unit,length,length_unit,area_px2,length_px,text');
+  expect(lines[0]).toBe('document,name,group,type,area,area_unit,length,length_unit,area_px2,length_px,text');
   expect(lines.length).toBeGreaterThanOrEqual(2);
   expect(lines[1]).toContain('polygon');
 });

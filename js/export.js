@@ -181,6 +181,7 @@ export function exportMeasurements() {
             name: s.name,
             points: s.points
           };
+          if (s.group) obj.group = s.group;
           if (s.type === 'note') {
             obj.text = s.text || '';
             return obj;

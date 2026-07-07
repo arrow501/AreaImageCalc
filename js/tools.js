@@ -1,11 +1,12 @@
 import { S, worker, imgWorker } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
+import { parseColor } from './color.js';
 import { encodeCanvas } from './canvasUtil.js';
 import { scheduleSave } from './storage.js';
 import { createTab, switchToTab, renderSidebar, getActiveTab } from './tabs.js';
 import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
-import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updateFilters } from './ui.js';
+import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updatePanelSelection, updateFilters } from './ui.js';
 import { recordHistory, recordTransformHistory, clearHistory } from './history.js';
 import { EVT, emit } from './events.js';
 
@@ -528,7 +529,7 @@ export function selectAt(ip) {
 
   S.selId = found;
   S.overlayDirty = true;
-  updatePanel();
+  updatePanelSelection();
 
   if (found) {
     const sh = findShape(found);
@@ -550,6 +551,108 @@ export function translateShape(sh, dx, dy) {
     sh.points[i] = { x: sh.points[i].x + dx, y: sh.points[i].y + dy };
   }
   sh._centroid = null;
+}
+
+// ---- Shape organisation (color, groups, order) ----
+
+// Pure parse first; canvas normalisation catches everything else the
+// browser understands (extended names, hsl(), ...)
+export function resolveColor(str) {
+  const p = parseColor(str);
+  if (p) return p;
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.fillStyle = '#010203';
+  ctx.fillStyle = String(str);
+  const v = ctx.fillStyle;
+  if (v === '#010203') return null; // invalid input leaves the sentinel untouched
+  return typeof v === 'string' && v[0] === '#' ? v.toUpperCase() : parseColor(v);
+}
+
+export function setShapeColor(id, colorStr) {
+  const sh = findShape(id);
+  if (!sh) return false;
+  const c = resolveColor(colorStr);
+  if (!c) {
+    status('Unrecognised color — try #hex, rgb(), or a color name');
+    return false;
+  }
+  if (c !== sh.color) {
+    recordHistory();
+    sh.color = c;
+    S.overlayDirty = true;
+    updatePanel();
+    scheduleSave();
+  }
+  return true;
+}
+
+// Keeps group members contiguous while preserving relative order; ungrouped
+// shapes hold their individual positions.
+function regroupShapes() {
+  const buckets = [];
+  const index = {};
+  for (let i = 0; i < S.shapes.length; i++) {
+    const sh = S.shapes[i];
+    const key = sh.group ? 'g:' + sh.group : 'u:' + sh.id;
+    if (index[key] !== undefined) {
+      buckets[index[key]].push(sh);
+    } else {
+      index[key] = buckets.length;
+      buckets.push([sh]);
+    }
+  }
+  const flat = [];
+  for (let i = 0; i < buckets.length; i++) {
+    for (let j = 0; j < buckets[i].length; j++) flat.push(buckets[i][j]);
+  }
+  S.shapes.length = 0;
+  Array.prototype.push.apply(S.shapes, flat);
+}
+
+export function setShapeGroup(id, groupName) {
+  const sh = findShape(id);
+  if (!sh) return;
+  const g = (groupName || '').trim() || null;
+  if ((sh.group || null) === g) return;
+  recordHistory();
+  if (g) sh.group = g;
+  else delete sh.group;
+  regroupShapes();
+  S.overlayDirty = true;
+  updatePanel();
+  scheduleSave();
+}
+
+export function existingGroups() {
+  const seen = {};
+  const out = [];
+  for (let i = 0; i < S.shapes.length; i++) {
+    const g = S.shapes[i].group;
+    if (g && !seen[g]) {
+      seen[g] = true;
+      out.push(g);
+    }
+  }
+  return out;
+}
+
+// Reorder within the list (z-order): the dragged shape adopts the group of
+// its drop position so groups stay contiguous.
+export function reorderShape(id, targetId, before) {
+  if (id === targetId) return;
+  const from = S.shapes.findIndex(function(s) { return s.id === id; });
+  const target = findShape(targetId);
+  if (from < 0 || !target) return;
+  recordHistory();
+  const sh = S.shapes.splice(from, 1)[0];
+  if (target.group) sh.group = target.group;
+  else delete sh.group;
+  let to = S.shapes.findIndex(function(s) { return s.id === targetId; });
+  if (!before) to++;
+  S.shapes.splice(to, 0, sh);
+  S.overlayDirty = true;
+  updatePanel();
+  scheduleSave();
 }
 
 // ---- Image Rotation ----

@@ -1,15 +1,16 @@
-import { S, worker, oCvs } from './state.js';
+import { S, COLORS, worker, oCvs } from './state.js';
 import { s2i, i2s, findShape, fmtArea, fmtPerim, fmtLen, segmentLength, distSeg, pip, hitHandle } from './geometry.js';
 import { resize, refreshCanvasRect } from './render.js';
 import {
   closePoly, closeSegment, finishFH, delShape, selectAt, hitsAt, translateShape,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
   rotateImage, renameShape, hideShape, showAllShapes,
-  showLabelPopup, confirmLabel, beginNoteAt
+  showLabelPopup, confirmLabel, beginNoteAt,
+  setShapeColor, setShapeGroup, existingGroups, reorderShape
 } from './tools.js';
 import {
-  setTool, cancelTool, fitView, updatePanel, status, updateFilters, updateScaleDisp,
-  setSlider, syncToolbarLabels
+  setTool, cancelTool, fitView, updatePanel, updatePanelSelection, status, updateFilters, updateScaleDisp,
+  setSlider, syncToolbarLabels, toggleGroupCollapsed
 } from './ui.js';
 import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
@@ -308,7 +309,7 @@ function startMoveDrag(ip) {
   S.moveShape = sh;
   S.moveLast = { x: ip.x, y: ip.y };
   oCvs.style.cursor = 'grabbing';
-  updatePanel();
+  updatePanelSelection();
   S.overlayDirty = true;
 }
 
@@ -1274,17 +1275,18 @@ $('.persp-tab').on('click', function() {
 // ---- Shapes Panel Events ----
 
 $('#shapes-list').on('click', '.shape-item', function(e) {
-  if ($(e.target).closest('.shape-del').length) return;
-  if ($(e.target).closest('.shape-eye').length) return;
+  if ($(e.target).closest('.shape-del, .shape-eye, .shape-swatch, .shape-menu, input').length) return;
 
   S.selId = $(this).data('id');
   S.overlayDirty = true;
-  updatePanel();
+  updatePanelSelection();
 
   const sh = findShape(S.selId);
   if (sh) {
     if (sh.type === 'segment') {
       status('Length: ' + fmtLen(sh.length));
+    } else if (sh.type === 'note') {
+      status('Note: ' + (sh.text || ''));
     } else if (sh.area != null) {
       status('Area: ' + fmtArea(sh.area) + ' | Perimeter: ' + fmtPerim(sh.perimeter));
     }
@@ -1294,6 +1296,229 @@ $('#shapes-list').on('click', '.shape-item', function(e) {
 $('#shapes-list').on('click', '.shape-del', function(e) {
   e.stopPropagation();
   delShape($(this).data('id'));
+});
+
+$('#shapes-list').on('click', '.group-header', function() {
+  toggleGroupCollapsed($(this).data('group'));
+});
+
+// ---- Shapes panel: inline rename ----
+
+function startInlineRename(id) {
+  const $name = $('#shapes-list .shape-item[data-id="' + id + '"] .shape-name');
+  if (!$name.length || $name.find('input').length) return;
+  const sh = findShape(id);
+  const old = sh ? (sh.name || '') : '';
+  const $inp = $('<input type="text" class="name-edit">').val(old);
+  $name.empty().append($inp);
+  $inp.focus().select();
+  let done = false;
+  function commit() {
+    if (done) return;
+    done = true;
+    const v = $inp.val();
+    if (v.trim() && v !== old) renameShape(id, v);
+    else updatePanel();
+  }
+  $inp.on('keydown', function(e) {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') { done = true; updatePanel(); }
+    e.stopPropagation();
+  });
+  $inp.on('blur', commit);
+  $inp.on('click dblclick', function(e) { e.stopPropagation(); });
+}
+
+$('#shapes-list').on('dblclick', '.shape-name', function(e) {
+  e.stopPropagation();
+  startInlineRename($(this).closest('.shape-item').data('id'));
+});
+
+// ---- Shapes panel: color popover ----
+
+let _colorShapeId = null;
+
+(function buildPalette() {
+  const $c = $('#color-swatches');
+  for (let i = 0; i < COLORS.length; i++) {
+    $c.append($('<button>').attr('title', COLORS[i]).attr('data-color', COLORS[i]).css('background', COLORS[i]));
+  }
+})();
+
+function positionPopover($m, el) {
+  const r = el.getBoundingClientRect();
+  $m.css({
+    left: Math.min(r.left, window.innerWidth - 240) + 'px',
+    top: (r.bottom + 4) + 'px'
+  }).show();
+}
+
+function closePopovers() {
+  $('#shape-menu, #color-popover, #group-popover').hide();
+}
+
+function openColorPopover(id, anchor) {
+  closePopovers();
+  _colorShapeId = id;
+  const sh = findShape(id);
+  $('#color-input').val(sh ? sh.color : '');
+  positionPopover($('#color-popover'), anchor);
+  $('#color-input').focus().select();
+}
+
+$('#shapes-list').on('click', '.shape-swatch', function(e) {
+  e.stopPropagation();
+  openColorPopover($(this).data('id'), this);
+});
+
+$('#color-swatches').on('click', 'button', function(e) {
+  e.stopPropagation();
+  if (_colorShapeId) setShapeColor(_colorShapeId, $(this).data('color'));
+  $('#color-popover').hide();
+});
+
+function applyColorInput() {
+  if (_colorShapeId && setShapeColor(_colorShapeId, $('#color-input').val())) {
+    $('#color-popover').hide();
+  }
+}
+
+$('#color-apply').on('click', function(e) {
+  e.stopPropagation();
+  applyColorInput();
+});
+
+$('#color-input').on('keydown', function(e) {
+  if (e.key === 'Enter') applyColorInput();
+  if (e.key === 'Escape') $('#color-popover').hide();
+  e.stopPropagation();
+});
+
+// ---- Shapes panel: group popover ----
+
+let _groupShapeId = null;
+
+function openGroupPopover(id, anchor) {
+  closePopovers();
+  _groupShapeId = id;
+  $('#group-input').val('');
+  positionPopover($('#group-popover'), anchor);
+  $('#group-input').focus();
+}
+
+function applyGroupInput() {
+  const v = $('#group-input').val();
+  if (_groupShapeId && v.trim()) setShapeGroup(_groupShapeId, v);
+  $('#group-popover').hide();
+  _groupShapeId = null;
+}
+
+$('#group-apply').on('click', function(e) {
+  e.stopPropagation();
+  applyGroupInput();
+});
+
+$('#group-input').on('keydown', function(e) {
+  if (e.key === 'Enter') applyGroupInput();
+  if (e.key === 'Escape') { $('#group-popover').hide(); _groupShapeId = null; }
+  e.stopPropagation();
+});
+
+// ---- Shapes panel: per-shape menu ----
+
+let _menuShapeId = null;
+
+$('#shapes-list').on('click', '.shape-menu', function(e) {
+  e.stopPropagation();
+  closePopovers();
+  _menuShapeId = $(this).data('id');
+  const sh = findShape(_menuShapeId);
+  if (!sh) return;
+
+  const $m = $('#shape-menu').empty();
+  $m.append($('<button data-act="rename">').text('Rename'));
+  $m.append($('<button data-act="color">').text('Change color…'));
+  $m.append($('<div class="menu-sep">'));
+  const groups = existingGroups();
+  for (let i = 0; i < groups.length; i++) {
+    if (groups[i] !== sh.group) {
+      $m.append($('<button data-act="group">').attr('data-group', groups[i]).text('Move to "' + groups[i] + '"'));
+    }
+  }
+  $m.append($('<button data-act="newgroup">').text('New group…'));
+  if (sh.group) $m.append($('<button data-act="ungroup">').text('Remove from group'));
+  $m.append($('<div class="menu-sep">'));
+  $m.append($('<button data-act="delete">').text('Delete'));
+  positionPopover($m, this);
+});
+
+$('#shape-menu').on('click', 'button', function(e) {
+  e.stopPropagation();
+  const act = $(this).data('act');
+  const id = _menuShapeId;
+  $('#shape-menu').hide();
+  if (!id) return;
+  const rowAnchor = $('#shapes-list .shape-item[data-id="' + id + '"]')[0];
+
+  if (act === 'rename') startInlineRename(id);
+  else if (act === 'color') openColorPopover(id, rowAnchor || this);
+  else if (act === 'group') setShapeGroup(id, $(this).data('group'));
+  else if (act === 'newgroup') openGroupPopover(id, rowAnchor || this);
+  else if (act === 'ungroup') setShapeGroup(id, null);
+  else if (act === 'delete') delShape(id);
+});
+
+// ---- Shapes panel: drag to reorder / regroup ----
+
+let _dragShapeId = null;
+
+$('#shapes-list').on('dragstart', '.shape-item', function(e) {
+  _dragShapeId = $(this).data('id');
+  e.originalEvent.dataTransfer.effectAllowed = 'move';
+  e.originalEvent.dataTransfer.setData('text/plain', String(_dragShapeId));
+});
+
+$('#shapes-list').on('dragover', '.shape-item', function(e) {
+  if (_dragShapeId == null) return;
+  e.preventDefault();
+  const r = this.getBoundingClientRect();
+  const before = (e.originalEvent.clientY - r.top) < r.height / 2;
+  $(this).toggleClass('drop-before', before).toggleClass('drop-after', !before);
+});
+
+$('#shapes-list').on('dragleave', '.shape-item', function() {
+  $(this).removeClass('drop-before drop-after');
+});
+
+$('#shapes-list').on('drop', '.shape-item', function(e) {
+  e.preventDefault();
+  const before = $(this).hasClass('drop-before');
+  $(this).removeClass('drop-before drop-after');
+  if (_dragShapeId != null) reorderShape(_dragShapeId, $(this).data('id'), before);
+  _dragShapeId = null;
+});
+
+$('#shapes-list').on('dragover', '.group-header', function(e) {
+  if (_dragShapeId == null) return;
+  e.preventDefault();
+  $(this).addClass('drop-into');
+});
+
+$('#shapes-list').on('dragleave', '.group-header', function() {
+  $(this).removeClass('drop-into');
+});
+
+$('#shapes-list').on('drop', '.group-header', function(e) {
+  e.preventDefault();
+  $(this).removeClass('drop-into');
+  if (_dragShapeId != null) setShapeGroup(_dragShapeId, $(this).data('group'));
+  _dragShapeId = null;
+});
+
+$('#shapes-list').on('dragend', '.shape-item', function() {
+  _dragShapeId = null;
+  $('#shapes-list .drop-before, #shapes-list .drop-after').removeClass('drop-before drop-after');
+  $('#shapes-list .drop-into').removeClass('drop-into');
 });
 
 // ---- Window Resize ----
@@ -1447,9 +1672,11 @@ $('#file-menu').on('click', 'button', function() {
 });
 
 $(document).on('click', function(e) {
-  if (!$(e.target).closest('#file-menu, #btn-file-menu').length) {
-    $('#file-menu').hide();
-  }
+  const $t = $(e.target);
+  if (!$t.closest('#file-menu, #btn-file-menu').length) $('#file-menu').hide();
+  if (!$t.closest('#shape-menu, .shape-menu').length) $('#shape-menu').hide();
+  if (!$t.closest('#color-popover, .shape-swatch').length) $('#color-popover').hide();
+  if (!$t.closest('#group-popover').length) $('#group-popover').hide();
 });
 
 $('#btn-export-project').on('click', function() {
