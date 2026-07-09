@@ -27,7 +27,8 @@ The module graph is a strict DAG — no circular imports. Layers:
 Layer 0 — zero deps, Node-importable, fully unit-testable
   constants.js    COLORS, SAVE_KEY, SAVE_VER*, STORAGE_*_LIMIT
   math.js         distSeg, pip, centroid, segmentLength, fitScale
-  handles.js      grab-ring layout, collision displacement, hit-testing
+  handles.js      grab-ring layout, collision displacement, hit-testing,
+                  label-box placement
   arcalcFormat.js .arcalc HTML-polyglot encode/decode
   csv.js          measurements CSV builder
   color.js        color string parsing → #RRGGBB
