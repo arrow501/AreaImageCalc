@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { encodeArcalc, decodeArcalc, APP_URL } from '../../js/arcalcFormat.js';
+import { encodeArcalc, decodeArcalc, APP_URL, HANDOFF_HASH } from '../../js/arcalcFormat.js';
 
 const sampleProject = {
   v: 4,
@@ -32,6 +32,26 @@ describe('encodeArcalc', () => {
     const html = encodeArcalc(sampleProject);
     expect(html).not.toMatch(/src\s*=\s*["']http/);
     expect(html).not.toMatch(/<link/);
+  });
+
+  test('includes the handoff link and script', () => {
+    const html = encodeArcalc(sampleProject);
+    expect(html).toContain('id="arcalc-open"');
+    expect(html).toContain('href="' + APP_URL + HANDOFF_HASH + '"');
+    expect(html).toContain('arcalc-ready');
+    expect(html).toContain('arcalc-project');
+  });
+
+  test('honours a custom app URL', () => {
+    const html = encodeArcalc(sampleProject, 'http://localhost:9999/');
+    expect(html).toContain('href="http://localhost:9999/' + HANDOFF_HASH + '"');
+  });
+
+  test('handoff script cannot terminate its own script element', () => {
+    const html = encodeArcalc(sampleProject);
+    const start = html.indexOf('<script>');
+    const end = html.indexOf('</script>', start);
+    expect(html.slice(start + 8, end)).not.toContain('</scr');
   });
 });
 

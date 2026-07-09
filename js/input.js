@@ -18,7 +18,8 @@ import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective
 import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
 import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage } from './tabs.js';
 import { loadPdf } from './pdf.js';
-import { exportProject, importProject, exportMeasurements, exportMeasurementsCsv } from './export.js';
+import { exportProject, importProject, exportMeasurements, exportMeasurementsCsv, hasExistingWork } from './export.js';
+import { PROJECT_EXTS } from './arcalcFormat.js';
 import { EVT, emit, on } from './events.js';
 
 // Sidebar reveal/collapse animates width; re-fit once the transition settles
@@ -1034,7 +1035,7 @@ function _drainFileQueue() {
       _fileQueueBusy = false;
       _drainFileQueue();
     });
-  } else if (ext === 'arcalc') {
+  } else if (PROJECT_EXTS.indexOf('.' + ext) >= 0) {
     importProject(file);
     _fileQueueBusy = false;
     _drainFileQueue();
@@ -1163,17 +1164,7 @@ function doNewProject() {
 }
 
 $('#btn-new').on('click', function() {
-  // Check live current-tab state plus every other tab's persisted data
-  let hasContent = !!(S.img || S.shapes.length);
-  if (!hasContent) {
-    for (let i = 0; i < S.tabs.length; i++) {
-      if (i === S.currentTabIdx) continue;
-      const t = S.tabs[i];
-      if (t.img || t.imgDataUrl || (t.shapes && t.shapes.length)) { hasContent = true; break; }
-    }
-  }
-
-  if (hasContent) {
+  if (hasExistingWork()) {
     showConfirmModal(
       $('<span>').append($('<strong>').text('Start a new project?'))
         .append('<br>')
@@ -1189,6 +1180,8 @@ $('#btn-new').on('click', function() {
 $('#btn-open').on('click', function() {
   $('#file-input').click();
 });
+
+$('#file-input').attr('accept', 'image/*,.pdf,' + PROJECT_EXTS.join(','));
 
 $('#file-input').on('change', function() {
   const files = this.files;

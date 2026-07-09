@@ -435,3 +435,19 @@ export function hydrateTabFields(tab, td) {
   tab.brightness = td.brightness || 0;
   tab.contrast = td.contrast || 0;
 }
+
+// Rebuild all tabs from serialized v3/v4 data ({ tabs, currentTabIdx }).
+// Shared by localStorage restore and project import/handoff.
+export function hydrateTabs(data) {
+  S.tabs = [];
+  S.currentTabIdx = -1;
+
+  for (let i = 0; i < data.tabs.length; i++) {
+    const td = data.tabs[i];
+    const idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
+    hydrateTabFields(S.tabs[idx], td);
+    if (td.docId != null && td.docId >= S.docN) S.docN = td.docId + 1;
+  }
+
+  switchToTab(data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length ? data.currentTabIdx : 0);
+}

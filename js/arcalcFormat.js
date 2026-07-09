@@ -2,14 +2,52 @@
 // Node-importable, fully unit-testable.
 //
 // A v2 .arcalc file is a self-describing HTML document: double-clicking it
-// (or opening it in any browser) shows a short explanation and a link to
-// the app, while the project data lives in an embedded JSON script tag.
-// decodeArcalc also accepts the legacy v1 format (plain JSON).
+// (or opening it in any browser) shows a short explanation and an
+// "Open AreaImageCalc" link that opens the app in a new tab and hands the
+// project over via a postMessage handshake, while the project data lives in
+// an embedded JSON script tag. decodeArcalc also accepts the legacy v1
+// format (plain JSON).
 
 export const ARCALC_DATA_ID = 'arcalc-data';
 export const APP_URL = 'https://areaimagecalc.pages.dev/';
+export const HANDOFF_HASH = '#arcalc-handoff';
+export const PROJECT_EXTS = ['.arcalc', '.html', '.htm'];
+export const MSG_READY = 'arcalc-ready';
+export const MSG_PROJECT = 'arcalc-project';
 
-export function encodeArcalc(project) {
+// Inline handoff script for the polyglot page: opens the app in a new tab
+// with HANDOFF_HASH, waits for the app's MSG_READY handshake, then posts the
+// embedded project JSON. Plain navigation remains the fallback (popup
+// blocked, JS disabled, or an app version without the listener).
+// Must never contain the character sequence "</script".
+function handoffScript() {
+  return '(function(){\n' +
+'const link=document.getElementById("arcalc-open");\n' +
+'const note=document.getElementById("arcalc-note");\n' +
+'const fallbackMsg=note.textContent;\n' +
+'let win=null;\n' +
+'let timer=0;\n' +
+'window.addEventListener("message",function(e){\n' +
+'if(!win||e.source!==win||!e.data||e.data.type!=="' + MSG_READY + '")return;\n' +
+'const json=document.getElementById("' + ARCALC_DATA_ID + '").textContent;\n' +
+'win.postMessage({type:"' + MSG_PROJECT + '",project:JSON.parse(json)},new URL(link.href).origin);\n' +
+'clearTimeout(timer);\n' +
+'note.textContent="Project opened in the AreaImageCalc tab.";\n' +
+'});\n' +
+'link.addEventListener("click",function(ev){\n' +
+'const w=window.open(link.href,"_blank");\n' +
+'if(!w)return;\n' +
+'ev.preventDefault();\n' +
+'win=w;\n' +
+'note.textContent="Opening AreaImageCalc\\u2026";\n' +
+'clearTimeout(timer);\n' +
+'timer=setTimeout(function(){note.textContent=fallbackMsg;},15000);\n' +
+'});\n' +
+'})();';
+}
+
+export function encodeArcalc(project, appUrl) {
+  const url = appUrl || APP_URL;
   // <-escape so the payload can never terminate the script element
   const json = JSON.stringify(project).replace(/</g, '\\u003c');
   return '<!DOCTYPE html>\n' +
@@ -33,10 +71,11 @@ export function encodeArcalc(project) {
 '<main>\n' +
 '<h1>AreaImageCalc project file</h1>\n' +
 '<p>This file contains measurements made with AreaImageCalc, a free browser-based area measurement tool.</p>\n' +
-'<p>To view or edit it, open the app and drop this file onto the page (or use the Open button).</p>\n' +
-'<a href="' + APP_URL + '">Open AreaImageCalc</a>\n' +
+'<p id="arcalc-note">Click below to open the app with this project loaded. If it does not load automatically, drop this file onto the app page (or use its Open button).</p>\n' +
+'<a id="arcalc-open" href="' + url + HANDOFF_HASH + '">Open AreaImageCalc</a>\n' +
 '</main>\n' +
 '<script type="application/json" id="' + ARCALC_DATA_ID + '">' + json + '</script>\n' +
+'<script>' + handoffScript() + '</script>\n' +
 '</body>\n' +
 '</html>\n';
 }

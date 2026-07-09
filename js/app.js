@@ -3,7 +3,7 @@ import { resize, startRenderLoop } from './render.js';
 import { enableTools } from './ui.js';
 import { scheduleSave, doSave, restoreState } from './storage.js';
 import { createTab, switchToTab } from './tabs.js';
-import { importProject } from './export.js';
+import { importProject, initProjectHandoff } from './export.js';
 import './input.js';
 import './storageUI.js';
 
@@ -16,6 +16,8 @@ if (!restoreState()) {
 }
 
 startRenderLoop();
+
+initProjectHandoff();
 
 if ('launchQueue' in window) {
   window.launchQueue.setConsumer(async function(launchParams) {

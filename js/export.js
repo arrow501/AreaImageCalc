@@ -51,8 +51,8 @@
  */
 
 import { S, SAVE_VER } from './state.js';
-import { serializeTab, snapshotCurrentTab, createTab, switchToTab, hydrateTabFields } from './tabs.js';
-import { encodeArcalc, decodeArcalc } from './arcalcFormat.js';
+import { serializeTab, snapshotCurrentTab, hydrateTabs } from './tabs.js';
+import { encodeArcalc, decodeArcalc, HANDOFF_HASH, MSG_READY, MSG_PROJECT } from './arcalcFormat.js';
 import { buildMeasurementsCsv } from './csv.js';
 import { status } from './ui.js';
 
@@ -89,8 +89,13 @@ export function exportProject() {
     tabs: S.tabs.map(serializeTab)
   };
 
-  triggerDownload(encodeArcalc(project), projectName() + '.arcalc', 'text/html');
-  status('Project saved as .arcalc file.');
+  triggerDownload(encodeArcalc(project), projectName() + '.arcalc.html', 'text/html');
+  status('Project saved as .arcalc.html file.');
+}
+
+function applyProject(data) {
+  hydrateTabs(data);
+  status('Project loaded: ' + data.tabs.length + ' tab(s).');
 }
 
 export function importProject(file) {
@@ -102,26 +107,52 @@ export function importProject(file) {
         alert('Invalid or empty project file.');
         return;
       }
-
-      S.tabs = [];
-      S.currentTabIdx = -1;
-
-      for (let i = 0; i < data.tabs.length; i++) {
-        const td = data.tabs[i];
-        const idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-        hydrateTabFields(S.tabs[idx], td);
-        if (td.docId != null && td.docId >= S.docN) S.docN = td.docId + 1;
-      }
-
-      const targetIdx = (data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length) ? data.currentTabIdx : 0;
-      switchToTab(targetIdx);
-      status('Project loaded: ' + data.tabs.length + ' tab(s).');
+      applyProject(data);
     } catch (ex) {
       console.error('Import failed:', ex);
       alert('Failed to load project file.');
     }
   };
   reader.readAsText(file);
+}
+
+export function hasExistingWork() {
+  if (S.shapes.length || S.img) return true;
+  return S.tabs.some(function(t) {
+    return (t.shapes && t.shapes.length) || t.imgDataUrl || t.img;
+  });
+}
+
+/**
+ * Receives a project posted by an .arcalc polyglot page. That page opens the
+ * app with HANDOFF_HASH, waits for MSG_READY, then posts the project JSON
+ * (see handoffScript in arcalcFormat.js). The opener may be a file:// page,
+ * whose origin serializes as "null" — so the handshake is gated on the hash
+ * flag and the message source being the opener, not on origin.
+ */
+export function initProjectHandoff() {
+  if (window.location.hash !== HANDOFF_HASH || !window.opener) return;
+
+  window.addEventListener('message', function onProject(e) {
+    if (e.source !== window.opener || !e.data || e.data.type !== MSG_PROJECT) return;
+    window.removeEventListener('message', onProject);
+    const data = e.data.project;
+    if (!data || !data.tabs || !data.tabs.length) return;
+    if (hasExistingWork() &&
+        !confirm('Load the project from the opened file? This replaces the work currently in the app.')) {
+      status('Project load cancelled.');
+      return;
+    }
+    try {
+      applyProject(data);
+    } catch (ex) {
+      console.error('Handoff import failed:', ex);
+      alert('Failed to load project file.');
+    }
+  });
+
+  window.opener.postMessage({ type: MSG_READY }, '*');
+  history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
 function tabsWithShapes() {
