@@ -10,7 +10,7 @@ import {
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, updatePanelSelection, status, updateFilters, updateScaleDisp,
-  setSlider, syncToolbarLabels, toggleGroupCollapsed
+  setSlider, initToolbarReflow, toggleGroupCollapsed
 } from './ui.js';
 import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
@@ -841,8 +841,10 @@ $(document).on('keydown', function(e) {
 
     case 'Escape': {
       const $open = $('#file-menu, #shape-menu, #color-popover, #group-popover, #areascale-popover').filter(':visible');
-      if ($open.length) {
+      const slidersOpen = $('#tb-sliders').hasClass('open');
+      if ($open.length || slidersOpen) {
         $open.hide();
+        $('#tb-sliders').removeClass('open');
       } else if (S.tool === 'squarecal') {
         cancelSqCalib();
       } else if (S.perspActive) {
@@ -1791,6 +1793,22 @@ $(document).on('click', function(e) {
   if (!$t.closest('#color-popover, .shape-swatch').length) $('#color-popover').hide();
   if (!$t.closest('#group-popover').length) $('#group-popover').hide();
   if (!$t.closest('#areascale-popover').length) $('#areascale-popover').hide();
+  if (!$t.closest('#tb-sliders, #btn-sliders-toggle').length) $('#tb-sliders').removeClass('open');
+});
+
+// ---- Brightness/Contrast popover (collapsed toolbar) ----
+
+$('#btn-sliders-toggle').on('click', function(e) {
+  e.stopPropagation();
+  const $s = $('#tb-sliders');
+  if ($s.hasClass('open')) { $s.removeClass('open'); return; }
+  const r = this.getBoundingClientRect();
+  $s.css({ left: 0, top: 0 }).addClass('open');
+  const w = $s.outerWidth();
+  $s.css({
+    left: Math.max(4, Math.min(r.left, window.innerWidth - w - 8)) + 'px',
+    top: (r.bottom + 4) + 'px'
+  });
 });
 
 $('#btn-export-project').on('click', function() {
@@ -1878,11 +1896,9 @@ window.addEventListener('beforeunload', function(e) {
   }
 });
 
-// ---- Dynamic toolbar label shortening ----
+// ---- Dynamic toolbar reflow ----
 
-if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(syncToolbarLabels).observe(document.getElementById('toolbar'));
-}
+initToolbarReflow();
 
 // Initialize sliders
 setSlider('bright', 0);

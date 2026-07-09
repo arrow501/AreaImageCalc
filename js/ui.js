@@ -290,31 +290,58 @@ export function syncSliders() {
   setSlider('contrast', S.contrast);
 }
 
-// ---- Dynamic Toolbar Label Shortening ----
+// ---- Dynamic Toolbar Reflow ----
+//
+// Stage 0: full labels, sliders inline.
+// Stage 1: full labels, sliders collapsed into a popover button.
+// Stage 2: short labels, sliders collapsed.
+//
+// Each stage's required single-row width is measured once (flex-wrap
+// suspended so scrollWidth reflects the true footprint even when it
+// overflows) and cached, so a resize only costs one width read and at
+// most one attribute write \u2014 never a measure/mutate loop. Because the
+// stage is a pure function of available width, growing back to a fuller
+// stage when space returns is automatic and exact.
 
-const _shortLabels = [
-  { id: 'btn-polygon',       full: 'Polygon',      short: 'Poly'      },
-  { id: 'btn-freehand',      full: 'Freehand',     short: 'Free'      },
-  { id: 'btn-segment',       full: 'Distance',     short: 'Dist'      },
-  { id: 'btn-label',         full: 'Label',        short: 'Lbl'       },
-  { id: 'btn-note',          full: 'Note',         short: 'Nt'        },
-  { id: 'btn-delete',        full: 'Delete',       short: 'Del'       },
-  { id: 'btn-clear',         full: 'Clear',        short: 'Clr'       },
-  { id: 'btn-rotate-custom', full: 'Rotate\u2026', short: 'Rot\u2026' },
-  { id: 'btn-persp',         full: 'Perspective',  short: 'Persp'     },
-];
+let _toolbarReq = null;
 
-export function syncToolbarLabels() {
+function measureToolbarThresholds(tb) {
+  const prevStage = tb.dataset.stage;
+  tb.classList.add('measuring');
+  const req = [];
+  for (let s = 0; s <= 2; s++) {
+    tb.dataset.stage = String(s);
+    req[s] = tb.scrollWidth + 1;
+  }
+  tb.classList.remove('measuring');
+  tb.dataset.stage = prevStage;
+  return req;
+}
+
+function applyToolbarStage(tb, avail) {
+  const req = _toolbarReq;
+  const stage = avail >= req[0] ? '0' : avail >= req[1] ? '1' : '2';
+  if (tb.dataset.stage !== stage) tb.dataset.stage = stage;
+  if (stage === '0') $('#tb-sliders').removeClass('open');
+}
+
+export function initToolbarReflow() {
   const tb = document.getElementById('toolbar');
   if (!tb) return;
-  _shortLabels.forEach(function(d) {
-    const el = document.getElementById(d.id);
-    if (el) el.textContent = d.full;
-  });
-  if (tb.getBoundingClientRect().height > 44) {
-    _shortLabels.forEach(function(d) {
-      const el = document.getElementById(d.id);
-      if (el) el.textContent = d.short;
+
+  _toolbarReq = measureToolbarThresholds(tb);
+  applyToolbarStage(tb, tb.clientWidth);
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(function() {
+      applyToolbarStage(tb, tb.clientWidth);
+    }).observe(tb);
+  }
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function() {
+      _toolbarReq = measureToolbarThresholds(tb);
+      applyToolbarStage(tb, tb.clientWidth);
     });
   }
 }

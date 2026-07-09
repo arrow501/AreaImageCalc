@@ -47,6 +47,12 @@
       flex-shrink: 0;
       flex-wrap: wrap;
     }
+    /* Suspended during one-time width measurement so scrollWidth reflects
+       the true single-row footprint at each reflow stage. */
+    #toolbar.measuring { flex-wrap: nowrap; }
+    #toolbar .lbl-short { display: none; }
+    #toolbar[data-stage="2"] .lbl-full { display: none; }
+    #toolbar[data-stage="2"] .lbl-short { display: inline; }
     .tb-btn {
       background: none;
       border: 1px solid transparent;
@@ -86,9 +92,24 @@
       flex-shrink: 0;
       margin-left: 8px;
     }
+    #scale-display { min-width: 15ch; }
 
     /* ========== SLIDERS (Brightness/Contrast) ========== */
-    .tb-sliders { display: flex; gap: 2px; margin-left: auto; align-items: stretch; height: 28px; flex-shrink: 0; }
+    .tb-sliders-wrap { display: flex; gap: 4px; margin-left: auto; align-items: center; flex-shrink: 0; }
+    #btn-sliders-toggle { display: none; }
+    #toolbar:not([data-stage="0"]) #btn-sliders-toggle { display: flex; }
+    #toolbar:not([data-stage="0"]) #tb-sliders { display: none; }
+    #toolbar:not([data-stage="0"]) #tb-sliders.open {
+      display: flex;
+      position: fixed;
+      z-index: 400;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      padding: 8px;
+    }
+    .tb-sliders { display: flex; gap: 2px; align-items: stretch; height: 28px; flex-shrink: 0; }
     .sl-group {
       display: flex;
       align-items: center;
@@ -986,46 +1007,49 @@
 
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
-  <div id="toolbar">
+  <div id="toolbar" data-stage="0">
     <button class="tb-btn" id="btn-file-menu" title="File menu" aria-label="File menu" aria-haspopup="true">&#9776; File</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]" aria-label="Scale tool (shortcut S) — click 2 known points">Scale</button>
-    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]" aria-label="Polygon tool (shortcut P) — click vertices, close to finish">Polygon</button>
-    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]" aria-label="Freehand tool (shortcut F) — drag to trace">Freehand</button>
-    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]" aria-label="Distance tool (shortcut D) — click points, finish with double-click or Enter">Distance</button>
+    <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]" aria-label="Polygon tool (shortcut P) — click vertices, close to finish"><span class="lbl-full">Polygon</span><span class="lbl-short">Poly</span></button>
+    <button class="tb-btn disabled" id="btn-freehand" data-tool="freehand" title="Freehand area — drag to trace [F]" aria-label="Freehand tool (shortcut F) — drag to trace"><span class="lbl-full">Freehand</span><span class="lbl-short">Free</span></button>
+    <button class="tb-btn disabled" id="btn-segment" data-tool="segment" title="Distance — click points, double-click or Enter to finish [D]" aria-label="Distance tool (shortcut D) — click points, finish with double-click or Enter"><span class="lbl-full">Distance</span><span class="lbl-short">Dist</span></button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-move" data-tool="move" title="Move shape — drag to reposition [M]" aria-label="Move tool (shortcut M) — drag a shape to reposition it">Move</button>
     <button class="tb-btn disabled" id="btn-edit" data-tool="edit" title="Edit control points — drag to move [E]" aria-label="Edit tool (shortcut E) — drag control points to move">Edit</button>
-    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]" aria-label="Label tool (shortcut L) — click a shape to rename it">Label</button>
-    <button class="tb-btn disabled" id="btn-note" data-tool="note" title="Pin a text note [N]" aria-label="Note tool (shortcut N) — click to pin a text note">Note</button>
-    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]" aria-label="Delete selected shape (Delete key)">Delete</button>
-    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes" aria-label="Remove all shapes">Clear</button>
+    <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]" aria-label="Label tool (shortcut L) — click a shape to rename it"><span class="lbl-full">Label</span><span class="lbl-short">Lbl</span></button>
+    <button class="tb-btn disabled" id="btn-note" data-tool="note" title="Pin a text note [N]" aria-label="Note tool (shortcut N) — click to pin a text note"><span class="lbl-full">Note</span><span class="lbl-short">Nt</span></button>
+    <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]" aria-label="Delete selected shape (Delete key)"><span class="lbl-full">Delete</span><span class="lbl-short">Del</span></button>
+    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes" aria-label="Remove all shapes"><span class="lbl-full">Clear</span><span class="lbl-short">Clr</span></button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]" aria-label="Fit image to view (Ctrl+0)">Fit</button>
-    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle" aria-label="Rotate by custom angle">Rotate&hellip;</button>
+    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle" aria-label="Rotate by custom angle"><span class="lbl-full">Rotate&hellip;</span><span class="lbl-short">Rot&hellip;</span></button>
     <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise" aria-label="Rotate 90 degrees clockwise">&#8635;</button>
     <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
-    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)">Perspective</button>
+    <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)"><span class="lbl-full">Perspective</span><span class="lbl-short">Persp</span></button>
     <div class="tb-sep"></div>
     <button class="tb-btn active" id="btn-toggle-sidebar" title="Show/hide sidebar" aria-label="Show or hide sidebar">Panel</button>
 
     <!-- Brightness / Contrast Sliders -->
-    <div class="tb-sliders">
-      <div class="sl-group" title="Brightness">
-        <span>B</span>
-        <div class="sl-track" data-slider="bright">
-          <div class="sl-fill"></div>
-          <div class="sl-thumb"></div>
+    <div class="tb-sliders-wrap">
+      <button class="tb-btn" id="btn-sliders-toggle" title="Brightness / Contrast" aria-label="Show brightness and contrast controls" aria-haspopup="true">B/C</button>
+      <div class="tb-sliders" id="tb-sliders">
+        <div class="sl-group" title="Brightness">
+          <span>B</span>
+          <div class="sl-track" data-slider="bright">
+            <div class="sl-fill"></div>
+            <div class="sl-thumb"></div>
+          </div>
+          <input type="number" class="sl-val" data-slider="bright" value="0" min="-100" max="100">
         </div>
-        <input type="number" class="sl-val" data-slider="bright" value="0" min="-100" max="100">
-      </div>
-      <div class="sl-group" title="Contrast">
-        <span>C</span>
-        <div class="sl-track" data-slider="contrast">
-          <div class="sl-fill"></div>
-          <div class="sl-thumb"></div>
+        <div class="sl-group" title="Contrast">
+          <span>C</span>
+          <div class="sl-track" data-slider="contrast">
+            <div class="sl-fill"></div>
+            <div class="sl-thumb"></div>
+          </div>
+          <input type="number" class="sl-val" data-slider="contrast" value="0" min="-100" max="100">
         </div>
-        <input type="number" class="sl-val" data-slider="contrast" value="0" min="-100" max="100">
       </div>
     </div>
 
