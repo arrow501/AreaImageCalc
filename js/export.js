@@ -51,7 +51,7 @@
  */
 
 import { S, SAVE_VER } from './state.js';
-import { serializeTab, snapshotCurrentTab, createTab, switchToTab, hydrateTabFields } from './tabs.js';
+import { serializeTab, snapshotCurrentTab, hydrateTabs } from './tabs.js';
 import { encodeArcalc, decodeArcalc, HANDOFF_HASH, MSG_READY, MSG_PROJECT } from './arcalcFormat.js';
 import { buildMeasurementsCsv } from './csv.js';
 import { status } from './ui.js';
@@ -89,23 +89,12 @@ export function exportProject() {
     tabs: S.tabs.map(serializeTab)
   };
 
-  triggerDownload(encodeArcalc(project), projectName() + '.arcalc', 'text/html');
-  status('Project saved as .arcalc file.');
+  triggerDownload(encodeArcalc(project), projectName() + '.arcalc.html', 'text/html');
+  status('Project saved as .arcalc.html file.');
 }
 
 function applyProject(data) {
-  S.tabs = [];
-  S.currentTabIdx = -1;
-
-  for (let i = 0; i < data.tabs.length; i++) {
-    const td = data.tabs[i];
-    const idx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-    hydrateTabFields(S.tabs[idx], td);
-    if (td.docId != null && td.docId >= S.docN) S.docN = td.docId + 1;
-  }
-
-  const targetIdx = (data.currentTabIdx >= 0 && data.currentTabIdx < S.tabs.length) ? data.currentTabIdx : 0;
-  switchToTab(targetIdx);
+  hydrateTabs(data);
   status('Project loaded: ' + data.tabs.length + ' tab(s).');
 }
 
@@ -127,7 +116,7 @@ export function importProject(file) {
   reader.readAsText(file);
 }
 
-function hasExistingWork() {
+export function hasExistingWork() {
   if (S.shapes.length || S.img) return true;
   return S.tabs.some(function(t) {
     return (t.shapes && t.shapes.length) || t.imgDataUrl || t.img;

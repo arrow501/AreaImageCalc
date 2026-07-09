@@ -33,16 +33,16 @@ async function fileMenuDownload(page, itemId) {
   return downloadText(page, () => page.locator(itemId).click());
 }
 
-test('saved .arcalc is a self-describing HTML file', async ({ page }) => {
+test('saved project is a self-describing .arcalc.html file', async ({ page }) => {
   const { name, text } = await fileMenuDownload(page, '#btn-export-project');
 
-  expect(name).toMatch(/\.arcalc$/);
+  expect(name).toMatch(/\.arcalc\.html$/);
   expect(text.startsWith('<!DOCTYPE html>')).toBe(true);
   expect(text).toContain('areaimagecalc.pages.dev');
   expect(text).toContain('id="arcalc-data"');
 });
 
-test('.arcalc round-trip restores shapes', async ({ page }) => {
+test('.arcalc.html round-trip restores shapes', async ({ page }) => {
   const { text } = await fileMenuDownload(page, '#btn-export-project');
 
   // Fresh session: beforeunload flushes a save, so clear storage from an
@@ -52,7 +52,7 @@ test('.arcalc round-trip restores shapes', async ({ page }) => {
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(0);
 
   await page.locator('#file-input').setInputFiles({
-    name: 'project.arcalc',
+    name: 'project.arcalc.html',
     mimeType: 'text/html',
     buffer: Buffer.from(text),
   });

@@ -11,6 +11,7 @@
 export const ARCALC_DATA_ID = 'arcalc-data';
 export const APP_URL = 'https://areaimagecalc.pages.dev/';
 export const HANDOFF_HASH = '#arcalc-handoff';
+export const PROJECT_EXTS = ['.arcalc', '.html', '.htm'];
 export const MSG_READY = 'arcalc-ready';
 export const MSG_PROJECT = 'arcalc-project';
 

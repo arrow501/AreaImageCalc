@@ -12,7 +12,7 @@ A browser-based tool for measuring areas and distances on images. Load any image
 - **Move tool**: drag a whole shape to reposition it (handy for comparing outlines); arrow keys nudge
 - **Selection cycling**: repeated clicks on overlapping measurements cycle through the stack; the selected shape renders on top
 - **PDF support**: thumbnail picker to choose pages (click, All/None, or type a range); pages render lazily at 150 DPI; PageUp/PageDown and a statusbar pager navigate within a document
-- **Project save / load**: `.arcalc` files are self-describing HTML — the recipient can double-click one to see what it is and where to open it; all tabs, WebP-compressed images, shapes, notes, and scale round-trip
+- **Project save / load**: projects save as `.arcalc.html` — self-describing HTML that opens in any browser on double-click, with a one-click handoff into the app; all tabs, WebP-compressed images, shapes, notes, and scale round-trip
 - **Measurements export**: CSV (spreadsheet-ready) or JSON, with calibrated values when a scale is set
 - **Scale calibration**: click two points of known distance (mm, cm, m, in, ft, yd); endpoints stay adjustable — drag them in Edit mode (the entered distance is kept) or double-click the scale line to re-calibrate. Alternatively, calibrate from a shape of known area via the shape menu
 - **Drawing tools**: polygon, freehand tracing with live fill preview, and open-path distance measurement — tools stay active so you can measure repeatedly; Esc exits
@@ -38,7 +38,7 @@ A browser-based tool for measuring areas and distances on images. Load any image
 4. Draw shapes with **Polygon** `P`, **Freehand** `F`, or measure a path with **Distance** `D` — tools stay active until `Esc`
 5. View per-shape and total measurements in the Shapes panel
 6. Pin notes with **Note** `N`; rename shapes with **Label** `L`
-7. Click **Save** for an `.arcalc` project file, or **Export** for CSV / JSON measurements
+7. Click **Save** for an `.arcalc.html` project file, or **Export** for CSV / JSON measurements
 
 ## Tools
 
@@ -127,9 +127,9 @@ The output is never cropped. If a strong correction would balloon the raster, a 
 
 Rotation always recomposes from the document's base image at the cumulative angle: rotating 10° six times gives the same quality and canvas size as rotating 60° once. Shapes and the scale line rotate with the image; `scalePPU` is preserved.
 
-## Project Files (.arcalc)
+## Project Files (.arcalc.html)
 
-An `.arcalc` file is a self-describing HTML document: opened directly (double-click, or sent to someone without the app) it renders a short explanation and a link to the app; the project data is embedded in a JSON script tag. Legacy plain-JSON `.arcalc` files still import. When installed as a PWA, the app registers as a handler for `.arcalc` files.
+A project file is a self-describing HTML document saved as `<name>.arcalc.html`: double-clicking it opens the browser with a short explanation and an "Open AreaImageCalc" button that hands the project straight into the app. The project data is embedded in a JSON script tag. Older `.arcalc` files (HTML polyglot or legacy plain JSON) still import. When installed as a PWA, the app registers as a handler for `.arcalc` files.
 
 ## Measurements Export
 

@@ -72,30 +72,13 @@ function _drawSegment(ctx, sh, sel, inv) {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
-  strokeShapePath(ctx, sh.color, sel, inv);
+  ctx.strokeStyle = sh.color;
+  ctx.lineWidth = (sel ? 3 : 1.5) * inv;
+  ctx.stroke();
   const hr = (sel ? 4 : 2.5) * inv;
   for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
 }
 
-// Selected shapes glow along their stroke instead of carrying a halo line;
-// same two-tone recipe as drawMeasurePill.
-function strokeShapePath(ctx, color, sel, inv) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-  if (!sel) {
-    ctx.stroke();
-    return;
-  }
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 10;
-  ctx.stroke();
-  ctx.stroke();
-  ctx.shadowColor = '#fff';
-  ctx.shadowBlur = 3;
-  ctx.stroke();
-  ctx.restore();
-}
 
 function _drawClosedShape(ctx, sh, sel, inv) {
   const pts = sh.points;
@@ -104,9 +87,11 @@ function _drawClosedShape(ctx, sh, sel, inv) {
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
   ctx.closePath();
-  ctx.fillStyle = sh.color + '20';
+  ctx.fillStyle = sh.color + (sel ? '38' : '20');
   ctx.fill();
-  strokeShapePath(ctx, sh.color, sel, inv);
+  ctx.strokeStyle = sh.color;
+  ctx.lineWidth = (sel ? 3 : 1.5) * inv;
+  ctx.stroke();
   if (pts.length <= 80 || sel) {
     const hr = (sel ? 4 : 2.5) * inv;
     for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
@@ -412,30 +397,29 @@ function drawNotes(ctx, boxes) {
   }
 }
 
+// Selected pill inverts to a white chip with a border in the shape's color
+// — readable on any imagery, no shadow passes (shadowBlur costs a
+// full-canvas gaussian per draw in the rAF loop).
 function drawMeasurePill(ctx, b, txt, color, sel) {
+  ctx.fillStyle = sel ? '#fff' : 'rgba(0,0,0,0.75)';
   roundRect(ctx, b.x, b.y, b.w, b.h, 3);
+  ctx.fill();
   if (sel) {
-    // The glow renders only outside the opaque pill, hinting outward from
-    // its edge; repeated fills deepen it. Colored halo for light imagery,
-    // tight white rim for dark.
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.92)';
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
-    ctx.fill();
-    ctx.fill();
-    ctx.shadowColor = '#fff';
-    ctx.shadowBlur = 4;
-    ctx.fill();
-    ctx.restore();
-  } else {
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
-  ctx.fillStyle = color;
+  ctx.fillStyle = sel ? '#1a1a1a' : color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(txt, b.x + b.w / 2, b.y + b.h / 2);
+}
+
+function placeMeasurePill(ctx, boxes, pt, txt, th, color, sel) {
+  const tw = ctx.measureText(txt).width + 10;
+  const box = { x: pt.x - tw / 2, y: pt.y - th / 2, w: tw, h: th };
+  const placed = placeLabel(boxes, box, 40) || (sel ? box : null);
+  if (placed) drawMeasurePill(ctx, placed, txt, color, sel);
 }
 
 // Labels are placed in shape-array order regardless of selection, so a
@@ -445,7 +429,7 @@ function drawMeasurePill(ctx, b, txt, color, sel) {
 // measurement.
 function drawAreaLabels(ctx, boxes) {
   ctx.font = areaFont(S.view.zoom);
-  const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
+  const th = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22)) + 6;
   for (let si = 0; si < S.shapes.length; si++) {
     const sh = S.shapes[si];
     if (sh.hidden || sh.type === 'note') continue;
@@ -458,26 +442,13 @@ function drawAreaLabels(ctx, boxes) {
         (sh.points[midIdx - 1].x + sh.points[midIdx].x) / 2,
         (sh.points[midIdx - 1].y + sh.points[midIdx].y) / 2
       );
-      const txt = fmtLen(sh.length);
-      const tw = ctx.measureText(txt).width + 10;
-      const th = fs + 6;
-      const box = { x: mp.x - tw / 2, y: mp.y - th / 2, w: tw, h: th };
-      const placed = placeLabel(boxes, box, 40) || (sel ? box : null);
-      if (placed) drawMeasurePill(ctx, placed, txt, sh.color, sel);
+      placeMeasurePill(ctx, boxes, mp, fmtLen(sh.length), th, sh.color, sel);
       continue;
     }
 
     if (!sh.closed || sh.area == null) continue;
-
     const cp = sh._centroid || (sh._centroid = centroid(sh.points));
-    const sp = i2s(cp.x, cp.y);
-    const txt = fmtArea(sh.area);
-    const tw = ctx.measureText(txt).width + 10;
-    const th = fs + 6;
-
-    const box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
-    const placed = placeLabel(boxes, box, 40) || (sel ? box : null);
-    if (placed) drawMeasurePill(ctx, placed, txt, sh.color, sel);
+    placeMeasurePill(ctx, boxes, i2s(cp.x, cp.y), fmtArea(sh.area), th, sh.color, sel);
   }
 }
 
