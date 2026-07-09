@@ -72,16 +72,29 @@ function _drawSegment(ctx, sh, sel, inv) {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
-  if (sel) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 5.5 * inv;
-    ctx.stroke();
-  }
-  ctx.strokeStyle = sh.color;
-  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-  ctx.stroke();
+  strokeShapePath(ctx, sh.color, sel, inv);
   const hr = (sel ? 4 : 2.5) * inv;
   for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+}
+
+// Selected shapes glow along their stroke instead of carrying a halo line;
+// same two-tone recipe as drawMeasurePill.
+function strokeShapePath(ctx, color, sel, inv) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
+  if (!sel) {
+    ctx.stroke();
+    return;
+  }
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+  ctx.stroke();
+  ctx.stroke();
+  ctx.shadowColor = '#fff';
+  ctx.shadowBlur = 3;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function _drawClosedShape(ctx, sh, sel, inv) {
@@ -93,14 +106,7 @@ function _drawClosedShape(ctx, sh, sel, inv) {
   ctx.closePath();
   ctx.fillStyle = sh.color + '20';
   ctx.fill();
-  if (sel) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 5.5 * inv;
-    ctx.stroke();
-  }
-  ctx.strokeStyle = sh.color;
-  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-  ctx.stroke();
+  strokeShapePath(ctx, sh.color, sel, inv);
   if (pts.length <= 80 || sel) {
     const hr = (sel ? 4 : 2.5) * inv;
     for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
