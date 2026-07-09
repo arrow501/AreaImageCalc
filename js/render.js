@@ -1,6 +1,6 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, dot, roundRect, handlesNear, drawGrabRing } from './geometry.js';
-import { hitTestHandles, HANDLE_RING_R } from './handles.js';
+import { hitTestHandles, HANDLE_RING_R, placeLabel } from './handles.js';
 import { drawPerspOverlay } from './perspective.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
 
@@ -14,40 +14,6 @@ const FONT_RUN = font(11);                                              // runni
 const FONT_POLY_SIDE = font(10);                                        // active polygon side labels
 function areaFont(zoom) { return font(Math.round(Math.min(Math.max(11, 13 * zoom), 22))); }
 function sideFont(zoom) { return font(Math.round(Math.min(Math.max(9,  10 * zoom), 14))); }
-
-// ---- Label collision helpers (module-scope; take boxes as param) ----
-const LABEL_PAD = 3;
-
-function rectsOverlap(a, b) {
-  return a.x < b.x + b.w && a.x + a.w > b.x &&
-         a.y < b.y + b.h && a.y + a.h > b.y;
-}
-
-function canPlace(boxes, box) {
-  const padded = { x: box.x - LABEL_PAD, y: box.y - LABEL_PAD,
-                   w: box.w + LABEL_PAD * 2, h: box.h + LABEL_PAD * 2 };
-  for (let i = 0; i < boxes.length; i++) {
-    if (rectsOverlap(padded, boxes[i])) return false;
-  }
-  return true;
-}
-
-const NUDGE_DIRS = [
-  {x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0},
-  {x:-0.7,y:-0.7},{x:0.7,y:-0.7},{x:-0.7,y:0.7},{x:0.7,y:0.7}
-];
-
-function tryPlace(boxes, box, maxNudge) {
-  if (canPlace(boxes, box)) { boxes.push(box); return box; }
-  for (let step = LABEL_PAD + 2; step <= maxNudge; step += LABEL_PAD + 2) {
-    for (let d = 0; d < NUDGE_DIRS.length; d++) {
-      const nb = { x: box.x + NUDGE_DIRS[d].x * step, y: box.y + NUDGE_DIRS[d].y * step,
-                   w: box.w, h: box.h };
-      if (canPlace(boxes, nb)) { boxes.push(nb); return nb; }
-    }
-  }
-  return null;
-}
 
 // ---- Resize / canvas rect ----
 export function refreshCanvasRect() {
@@ -106,11 +72,29 @@ function _drawSegment(ctx, sh, sel, inv) {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(pts[pi].x, pts[pi].y);
-  ctx.strokeStyle = sh.color;
-  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-  ctx.stroke();
+  strokeShapePath(ctx, sh.color, sel, inv);
   const hr = (sel ? 4 : 2.5) * inv;
   for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
+}
+
+// Selected shapes glow along their stroke instead of carrying a halo line;
+// same two-tone recipe as drawMeasurePill.
+function strokeShapePath(ctx, color, sel, inv) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
+  if (!sel) {
+    ctx.stroke();
+    return;
+  }
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 10;
+  ctx.stroke();
+  ctx.stroke();
+  ctx.shadowColor = '#fff';
+  ctx.shadowBlur = 3;
+  ctx.stroke();
+  ctx.restore();
 }
 
 function _drawClosedShape(ctx, sh, sel, inv) {
@@ -122,9 +106,7 @@ function _drawClosedShape(ctx, sh, sel, inv) {
   ctx.closePath();
   ctx.fillStyle = sh.color + '20';
   ctx.fill();
-  ctx.strokeStyle = sh.color;
-  ctx.lineWidth = (sel ? 2.5 : 1.5) * inv;
-  ctx.stroke();
+  strokeShapePath(ctx, sh.color, sel, inv);
   if (pts.length <= 80 || sel) {
     const hr = (sel ? 4 : 2.5) * inv;
     for (let pi = 0; pi < pts.length; pi++) dot(ctx, pts[pi].x, pts[pi].y, hr, sh.color);
@@ -182,18 +164,6 @@ function drawShapes(ctx, inv) {
       _drawClosedShape(ctx, selShape, true, inv);
     }
   }
-}
-
-// Iteration order that gives the selected shape first claim on label space
-function labelOrder() {
-  if (!S.selId) return S.shapes;
-  const rest = [];
-  let sel = null;
-  for (let i = 0; i < S.shapes.length; i++) {
-    if (S.shapes[i].id === S.selId) sel = S.shapes[i];
-    else rest.push(S.shapes[i]);
-  }
-  return sel ? [sel].concat(rest) : S.shapes;
 }
 
 function drawActiveTool(ctx, inv) {
@@ -393,9 +363,8 @@ function drawActivePolySideLabels(ctx) {
 
 function drawNotes(ctx, boxes) {
   ctx.font = FONT_RUN;
-  const order = labelOrder();
-  for (let si = 0; si < order.length; si++) {
-    const sh = order[si];
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
     if (sh.hidden || sh.type !== 'note') continue;
 
     const sel = sh.id === S.selId;
@@ -416,7 +385,7 @@ function drawNotes(ctx, boxes) {
     const tw = ctx.measureText(txt).width + 12;
     const th = 18;
     const box = { x: sp.x + 9, y: sp.y - th - 6, w: tw, h: th };
-    const placed = tryPlace(boxes, box, 48);
+    const placed = placeLabel(boxes, box, 48) || (sel ? box : null);
     if (!placed) continue;
 
     // Leader when the label was nudged away from its default spot
@@ -443,13 +412,44 @@ function drawNotes(ctx, boxes) {
   }
 }
 
+function drawMeasurePill(ctx, b, txt, color, sel) {
+  roundRect(ctx, b.x, b.y, b.w, b.h, 3);
+  if (sel) {
+    // The glow renders only outside the opaque pill, hinting outward from
+    // its edge; repeated fills deepen it. Colored halo for light imagery,
+    // tight white rim for dark.
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.fill();
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 4;
+    ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fill();
+  }
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, b.x + b.w / 2, b.y + b.h / 2);
+}
+
+// Labels are placed in shape-array order regardless of selection, so a
+// selection change never reshuffles collision nudges (labels must not jump
+// when clicking cycles through overlapping shapes). The selected label is
+// drawn even when no free spot exists — one overlap beats an invisible
+// measurement.
 function drawAreaLabels(ctx, boxes) {
-  const zoomFont = areaFont(S.view.zoom);
-  ctx.font = zoomFont;
-  const order = labelOrder();
-  for (let si = 0; si < order.length; si++) {
-    const sh = order[si];
+  ctx.font = areaFont(S.view.zoom);
+  const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
     if (sh.hidden || sh.type === 'note') continue;
+    const sel = sh.id === S.selId;
 
     if (sh.type === 'segment') {
       if (sh.points.length < 2 || sh.length == null) continue;
@@ -459,20 +459,11 @@ function drawAreaLabels(ctx, boxes) {
         (sh.points[midIdx - 1].y + sh.points[midIdx].y) / 2
       );
       const txt = fmtLen(sh.length);
-      const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
       const tw = ctx.measureText(txt).width + 10;
       const th = fs + 6;
       const box = { x: mp.x - tw / 2, y: mp.y - th / 2, w: tw, h: th };
-      const placed = tryPlace(boxes, box, 40);
-      if (placed) {
-        ctx.fillStyle = 'rgba(0,0,0,0.75)';
-        roundRect(ctx, placed.x, placed.y, tw, th, 3);
-        ctx.fill();
-        ctx.fillStyle = sh.color;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(txt, placed.x + tw / 2, placed.y + th / 2);
-      }
+      const placed = placeLabel(boxes, box, 40) || (sel ? box : null);
+      if (placed) drawMeasurePill(ctx, placed, txt, sh.color, sel);
       continue;
     }
 
@@ -481,22 +472,12 @@ function drawAreaLabels(ctx, boxes) {
     const cp = sh._centroid || (sh._centroid = centroid(sh.points));
     const sp = i2s(cp.x, cp.y);
     const txt = fmtArea(sh.area);
-    const fs = Math.round(Math.min(Math.max(11, 13 * S.view.zoom), 22));
-
     const tw = ctx.measureText(txt).width + 10;
     const th = fs + 6;
 
     const box = { x: sp.x - tw / 2, y: sp.y - th / 2, w: tw, h: th };
-    const placed = tryPlace(boxes, box, 40);
-    if (!placed) continue;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    roundRect(ctx, placed.x, placed.y, tw, th, 3);
-    ctx.fill();
-    ctx.fillStyle = sh.color;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(txt, placed.x + tw / 2, placed.y + th / 2);
+    const placed = placeLabel(boxes, box, 40) || (sel ? box : null);
+    if (placed) drawMeasurePill(ctx, placed, txt, sh.color, sel);
   }
 }
 
@@ -544,7 +525,7 @@ function drawSideLabels(ctx, boxes) {
   for (let i = 0; i < sideLabelCandidates.length; i++) {
     const sl = sideLabelCandidates[i];
     const box = { x: sl.x - sl.tw / 2, y: sl.boxY, w: sl.tw, h: sl.th };
-    const placed = tryPlace(boxes, box, 24);
+    const placed = placeLabel(boxes, box, 24);
     if (!placed) continue;
 
     ctx.fillStyle = 'rgba(0,0,0,0.7)';

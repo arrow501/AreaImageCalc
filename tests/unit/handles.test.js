@@ -1,7 +1,8 @@
 import { describe, test, expect } from 'vitest';
 import {
   layoutHandles, hitTestHandles, maxRingOffset,
-  HANDLE_RING_R, HANDLE_PT_R
+  rectsOverlap, placeLabel,
+  HANDLE_RING_R, HANDLE_PT_R, LABEL_PAD
 } from '../../js/handles.js';
 
 const R = HANDLE_RING_R;
@@ -141,5 +142,55 @@ describe('hitTestHandles', () => {
     // but outside where the undisplaced ring would have been
     const probe = layout[1].rx + R - 1;
     expect(hitTestHandles(layout, probe, 0).id).toBe('b');
+  });
+});
+
+describe('rectsOverlap', () => {
+  test('detects intersecting rects', () => {
+    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 })).toBe(true);
+  });
+
+  test('rejects disjoint and edge-touching rects', () => {
+    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 20, y: 0, w: 10, h: 10 })).toBe(false);
+    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBe(false);
+  });
+});
+
+describe('placeLabel', () => {
+  test('keeps a box in place when nothing collides', () => {
+    const boxes = [];
+    const box = { x: 100, y: 100, w: 40, h: 16 };
+    const placed = placeLabel(boxes, box, 40);
+    expect(placed).toEqual(box);
+    expect(boxes).toEqual([box]);
+  });
+
+  test('nudges a colliding box without moving earlier ones', () => {
+    const boxes = [];
+    const first = placeLabel(boxes, { x: 100, y: 100, w: 40, h: 16 }, 40);
+    const second = placeLabel(boxes, { x: 100, y: 100, w: 40, h: 16 }, 40);
+    expect(second).not.toBeNull();
+    expect(second.x !== 100 || second.y !== 100).toBe(true);
+    expect(first).toEqual({ x: 100, y: 100, w: 40, h: 16 });
+    const padded = { x: second.x - LABEL_PAD, y: second.y - LABEL_PAD,
+                     w: second.w + LABEL_PAD * 2, h: second.h + LABEL_PAD * 2 };
+    expect(rectsOverlap(padded, first)).toBe(false);
+  });
+
+  test('returns null when no free spot exists within maxNudge', () => {
+    const boxes = [{ x: -500, y: -500, w: 1000, h: 1000 }];
+    const placed = placeLabel(boxes, { x: 0, y: 0, w: 40, h: 16 }, 40);
+    expect(placed).toBeNull();
+    expect(boxes).toHaveLength(1);
+  });
+
+  test('placement is deterministic for identical input order', () => {
+    const run = () => {
+      const boxes = [];
+      const out = [];
+      for (let i = 0; i < 4; i++) out.push(placeLabel(boxes, { x: 50, y: 50, w: 30, h: 14 }, 60));
+      return out;
+    };
+    expect(run()).toEqual(run());
   });
 });
