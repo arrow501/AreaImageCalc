@@ -102,11 +102,6 @@ export function hitHandle(sx, sy, hitR) {
   return hitTestHandles(handlesNear(sx, sy), sx, sy, hitR);
 }
 
-export function hasWork() {
-  if (S.img && (S.shapes.length > 0 || S.scaleLine)) return true;
-  return S.tabs.some(function(t) { return t.imgDataUrl && (t.shapes.length > 0 || t.scaleLine); });
-}
-
 // Grab indicator: a weighted ring (dark under-stroke + light stroke). When
 // the ring centre was displaced by collision, a faint leader ties it back to
 // its control point. The active ring also highlights its control point so

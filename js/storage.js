@@ -1,5 +1,5 @@
 import { S, SAVE_KEY, SAVE_VER, SAVE_VER_COMPAT, SAVE_VER_LEGACY, STORAGE_SOFT_LIMIT, STORAGE_HARD_LIMIT } from './state.js';
-import { serializeTab, snapshotCurrentTab, createTab, switchToTab, hydrateTabFields } from './tabs.js';
+import { serializeTab, snapshotCurrentTab, createTab, switchToTab, hydrateTabs } from './tabs.js';
 import { status } from './ui.js';
 import { EVT, emit } from './events.js';
 
@@ -102,15 +102,7 @@ function hydrateState(state) {
   if ((state.v !== SAVE_VER && state.v !== SAVE_VER_COMPAT) ||
       !Array.isArray(state.tabs) || !state.tabs.length) return false;
 
-  for (let i = 0; i < state.tabs.length; i++) {
-    const td = state.tabs[i];
-    const tidx = createTab(td.label || 'Tab ' + (i + 1), td.imgDataUrl || null, null);
-    hydrateTabFields(S.tabs[tidx], td);
-    if (td.docId != null && td.docId >= S.docN) S.docN = td.docId + 1;
-  }
-
-  const targetIdx = (state.currentTabIdx >= 0 && state.currentTabIdx < S.tabs.length) ? state.currentTabIdx : 0;
-  switchToTab(targetIdx);
+  hydrateTabs(state);
   return true;
 }
 
