@@ -1034,7 +1034,7 @@ function _drainFileQueue() {
       _fileQueueBusy = false;
       _drainFileQueue();
     });
-  } else if (ext === 'arcalc') {
+  } else if (ext === 'arcalc' || ext === 'html' || ext === 'htm') {
     importProject(file);
     _fileQueueBusy = false;
     _drainFileQueue();

@@ -89,8 +89,8 @@ export function exportProject() {
     tabs: S.tabs.map(serializeTab)
   };
 
-  triggerDownload(encodeArcalc(project), projectName() + '.arcalc', 'text/html');
-  status('Project saved as .arcalc file.');
+  triggerDownload(encodeArcalc(project), projectName() + '.arcalc.html', 'text/html');
+  status('Project saved as .arcalc.html file.');
 }
 
 function applyProject(data) {
