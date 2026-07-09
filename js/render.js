@@ -407,18 +407,24 @@ function drawNotes(ctx, boxes) {
 }
 
 function drawMeasurePill(ctx, b, txt, color, sel) {
-  ctx.fillStyle = sel ? 'rgba(0,0,0,0.92)' : 'rgba(0,0,0,0.75)';
   roundRect(ctx, b.x, b.y, b.w, b.h, 3);
-  ctx.fill();
   if (sel) {
+    // The glow renders only outside the opaque pill, hinting outward from
+    // its edge; repeated fills deepen it. Colored halo for light imagery,
+    // tight white rim for dark.
     ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
     ctx.shadowColor = color;
-    ctx.shadowBlur = 9;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
-    roundRect(ctx, b.x, b.y, b.w, b.h, 3);
-    ctx.stroke();
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.fill();
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 4;
+    ctx.fill();
     ctx.restore();
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fill();
   }
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
