@@ -914,9 +914,14 @@
     #btn-shortcuts {
       background: none; border: 1px solid #444; color: #aaa;
       border-radius: 50%; width: 18px; height: 18px; font-size: 11px;
-      line-height: 1; padding: 0; cursor: pointer; margin-left: auto;
+      line-height: 1; padding: 0; cursor: pointer;
     }
     #btn-shortcuts:hover { color: #FF6B35; border-color: #FF6B35; }
+    #credit-link {
+      color: #666; font-size: 11px; text-decoration: none;
+      margin-left: auto; margin-right: 8px;
+    }
+    #credit-link:hover { color: #FF6B35; text-decoration: underline; }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -1147,6 +1152,7 @@
       <span id="page-nav-label"></span>
       <button id="page-next" title="Next page [PgDn]" aria-label="Next page">&#8250;</button>
     </div>
+    <a id="credit-link" href="https://github.com/arrow501/AreaImageCalc" target="_blank" rel="noopener noreferrer" title="AreaImageCalc on GitHub">made with love by arrow</a>
     <button id="btn-shortcuts" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">?</button>
   </div>
 </div>
