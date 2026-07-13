@@ -296,52 +296,50 @@ export function syncSliders() {
 // Stage 1: full labels, sliders collapsed into a popover button.
 // Stage 2: short labels, sliders collapsed.
 //
-// Each stage's required single-row width is measured once (flex-wrap
-// suspended so scrollWidth reflects the true footprint even when it
-// overflows) and cached, so a resize only costs one width read and at
-// most one attribute write \u2014 never a measure/mutate loop. Because the
-// stage is a pure function of available width, growing back to a fuller
-// stage when space returns is automatic and exact.
+// Goal: fewest rows with elements maximally expanded. On resize each
+// stage is applied fullest-first and its real wrapped row count read
+// back; the fullest stage achieving the minimum row count wins. So a
+// stage only degrades when that actually saves a row \u2014 if the toolbar
+// must wrap regardless, labels and sliders unfold into the extra row
+// space. The trial layouts happen inside the resize callback before
+// paint, so they never flash.
 
-let _toolbarReq = null;
-
-function measureToolbarThresholds(tb) {
-  const prevStage = tb.dataset.stage;
-  tb.classList.add('measuring');
-  const req = [];
-  for (let s = 0; s <= 2; s++) {
-    tb.dataset.stage = String(s);
-    req[s] = tb.scrollWidth + 1;
+function toolbarRows(tb) {
+  let rows = 0;
+  let prev = null;
+  for (const el of tb.children) {
+    const r = el.getBoundingClientRect();
+    if (!r.width) continue;
+    const center = r.top + r.height / 2;
+    if (prev === null || center - prev > 2) {
+      rows++;
+      prev = center;
+    }
   }
-  tb.classList.remove('measuring');
-  tb.dataset.stage = prevStage;
-  return req;
+  return rows;
 }
 
-function applyToolbarStage(tb, avail) {
-  const req = _toolbarReq;
-  const stage = avail >= req[0] ? '0' : avail >= req[1] ? '1' : '2';
-  if (tb.dataset.stage !== stage) tb.dataset.stage = stage;
-  if (stage === '0') $('#tb-sliders').removeClass('open');
+function applyToolbarStage(tb) {
+  const rows = [];
+  for (let s = 0; s <= 2; s++) {
+    tb.dataset.stage = String(s);
+    rows[s] = toolbarRows(tb);
+    if (rows[s] === 1) break;
+  }
+  const best = rows.indexOf(Math.min.apply(null, rows));
+  tb.dataset.stage = String(best);
+  if (best === 0) $('#tb-sliders').removeClass('open');
 }
 
 export function initToolbarReflow() {
   const tb = document.getElementById('toolbar');
   if (!tb) return;
 
-  _toolbarReq = measureToolbarThresholds(tb);
-  applyToolbarStage(tb, tb.clientWidth);
+  applyToolbarStage(tb);
 
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(function() {
-      applyToolbarStage(tb, tb.clientWidth);
+      applyToolbarStage(tb);
     }).observe(tb);
-  }
-
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(function() {
-      _toolbarReq = measureToolbarThresholds(tb);
-      applyToolbarStage(tb, tb.clientWidth);
-    });
   }
 }
