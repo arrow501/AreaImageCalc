@@ -1,7 +1,7 @@
 {
   "name": "areaimagecalc",
   "version": "2.1.0",
-  "description": "Measure areas in images and PDFs",
+  "description": "Measure area, distance and perimeter on images, floor plans, maps and PDFs — in the browser, nothing uploaded",
   "type": "module",
   "scripts": {
     "test": "vitest run",

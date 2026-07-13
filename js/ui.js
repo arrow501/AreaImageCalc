@@ -33,10 +33,17 @@ export function cancelTool() {
   S.overlayDirty = true;
 }
 
+const TOOL_NAMES = {
+  idle: 'No tool', scale: 'Scale', polygon: 'Polygon', freehand: 'Freehand',
+  segment: 'Distance', edit: 'Edit', move: 'Move', label: 'Label',
+  note: 'Note', squarecal: 'Square Cal'
+};
+
 export function setTool(t) {
   cancelTool();
   S.tool = t;
 
+  $('#tool-display').text(TOOL_NAMES[t] || t);
   $('.tb-btn[data-tool]').removeClass('active');
   if (t !== 'idle') {
     $('.tb-btn[data-tool="' + t + '"]').addClass('active');
@@ -136,7 +143,8 @@ export function updateScaleDisp() {
 // rows, so double-clicks (inline rename) and hover states survive.
 export function updatePanelSelection() {
   $('#shapes-list .shape-item').each(function() {
-    $(this).toggleClass('selected', $(this).attr('data-id') === S.selId);
+    const sel = $(this).attr('data-id') === S.selId;
+    $(this).toggleClass('selected', sel).attr('aria-selected', sel ? 'true' : 'false');
   });
 }
 
@@ -164,11 +172,19 @@ function buildShapeRow(s) {
   const t = shapeMeasureText(s);
   const hideTip = s.hidden ? 'Show shape [H]' : 'Hide shape [H]';
 
+  const typeName = s.type === 'segment' ? 'distance' : s.type === 'note' ? 'note' : 'area';
+  const label = (s.name || 'Unnamed') + ', ' + typeName + ' ' + t.m +
+    (t.p ? ', perimeter ' + t.p : '') + (s.hidden ? ', hidden' : '');
+
   const $item = $('<div class="shape-item">')
     .toggleClass('selected', s.id === S.selId)
     .toggleClass('shape-hidden', !!s.hidden)
     .attr('data-id', s.id)
-    .attr('draggable', 'true');
+    .attr('draggable', 'true')
+    .attr('tabindex', '0')
+    .attr('role', 'option')
+    .attr('aria-selected', s.id === S.selId ? 'true' : 'false')
+    .attr('aria-label', label);
 
   $item.append(
     $('<button class="shape-swatch" title="Change color">')
@@ -222,7 +238,11 @@ export function updatePanel() {
         collapsed = !!_collapsedGroups[g];
         $l.append(
           $('<div class="group-header">').attr('data-group', g)
-            .append($('<span class="group-caret">').html(collapsed ? '&#9656;' : '&#9662;'))
+            .attr('tabindex', '0')
+            .attr('role', 'button')
+            .attr('aria-expanded', collapsed ? 'false' : 'true')
+            .attr('aria-label', 'Group ' + g + ', ' + fmtArea(sub) + ', ' + cnt + ' shapes')
+            .append($('<span class="group-caret" aria-hidden="true">').html(collapsed ? '&#9656;' : '&#9662;'))
             .append($('<span class="group-name">').text(g))
             .append($('<span class="group-sub">').text(fmtArea(sub) + ' · ' + cnt))
         );
@@ -281,6 +301,7 @@ export function setSlider(name, val) {
   }
 
   $grp.find('.sl-val').val(val);
+  $grp.find('.sl-track').attr('aria-valuenow', val);
 
   updateFilters();
 }
@@ -290,31 +311,59 @@ export function syncSliders() {
   setSlider('contrast', S.contrast);
 }
 
-// ---- Dynamic Toolbar Label Shortening ----
+// ---- Dynamic Toolbar Reflow ----
+//
+// Stage 0: full labels, sliders inline.
+// Stage 1: full labels, sliders collapsed into a popover button.
+// Stage 2: short labels, sliders collapsed.
+//
+// Goal: fewest rows with elements maximally expanded. On resize each
+// stage is applied fullest-first and its real wrapped row count read
+// back; the fullest stage achieving the minimum row count wins. So a
+// stage only degrades when that actually saves a row \u2014 if the toolbar
+// must wrap regardless, labels and sliders unfold into the extra row
+// space. The trial layouts happen inside the resize callback before
+// paint, so they never flash.
 
-const _shortLabels = [
-  { id: 'btn-polygon',       full: 'Polygon',      short: 'Poly'      },
-  { id: 'btn-freehand',      full: 'Freehand',     short: 'Free'      },
-  { id: 'btn-segment',       full: 'Distance',     short: 'Dist'      },
-  { id: 'btn-label',         full: 'Label',        short: 'Lbl'       },
-  { id: 'btn-note',          full: 'Note',         short: 'Nt'        },
-  { id: 'btn-delete',        full: 'Delete',       short: 'Del'       },
-  { id: 'btn-clear',         full: 'Clear',        short: 'Clr'       },
-  { id: 'btn-rotate-custom', full: 'Rotate\u2026', short: 'Rot\u2026' },
-  { id: 'btn-persp',         full: 'Perspective',  short: 'Persp'     },
-];
+function toolbarRows(tb) {
+  let rows = 0;
+  let prev = null;
+  for (const el of tb.children) {
+    const r = el.getBoundingClientRect();
+    if (!r.width) continue;
+    const center = r.top + r.height / 2;
+    if (prev === null || center - prev > 2) {
+      rows++;
+      prev = center;
+    }
+  }
+  return rows;
+}
 
-export function syncToolbarLabels() {
+function applyToolbarStage(tb) {
+  const rows = [];
+  for (let s = 0; s <= 2; s++) {
+    tb.dataset.stage = String(s);
+    rows[s] = toolbarRows(tb);
+    if (rows[s] === 1) break;
+  }
+  const best = rows.indexOf(Math.min.apply(null, rows));
+  tb.dataset.stage = String(best);
+  if (best === 0) {
+    $('#tb-sliders').removeClass('open');
+    $('#btn-sliders-toggle').attr('aria-expanded', 'false');
+  }
+}
+
+export function initToolbarReflow() {
   const tb = document.getElementById('toolbar');
   if (!tb) return;
-  _shortLabels.forEach(function(d) {
-    const el = document.getElementById(d.id);
-    if (el) el.textContent = d.full;
-  });
-  if (tb.getBoundingClientRect().height > 44) {
-    _shortLabels.forEach(function(d) {
-      const el = document.getElementById(d.id);
-      if (el) el.textContent = d.short;
-    });
+
+  applyToolbarStage(tb);
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(function() {
+      applyToolbarStage(tb);
+    }).observe(tb);
   }
 }

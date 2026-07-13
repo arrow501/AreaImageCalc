@@ -10,13 +10,14 @@ import {
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, updatePanelSelection, status, updateFilters, updateScaleDisp,
-  setSlider, syncToolbarLabels, toggleGroupCollapsed
+  setSlider, initToolbarReflow, toggleGroupCollapsed
 } from './ui.js';
 import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
 import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
 import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
 import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage } from './tabs.js';
+import { HC_KEY } from './constants.js';
 import { loadPdf } from './pdf.js';
 import { exportProject, importProject, exportMeasurements, exportMeasurementsCsv, hasExistingWork } from './export.js';
 import { PROJECT_EXTS } from './arcalcFormat.js';
@@ -841,8 +842,13 @@ $(document).on('keydown', function(e) {
 
     case 'Escape': {
       const $open = $('#file-menu, #shape-menu, #color-popover, #group-popover, #areascale-popover').filter(':visible');
-      if ($open.length) {
+      const slidersOpen = $('#tb-sliders').hasClass('open');
+      if ($open.length || slidersOpen) {
+        const opener = $open.first().data('opener');
         $open.hide();
+        $('#btn-file-menu, #btn-sliders-toggle').attr('aria-expanded', 'false');
+        $('#tb-sliders').removeClass('open');
+        if (opener && typeof opener.focus === 'function') opener.focus();
       } else if (S.tool === 'squarecal') {
         cancelSqCalib();
       } else if (S.perspActive) {
@@ -1228,7 +1234,8 @@ $('#btn-fit').on('click', function() {
 $('#btn-toggle-sidebar').on('click', function() {
   const $p = $('#sidebar');
   $p.toggleClass('collapsed');
-  $(this).toggleClass('active', !$p.hasClass('collapsed'));
+  const open = !$p.hasClass('collapsed');
+  $(this).toggleClass('active', open).attr('aria-expanded', open ? 'true' : 'false');
   setTimeout(function() { resize(); if (S.img) fitView(); }, 170);
 });
 
@@ -1243,7 +1250,9 @@ $('.pane-header').on('click', function(e) {
   } else if ($pane.data('splitH')) {
     $pane.css('height', $pane.data('splitH'));
   }
-  $(this).find('.pane-caret').html($pane.hasClass('collapsed') ? '&#9656;' : '&#9662;');
+  const paneOpen = !$pane.hasClass('collapsed');
+  $(this).find('.pane-caret').html(paneOpen ? '&#9662;' : '&#9656;');
+  $(this).attr('aria-expanded', paneOpen ? 'true' : 'false');
 });
 
 // ---- Pane splitter: drag to resize Documents vs Shapes ----
@@ -1561,7 +1570,10 @@ $('#shapes-list').on('click', '.shape-menu', function(e) {
   if (sh.group) $m.append($('<button data-act="ungroup">').text('Remove from group'));
   $m.append($('<div class="menu-sep">'));
   $m.append($('<button data-act="delete">').text('Delete'));
+  $m.find('button').attr('role', 'menuitem');
   positionPopover($m, this);
+  $m.data('opener', this);
+  $m.find('button:visible').first().focus();
 });
 
 $('#shape-menu').on('click', 'button', function(e) {
@@ -1775,23 +1787,128 @@ $('#page-next').on('click', function() { navPage(1); });
 $('#btn-file-menu').on('click', function(e) {
   e.stopPropagation();
   const $m = $('#file-menu');
-  if ($m.is(':visible')) { $m.hide(); return; }
+  if ($m.is(':visible')) { closeFileMenu(); return; }
   const r = this.getBoundingClientRect();
-  $m.css({ left: r.left + 'px', top: (r.bottom + 4) + 'px' }).show();
+  $m.css({ left: r.left + 'px', top: (r.bottom + 4) + 'px' }).show()
+    .data('opener', this);
+  $(this).attr('aria-expanded', 'true');
+  $m.find('button:visible').first().focus();
 });
 
-$('#file-menu').on('click', 'button', function() {
+function closeFileMenu() {
   $('#file-menu').hide();
+  $('#btn-file-menu').attr('aria-expanded', 'false');
+}
+
+$('#file-menu').on('click', 'button', function() {
+  closeFileMenu();
 });
 
 $(document).on('click', function(e) {
   const $t = $(e.target);
-  if (!$t.closest('#file-menu, #btn-file-menu').length) $('#file-menu').hide();
+  if (!$t.closest('#file-menu, #btn-file-menu').length) closeFileMenu();
   if (!$t.closest('#shape-menu, .shape-menu').length) $('#shape-menu').hide();
   if (!$t.closest('#color-popover, .shape-swatch').length) $('#color-popover').hide();
   if (!$t.closest('#group-popover').length) $('#group-popover').hide();
   if (!$t.closest('#areascale-popover').length) $('#areascale-popover').hide();
+  if (!$t.closest('#tb-sliders, #btn-sliders-toggle').length) {
+    $('#tb-sliders').removeClass('open');
+    $('#btn-sliders-toggle').attr('aria-expanded', 'false');
+  }
 });
+
+// ---- Brightness/Contrast popover (collapsed toolbar) ----
+
+$('#btn-sliders-toggle').on('click', function(e) {
+  e.stopPropagation();
+  const $s = $('#tb-sliders');
+  if ($s.hasClass('open')) {
+    $s.removeClass('open');
+    $(this).attr('aria-expanded', 'false');
+    return;
+  }
+  const r = this.getBoundingClientRect();
+  $s.css({ left: 0, top: 0 }).addClass('open').data('opener', this);
+  $(this).attr('aria-expanded', 'true');
+  const w = $s.outerWidth();
+  $s.css({
+    left: Math.max(4, Math.min(r.left, window.innerWidth - w - 8)) + 'px',
+    top: (r.bottom + 4) + 'px'
+  });
+});
+
+// ---- Keyboard access: sidebar rows, menus, sliders ----
+
+// Enter/Space activate the focusable rows that respond to click
+$(document).on('keydown', '.doc-row, .doc-page, .shape-item, .group-header, .pane-header', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if ($(e.target).is('input, button, select, textarea')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  $(this).trigger('click');
+});
+
+// Arrow keys move focus between rows within a sidebar list
+$(document).on('keydown', '#shapes-list .shape-item, #shapes-list .group-header, #doc-list .doc-row, #doc-list .doc-page', function(e) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const $rows = $(this).closest('#shapes-list, #doc-list').find('[tabindex="0"]:visible');
+  const i = $rows.index(this);
+  const j = e.key === 'ArrowDown' ? i + 1 : i - 1;
+  if (j < 0 || j >= $rows.length) return;
+  e.preventDefault();
+  e.stopPropagation();
+  $rows.eq(j).focus();
+});
+
+// Arrow keys cycle items inside any dropdown menu
+$(document).on('keydown', '.dropdown-menu', function(e) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+  const items = $(this).find('button:visible').toArray();
+  if (!items.length) return;
+  e.preventDefault();
+  e.stopPropagation();
+  let i = items.indexOf(document.activeElement);
+  if (e.key === 'Home' || (e.key === 'ArrowDown' && i === -1)) i = 0;
+  else if (e.key === 'End' || (e.key === 'ArrowUp' && i === -1)) i = items.length - 1;
+  else if (e.key === 'ArrowDown') i = (i + 1) % items.length;
+  else i = (i - 1 + items.length) % items.length;
+  items[i].focus();
+});
+
+// Slider tracks respond to arrows, PageUp/Down, Home/End, and 0 to reset
+$('.sl-track').on('keydown', function(e) {
+  const name = $(this).data('slider');
+  const cur = name === 'bright' ? S.brightness : S.contrast;
+  let v = null;
+  switch (e.key) {
+    case 'ArrowLeft': case 'ArrowDown': v = cur - 5; break;
+    case 'ArrowRight': case 'ArrowUp': v = cur + 5; break;
+    case 'PageDown': v = cur - 25; break;
+    case 'PageUp': v = cur + 25; break;
+    case 'Home': v = -100; break;
+    case 'End': v = 100; break;
+    case '0': v = 0; break;
+  }
+  if (v === null) return;
+  e.preventDefault();
+  e.stopPropagation();
+  setSlider(name, v);
+});
+
+// ---- High contrast mode ----
+
+function applyHC(on) {
+  document.documentElement.classList.toggle('hc', on);
+  $('#btn-hc').attr('aria-pressed', on ? 'true' : 'false')
+    .text('High Contrast: ' + (on ? 'On' : 'Off'));
+  try { localStorage.setItem(HC_KEY, on ? '1' : '0'); } catch (err) { /* storage may be unavailable */ }
+}
+
+$('#btn-hc').on('click', function() {
+  applyHC(!document.documentElement.classList.contains('hc'));
+});
+
+try { if (localStorage.getItem(HC_KEY) === '1') applyHC(true); } catch (err) { /* storage may be unavailable */ }
 
 $('#btn-export-project').on('click', function() {
   exportProject();
@@ -1878,11 +1995,9 @@ window.addEventListener('beforeunload', function(e) {
   }
 });
 
-// ---- Dynamic toolbar label shortening ----
+// ---- Dynamic toolbar reflow ----
 
-if (typeof ResizeObserver !== 'undefined') {
-  new ResizeObserver(syncToolbarLabels).observe(document.getElementById('toolbar'));
-}
+initToolbarReflow();
 
 // Initialize sliders
 setSlider('bright', 0);
