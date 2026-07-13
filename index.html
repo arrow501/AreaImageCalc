@@ -4,7 +4,40 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://code.jquery.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Area Calculator</title>
+  <title>Measure Area &amp; Distance on Images, PDFs &amp; Maps — AreaImageCalc</title>
+  <meta name="description" content="Free online tool to measure area, distance and perimeter on images, floor plans, maps and PDFs. Calibrate a real-world scale, draw polygons or trace freehand, export CSV. Nothing is uploaded — runs entirely in your browser. Open source (MIT).">
+  <meta name="theme-color" content="#1a1a1a">
+  <link rel="canonical" href="https://areaimagecalc.pages.dev/">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AreaImageCalc">
+  <meta property="og:title" content="AreaImageCalc — Measure Area &amp; Distance on Images, PDFs &amp; Maps">
+  <meta property="og:description" content="Free, open-source measurement tool: calibrate scale, draw shapes, get real-world area and distance from any image or PDF. 100% in-browser, nothing uploaded.">
+  <meta property="og:url" content="https://areaimagecalc.pages.dev/">
+  <meta property="og:image" content="https://areaimagecalc.pages.dev/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AreaImageCalc — Measure Area &amp; Distance on Images, PDFs &amp; Maps">
+  <meta name="twitter:description" content="Free, open-source measurement tool: calibrate scale, draw shapes, get real-world area and distance from any image or PDF. 100% in-browser, nothing uploaded.">
+  <meta name="twitter:image" content="https://areaimagecalc.pages.dev/og-image.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "AreaImageCalc",
+    "url": "https://areaimagecalc.pages.dev/",
+    "description": "Measure area, distance and perimeter on images, floor plans, maps and PDFs. Calibrate a real-world scale, draw polygons or trace freehand, correct perspective, and export measurements as CSV or JSON. Runs entirely in the browser; no data leaves the device.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://github.com/arrow501/AreaImageCalc/blob/main/LICENSE",
+    "sameAs": ["https://github.com/arrow501/AreaImageCalc"],
+    "image": "https://areaimagecalc.pages.dev/og-image.png",
+    "featureList": "Area measurement, distance measurement, scale calibration, polygon and freehand drawing, PDF page support, perspective correction, square calibration, notes, CSV and JSON export, undo/redo, offline-capable, no upload"
+  }
+  </script>
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -439,6 +472,15 @@
     .dz-content { text-align: center; color: #555; pointer-events: none; }
     .dz-content .big { font-size: 20px; color: #777; margin-bottom: 6px; }
     .dz-content .sub { font-size: 12px; }
+    .dz-content .tagline { font-size: 11px; color: #4a4a4a; margin-top: 18px; max-width: 420px; line-height: 1.5; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
 
     /* ========== CURSORS ========== */
     .cursor-crosshair #overlay-canvas { cursor: crosshair; }
@@ -1002,6 +1044,10 @@
 </head>
 <body>
 
+<noscript>
+  <p>AreaImageCalc is a free, open-source tool that measures area, distance and perimeter on images, floor plans, maps and PDFs. It needs JavaScript to run &mdash; everything happens locally in your browser and nothing is uploaded. Source code and downloads: <a href="https://github.com/arrow501/AreaImageCalc">github.com/arrow501/AreaImageCalc</a>.</p>
+</noscript>
+
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar" data-stage="0">
@@ -1093,8 +1139,10 @@
 
       <div id="dropzone">
         <div class="dz-content">
+          <h1 class="sr-only">AreaImageCalc — measure area and distance on images, floor plans, maps and PDFs</h1>
           <div class="big">Drop image, PDF, or project here</div>
           <div class="sub">or click <b>Open</b> &middot; <kbd>Ctrl+V</kbd> to paste</div>
+          <p class="tagline">Free, open-source area and distance measurement with real-world scale calibration. Everything runs in your browser &mdash; nothing is uploaded.</p>
         </div>
       </div>
 

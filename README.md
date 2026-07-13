@@ -1,8 +1,8 @@
-# Area Calculator
+# AreaImageCalc — measure area & distance on images and PDFs
 
 **[Live Demo](https://areaimagecalc.pages.dev/)**
 
-A browser-based tool for measuring areas and distances on images. Load any image or PDF, set a real-world scale, draw shapes, annotate, and export measurements. No backend, no build step — plain ES modules served as static files.
+A free, open-source (MIT) browser tool for measuring area, distance and perimeter on images, floor plans, maps and PDFs. Load a file, set a real-world scale, draw shapes, annotate, and export measurements. No backend, no build step — plain ES modules served as static files. Everything runs locally in your browser; the app makes no network calls after loading and no data ever leaves your device.
 
 ## Features
 
