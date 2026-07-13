@@ -325,12 +325,18 @@ export function renderSidebar() {
     const isDocActive = grp.pages.some(function(p) { return p.idx === S.currentTabIdx; });
     const collapsed = multi && _collapsedDocs[grp.docId];
 
-    const $item = $('<div class="doc-item">').toggleClass('active', isDocActive);
-    const $row = $('<div class="doc-row">');
+    const $item = $('<div class="doc-item">').toggleClass('active', isDocActive)
+      .attr('role', 'listitem');
+    const $row = $('<div class="doc-row">')
+      .attr('tabindex', '0')
+      .attr('role', 'button')
+      .attr('aria-label', grp.label + (multi ? ', ' + grp.pages.length + ' pages' : ''))
+      .attr('aria-current', isDocActive ? 'true' : 'false');
 
     if (multi) {
+      $row.attr('aria-expanded', collapsed ? 'false' : 'true');
       $row.append(
-        $('<span class="doc-caret">').html(collapsed ? '&#9656;' : '&#9662;')
+        $('<span class="doc-caret" aria-hidden="true">').html(collapsed ? '&#9656;' : '&#9662;')
           .attr('data-doc', grp.docId)
       );
     } else {
@@ -358,6 +364,10 @@ export function renderSidebar() {
         $pages.append(
           $('<div class="doc-page">').toggleClass('active', pageActive)
             .attr('data-idx', pg.idx)
+            .attr('tabindex', '0')
+            .attr('role', 'button')
+            .attr('aria-label', 'Page ' + (pg.tab.pageNum || p + 1) + ' of ' + grp.label)
+            .attr('aria-current', pageActive ? 'true' : 'false')
             .append($('<span class="doc-label">').text('Page ' + (pg.tab.pageNum || p + 1)))
             .append($('<button class="doc-close" title="Close page">').html('&times;').attr('data-idx', pg.idx))
         );

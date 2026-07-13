@@ -33,10 +33,17 @@ export function cancelTool() {
   S.overlayDirty = true;
 }
 
+const TOOL_NAMES = {
+  idle: 'No tool', scale: 'Scale', polygon: 'Polygon', freehand: 'Freehand',
+  segment: 'Distance', edit: 'Edit', move: 'Move', label: 'Label',
+  note: 'Note', squarecal: 'Square Cal'
+};
+
 export function setTool(t) {
   cancelTool();
   S.tool = t;
 
+  $('#tool-display').text(TOOL_NAMES[t] || t);
   $('.tb-btn[data-tool]').removeClass('active');
   if (t !== 'idle') {
     $('.tb-btn[data-tool="' + t + '"]').addClass('active');
@@ -136,7 +143,8 @@ export function updateScaleDisp() {
 // rows, so double-clicks (inline rename) and hover states survive.
 export function updatePanelSelection() {
   $('#shapes-list .shape-item').each(function() {
-    $(this).toggleClass('selected', $(this).attr('data-id') === S.selId);
+    const sel = $(this).attr('data-id') === S.selId;
+    $(this).toggleClass('selected', sel).attr('aria-selected', sel ? 'true' : 'false');
   });
 }
 
@@ -164,11 +172,19 @@ function buildShapeRow(s) {
   const t = shapeMeasureText(s);
   const hideTip = s.hidden ? 'Show shape [H]' : 'Hide shape [H]';
 
+  const typeName = s.type === 'segment' ? 'distance' : s.type === 'note' ? 'note' : 'area';
+  const label = (s.name || 'Unnamed') + ', ' + typeName + ' ' + t.m +
+    (t.p ? ', perimeter ' + t.p : '') + (s.hidden ? ', hidden' : '');
+
   const $item = $('<div class="shape-item">')
     .toggleClass('selected', s.id === S.selId)
     .toggleClass('shape-hidden', !!s.hidden)
     .attr('data-id', s.id)
-    .attr('draggable', 'true');
+    .attr('draggable', 'true')
+    .attr('tabindex', '0')
+    .attr('role', 'option')
+    .attr('aria-selected', s.id === S.selId ? 'true' : 'false')
+    .attr('aria-label', label);
 
   $item.append(
     $('<button class="shape-swatch" title="Change color">')
@@ -222,7 +238,11 @@ export function updatePanel() {
         collapsed = !!_collapsedGroups[g];
         $l.append(
           $('<div class="group-header">').attr('data-group', g)
-            .append($('<span class="group-caret">').html(collapsed ? '&#9656;' : '&#9662;'))
+            .attr('tabindex', '0')
+            .attr('role', 'button')
+            .attr('aria-expanded', collapsed ? 'false' : 'true')
+            .attr('aria-label', 'Group ' + g + ', ' + fmtArea(sub) + ', ' + cnt + ' shapes')
+            .append($('<span class="group-caret" aria-hidden="true">').html(collapsed ? '&#9656;' : '&#9662;'))
             .append($('<span class="group-name">').text(g))
             .append($('<span class="group-sub">').text(fmtArea(sub) + ' · ' + cnt))
         );
@@ -281,6 +301,7 @@ export function setSlider(name, val) {
   }
 
   $grp.find('.sl-val').val(val);
+  $grp.find('.sl-track').attr('aria-valuenow', val);
 
   updateFilters();
 }
@@ -328,7 +349,10 @@ function applyToolbarStage(tb) {
   }
   const best = rows.indexOf(Math.min.apply(null, rows));
   tb.dataset.stage = String(best);
-  if (best === 0) $('#tb-sliders').removeClass('open');
+  if (best === 0) {
+    $('#tb-sliders').removeClass('open');
+    $('#btn-sliders-toggle').attr('aria-expanded', 'false');
+  }
 }
 
 export function initToolbarReflow() {
