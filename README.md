@@ -1,156 +1,132 @@
-# AreaImageCalc — measure area & distance on images and PDFs
+# AreaImageCalc
 
-**[Live Demo](https://areaimagecalc.pages.dev/)**
+**Measure area and distance on images, floor plans, maps, and PDFs — free, in your browser.**
 
-A free, open-source (MIT) browser tool for measuring area, distance and perimeter on images, floor plans, maps and PDFs. Load a file, set a real-world scale, draw shapes, annotate, and export measurements. No backend, no build step — plain ES modules served as static files. Everything runs locally in your browser; the app makes no network calls after loading and no data ever leaves your device.
+**[Open the app](https://areaimagecalc.pages.dev/)** · no install, no sign-up
 
-## Features
+![AreaImageCalc preview](og-image.png)
 
-- **Image loading**: drag & drop, paste from clipboard, or file picker — JPEG, PNG, GIF, WebP; multiple files at once
-- **Integrated sidebar**: Documents and Shapes live in one sidebar as collapsible panes with a draggable height splitter; dock it left or right (File menu, persisted); multi-page PDFs group their pages under one expandable node; file actions sit in a compact File menu
-- **Shape organisation**: drag rows to reorder (z-order follows), group shapes with subtotals and collapse, rename inline with a double-click, and recolor via a palette or free-text input (hex, rgb(), names)
-- **Move tool**: drag a whole shape to reposition it (handy for comparing outlines); arrow keys nudge
-- **Selection cycling**: repeated clicks on overlapping measurements cycle through the stack; the selected shape renders on top
-- **PDF support**: thumbnail picker to choose pages (click, All/None, or type a range); pages render lazily at 150 DPI; PageUp/PageDown and a statusbar pager navigate within a document
-- **Project save / load**: projects save as `.arcalc.html` — self-describing HTML that opens in any browser on double-click, with a one-click handoff into the app; all tabs, WebP-compressed images, shapes, notes, and scale round-trip
-- **Measurements export**: CSV (spreadsheet-ready) or JSON, with calibrated values when a scale is set
-- **Scale calibration**: click two points of known distance (mm, cm, m, in, ft, yd); endpoints stay adjustable — drag them in Edit mode (the entered distance is kept) or double-click the scale line to re-calibrate. Alternatively, calibrate from a shape of known area via the shape menu
-- **Drawing tools**: polygon, freehand tracing with live fill preview, and open-path distance measurement — tools stay active so you can measure repeatedly; Esc exits
-- **Undo / redo**: per-document history for adding, deleting, moving, renaming, regrouping, recoloring, and clearing shapes and scale changes (`Ctrl+Z` / `Ctrl+Shift+Z`); the most recent image transform (rotate / perspective) is also undoable via a snapshot slot in localStorage
-- **Notes**: pin text annotations anywhere on the image; they export with measurements
-- **Edit mode**: every control point has a minimum-size grab ring; overlapping rings move aside (the point never leaves its ring) so dense vertices stay clickable at any zoom
-- **Label / rename**: click any shape to rename it inline
-- **Hide / show shapes**: toggle visibility per shape; a "show all" notice appears when any are hidden
-- **Image rotation**: 90° buttons and custom angles — recomposed from the original image, so repeated rotations never blur or grow the canvas
-- **Perspective correction**: drag four corner handles with a live CSS preview; the pixel warp runs in a Web Worker and never crops — oversized results are scaled into a pixel budget with all geometry kept consistent
-- **Square calibration**: click the four corners of a known real-world square — corrects perspective and sets scale in one step
-- **Storage management**: images background-encoded to WebP; soft (5 MB) and hard (10 MB) limits with badge warnings and an export prompt
-- **Live measurements**: side-length labels, area, and perimeter with collision-avoiding label placement
-- **Image adjustments**: brightness and contrast sliders
-- **Touch support**: one-finger tools, two-finger pan and pinch-to-zoom
-- **Session persistence**: auto-saves to localStorage with a backup key; restores on reload
+AreaImageCalc turns any picture into something you can measure. Drop in a floor plan, a site map, an aerial photo, or a scanned PDF, click two points of known distance to set the scale, and every shape you draw reports its real-world area, perimeter, and length — ready to export as CSV for a spreadsheet. It is built for the kind of job where tracing a region on an image beats visiting it with a tape measure: estimating flooring or paint from a plan, sizing a lawn or roof from a satellite view, quantifying regions in scanned documents or lab images.
+
+Everything runs locally in your browser. After the page loads, the app makes no network calls; images and projects never leave your device. It is open source under the MIT license, works offline, and can be installed as a PWA or run from a folder of static files.
 
 ## Quick Start
 
-1. Open `index.html` in a modern browser (or visit the live demo)
-2. Drop an image / PDF, or click **Open**
-3. *(Optional)* Click **Scale** `S` and mark a known distance to enable real-world units
-4. Draw shapes with **Polygon** `P`, **Freehand** `F`, or measure a path with **Distance** `D` — tools stay active until `Esc`
-5. View per-shape and total measurements in the Shapes panel
-6. Pin notes with **Note** `N`; rename shapes with **Label** `L`
-7. Click **Save** for an `.arcalc.html` project file, or **Export** for CSV / JSON measurements
+1. Open the [live app](https://areaimagecalc.pages.dev/) (or `index.html` locally)
+2. Drop an image or PDF, click **Open**, or paste with `Ctrl+V`
+3. *(Optional)* Press `S` (**Scale**) and click two points of known distance to enable real-world units
+4. Draw with **Polygon** `P` or **Freehand** `F`, or measure a path with **Distance** `D` — tools stay active until `Esc`
+5. Read per-shape and total measurements in the Shapes panel
+6. **Save** an `.arcalc.html` project file, or **Export** measurements as CSV / JSON
+
+## Highlights
+
+- **Real-world units** — calibrate from a known distance, a known area, or a known square; supports mm, cm, m, in, ft, yd
+- **Drawing tools** — polygon, freehand tracing with live fill, and open-path distance measurement, with live side-length, area, and perimeter labels that avoid overlapping
+- **PDF support** — pick pages from a thumbnail grid; pages render lazily and group under one document in the sidebar
+- **Perspective correction** — de-skew photos taken at an angle, manually or automatically via square calibration; the result is never cropped
+- **Organize** — tabs per document; group shapes with subtotals; reorder, rename, recolor, hide, and annotate with pinned notes
+- **Full undo/redo** per document, including image transforms
+- **Portable projects** — a saved project is a single self-describing HTML file that opens in any browser on double-click
+- **Works everywhere** — mouse, keyboard, and touch (one-finger draw, two-finger pan and pinch-zoom); sessions auto-save and restore on reload
 
 ## Tools
 
-| Tool | Shortcut | Description |
-|------|----------|-------------|
+| Tool | Key | Description |
+|------|-----|-------------|
 | Scale | `S` | Click two points of a known distance; drag endpoints to fine-tune before confirming |
-| Polygon | `P` | Click to place vertices; close via first point, double-click, Enter, or right-click |
+| Polygon | `P` | Click to place vertices; close via first point, double-click, `Enter`, or right-click |
 | Freehand | `F` | Drag to trace; live fill shows the region; release to finish |
-| Distance | `D` | Click points along a path; finish with double-click, Enter, or right-click |
-| Move | `M` | Drag a whole shape to reposition it; arrow keys nudge (Shift = 10x) |
+| Distance | `D` | Click points along a path; finish with double-click, `Enter`, or right-click |
+| Move | `M` | Drag a whole shape to reposition it; arrow keys nudge (`Shift` = 10×) |
 | Edit | `E` | Drag grab rings to move shape points, note pins, and scale endpoints |
 | Label | `L` | Click a shape to rename it; click a note to edit its text |
-| Note | `N` | Click to pin a text annotation |
+| Note | `N` | Click to pin a text annotation (notes export with measurements) |
 | Perspective | `W` | Drag four corner handles to de-skew the image |
 | Square Cal | — | Perspective panel → **Square Cal** tab; click 4 corners of a known square |
 | Rotate | — | 90° buttons or a custom-angle popup |
 
-## Keyboard Shortcuts
+### Keyboard
 
 | Key | Action |
 |-----|--------|
-| `S` / `P` / `F` / `D` / `M` / `E` / `L` / `N` | Activate tool (toggle off if already active) |
+| `S` `P` `F` `D` `M` `E` `L` `N` | Activate tool (toggle off if already active) |
 | `1`–`6` | Numeric aliases for Scale / Polygon / Freehand / Distance / Edit / Perspective |
-| `W` | Enter / exit Perspective mode |
 | `H` | Hide / show selected shape |
 | `Ctrl+Z` / `Ctrl+Shift+Z` (or `Ctrl+Y`) | Undo / redo |
-| `Backspace` | Remove the last placed point while drawing; delete selected shape otherwise |
+| `Backspace` | Remove last placed point while drawing; delete selected shape otherwise |
 | `Space` + drag | Pan |
-| `+` / `-` | Zoom in / out |
-| `Ctrl+0` | Fit image to view |
+| `+` / `-` · `Ctrl+0` | Zoom in / out · fit image to view |
 | `PgUp` / `PgDn` | Previous / next page of the current document |
-| `Enter` | Finish Distance path · Apply perspective / square calibration |
-| `Escape` | Exit current tool / cancel perspective / deselect |
+| `Enter` | Finish Distance path · apply perspective / square calibration |
+| `Escape` | Exit tool / cancel perspective / deselect |
 | `?` | Show shortcut help |
 
-## Mouse Controls
+### Mouse and Touch
 
-| Action | Result |
-|--------|--------|
+| Input | Result |
+|-------|--------|
 | Scroll wheel | Zoom at cursor |
 | Middle-click drag | Pan |
-| Right-click | Finish the current path (or clear it if too short) |
-| Click shape | Select it |
-| Double-click note pin | Edit its text |
-| Double-click scale line | Re-open calibration with the value prefilled |
-
-## Touch Controls
-
-| Gesture | Result |
-|---------|--------|
-| One finger | Use active tool (draw, edit, select) |
+| Right-click | Finish the current path |
+| Click a shape | Select it (repeated clicks cycle overlapping shapes) |
+| Double-click a note pin | Edit its text |
+| Double-click the scale line | Re-open calibration with the value prefilled |
+| One finger | Use the active tool |
 | Two fingers | Pan and pinch-to-zoom |
-| Tap shape | Select it |
 
-## Scale Calibration
+## Setting the Scale
 
-1. Click **Scale** (or press `S`)
-2. Click two points on an object of known size — drag the grab rings to fine-tune
-3. Enter the real-world distance and unit → **Set**
-4. All measurements update immediately to calibrated units
+Three ways to get real-world units:
 
-To correct later: drag an endpoint in **Edit** mode (the entered distance is kept and pixels-per-unit recalculates), or double-click the line to re-enter the value.
+- **Known distance** — press `S`, click two points on something of known length (a wall on a plan, a scale bar on a map), enter the distance and unit. Endpoints stay adjustable: drag them in **Edit** mode (the entered distance is kept and pixels-per-unit recalculates), or double-click the line to re-enter the value.
+- **Known area** — draw a closed shape around a region of known area, open its shape menu (⋮ in the Shapes pane) → **Set scale from area…**, and enter the area.
+- **Known square** — if the photo is skewed, enter Perspective mode (`W`) → **Square Cal** tab, click the four corners of a real-world square, and enter its side length. This corrects perspective *and* sets the scale in one step.
 
-**Scale by area**: draw a closed shape around a region of known real-world area, open its shape menu (⋮ in the Shapes pane) → **Set scale from area…**, and enter the area. Pixels-per-unit derives from `sqrt(px_area / real_area)`.
+## Perspective Correction and Rotation
 
-Supported units: `mm` `cm` `m` `in` `ft` `yd`
+For photos taken at an angle, press `W` and drag the four corner handles until the reference grid matches the image distortion — a live preview shows the correction before you commit with **Apply**. The warp runs in a Web Worker so the UI stays responsive, and the output is never cropped; if a strong correction would balloon the raster, a uniform downscale is folded into the transform with all geometry kept consistent.
 
-## Square Calibration
+Rotation (90° buttons or a custom angle) always recomposes from the original image at the cumulative angle, so repeated rotations never blur or grow the canvas. Shapes and the scale line follow the image through both operations.
 
-A faster alternative that corrects perspective *and* sets scale in one step:
+## Saving and Exporting
 
-1. Enter Perspective mode (button or `W`) → switch to the **Square Cal** tab
-2. Click the four corners of any object you know is a real-world square (any order; drag corners to fine-tune)
-3. Enter the side length and click **Apply**
+- **Project files** — **Save** writes `<name>.arcalc.html`, a single self-describing HTML document: double-clicking it opens a page with an "Open AreaImageCalc" button that hands the project straight back into the app. All tabs, images (WebP-compressed), shapes, notes, and scale round-trip. Older `.arcalc` and plain-JSON files still import, and the installed PWA registers as a handler for `.arcalc` files.
+- **CSV** — one row per shape (`document, name, type, area, area_unit, length, length_unit, area_px2, length_px, text`), BOM-prefixed for spreadsheet apps.
+- **JSON** — per-tab measurements with shape coordinates for downstream processing.
 
-## Perspective Correction (Manual)
+Sessions also auto-save to localStorage and restore on reload. Images are background-encoded to WebP to shrink the footprint; if a session outgrows the browser's storage (soft limit 5 MB, hard limit 10 MB), the app degrades gracefully — background-tab images are dropped first, and a badge plus modal prompt you to export a project file before anything is lost.
 
-1. Click **Perspective** (or press `W`)
-2. Drag the four corner handles to match the image distortion — a reference grid helps judge alignment
-3. A live CSS preview shows the correction before committing
-4. Press **Apply** (or `Enter`); the pixel warp runs in a Web Worker so the UI stays responsive
+## Privacy
 
-The output is never cropped. If a strong correction would balloon the raster, a uniform downscale is folded into the transform — shapes, the scale line, and pixels-per-unit all stay consistent.
+The hosted app collects no data. There are no analytics, no cookies, and no accounts; after the initial page load the app makes zero network calls (PDF.js is fetched from a CDN only the first time a PDF is opened). Everything you load or draw stays in your browser's local storage on your machine.
 
-## Rotation
+## Running Locally
 
-Rotation always recomposes from the document's base image at the cumulative angle: rotating 10° six times gives the same quality and canvas size as rotating 60° once. Shapes and the scale line rotate with the image; `scalePPU` is preserved.
+No build step — plain ES modules served as static files:
 
-## Project Files (.arcalc.html)
+```sh
+git clone https://github.com/arrow501/AreaImageCalc.git
+cd AreaImageCalc
+npm run serve        # or any static file server
+```
 
-A project file is a self-describing HTML document saved as `<name>.arcalc.html`: double-clicking it opens the browser with a short explanation and an "Open AreaImageCalc" button that hands the project straight into the app. The project data is embedded in a JSON script tag. Older `.arcalc` files (HTML polyglot or legacy plain JSON) still import. When installed as a PWA, the app registers as a handler for `.arcalc` files.
+Requires a modern browser with ES modules, Canvas 2D, Web Workers, and localStorage. `createImageBitmap` and `OffscreenCanvas` are used when available and degrade gracefully.
 
-## Measurements Export
+## Development
 
-**Export** offers two formats:
+Runtime dependencies are deliberately minimal: [jQuery](https://jquery.com/) (CDN), the [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) font, and [PDF.js](https://mozilla.github.io/pdf.js/) lazy-loaded on first PDF open.
 
-- **CSV** — one row per shape (`document, name, type, area, area_unit, length, length_unit, area_px2, length_px, text`), BOM-prefixed for spreadsheet apps
-- **JSON** — per-tab measurements with shape coordinates for downstream processing
+```sh
+npm test           # Vitest unit tests (pure modules)
+npm run test:e2e   # Playwright E2E (headless Chromium)
+npm run test:all   # both
+```
 
-## Storage Management
+<details>
+<summary><b>Architecture</b> — module responsibilities</summary>
 
-| Condition | Behaviour |
-|-----------|-----------|
-| Save ≤ 5 MB | Full save — all tabs with images |
-| 5 MB < save ≤ 10 MB | Background-tab images dropped; yellow badge on Save |
-| Save > 10 MB | All images dropped from auto-save; red badge; modal prompts to export a project file |
-
-Images are background-encoded to WebP (35% lossy) via a Web Worker to reduce footprint before the size check runs.
-
-## Architecture
-
-The app is split into ES modules — `index.html` only contains the CSS and HTML shell. The module graph is a strict DAG (see `CLAUDE.md` for the layer diagram).
+The app is split into ES modules; `index.html` contains only the CSS and HTML shell. The module graph is a strict DAG (see `CLAUDE.md` for the layer diagram).
 
 | File | Responsibility |
 |------|----------------|
@@ -179,34 +155,21 @@ The app is split into ES modules — `index.html` only contains the CSS and HTML
 | `js/worker.js` | Web Worker: shoelace, RDP simplification, homography warp |
 | `js/imageWorker.js` | Web Worker: OffscreenCanvas WebP encoder |
 
-### Key Algorithms
+</details>
 
-- **Area / perimeter**: shoelace formula, runs in a Web Worker
-- **Path simplification**: Ramer–Douglas–Peucker, runs in a Web Worker
-- **Freehand sampling**: fixed screen-space step (zoom-independent detail)
-- **Point-in-polygon**: ray casting
-- **Homography**: 4-point DLT with Gaussian elimination; bilinear re-raster in a Web Worker; pixel-budget scale folding
-- **Handle layout**: iterative pairwise ring separation clamped so control points never exit their rings
-- **Label placement**: AABB collision detection with priority (area labels, then longest sides, then notes)
+<details>
+<summary><b>Key algorithms</b></summary>
 
-## Testing
+- **Area / perimeter** — shoelace formula, runs in a Web Worker
+- **Path simplification** — Ramer–Douglas–Peucker, runs in a Web Worker
+- **Freehand sampling** — fixed screen-space step (zoom-independent detail)
+- **Point-in-polygon** — ray casting
+- **Homography** — 4-point DLT with Gaussian elimination; bilinear re-raster in a Web Worker; pixel-budget scale folding
+- **Handle layout** — iterative pairwise ring separation clamped so control points never exit their rings
+- **Label placement** — AABB collision detection with priority (area labels, then longest sides, then notes)
 
-```sh
-npm test           # Vitest unit tests (pure modules)
-npm run test:e2e   # Playwright E2E (headless Chromium)
-npm run test:all   # both
-```
-
-## Dependencies
-
-- [jQuery 3.7.1](https://jquery.com/) — DOM / events (CDN)
-- [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) — monospace font (Google Fonts)
-- [PDF.js](https://mozilla.github.io/pdf.js/) — lazy-loaded from CDN the first time a PDF is opened
-
-## Browser Support
-
-Requires a modern browser with ES modules, Canvas 2D, Web Workers, and `localStorage`. `createImageBitmap` and `OffscreenCanvas` are used when available (WebP encoding) and degrade gracefully.
+</details>
 
 ## License
 
-MIT License
+[MIT](LICENSE)
