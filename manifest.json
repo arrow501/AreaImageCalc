@@ -1,6 +1,7 @@
 {
   "name": "AreaImageCalc",
   "short_name": "AreaImageCalc",
+  "description": "Measure area, distance and perimeter on images, floor plans, maps and PDFs — with real-world scale calibration, CSV export, and full offline privacy.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a1a",

@@ -1,5 +1,6 @@
 export const COLORS = ['#FF6B35', '#4A9EFF', '#22D88E', '#FF4081', '#FFD740', '#7C4DFF'];
 export const SAVE_KEY = 'areaCalcState';
+export const HC_KEY = SAVE_KEY + '.highContrast';
 export const TRANSFORM_UNDO_KEY = SAVE_KEY + '.transformUndo';
 export const SAVE_VER = 4;
 export const SAVE_VER_COMPAT = 3;

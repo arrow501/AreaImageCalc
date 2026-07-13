@@ -4,7 +4,40 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://code.jquery.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; worker-src 'self' blob: https://cdnjs.cloudflare.com; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Area Calculator</title>
+  <title>Measure Area &amp; Distance on Images, PDFs &amp; Maps — AreaImageCalc</title>
+  <meta name="description" content="Free online tool to measure area, distance and perimeter on images, floor plans, maps and PDFs. Calibrate a real-world scale, draw polygons or trace freehand, export CSV. Nothing is uploaded — runs entirely in your browser. Open source (MIT).">
+  <meta name="theme-color" content="#1a1a1a">
+  <link rel="canonical" href="https://areaimagecalc.pages.dev/">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AreaImageCalc">
+  <meta property="og:title" content="AreaImageCalc — Measure Area &amp; Distance on Images, PDFs &amp; Maps">
+  <meta property="og:description" content="Free, open-source measurement tool: calibrate scale, draw shapes, get real-world area and distance from any image or PDF. 100% in-browser, nothing uploaded.">
+  <meta property="og:url" content="https://areaimagecalc.pages.dev/">
+  <meta property="og:image" content="https://areaimagecalc.pages.dev/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AreaImageCalc — Measure Area &amp; Distance on Images, PDFs &amp; Maps">
+  <meta name="twitter:description" content="Free, open-source measurement tool: calibrate scale, draw shapes, get real-world area and distance from any image or PDF. 100% in-browser, nothing uploaded.">
+  <meta name="twitter:image" content="https://areaimagecalc.pages.dev/og-image.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "AreaImageCalc",
+    "url": "https://areaimagecalc.pages.dev/",
+    "description": "Measure area, distance and perimeter on images, floor plans, maps and PDFs. Calibrate a real-world scale, draw polygons or trace freehand, correct perspective, and export measurements as CSV or JSON. Runs entirely in the browser; no data leaves the device.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://github.com/arrow501/AreaImageCalc/blob/main/LICENSE",
+    "sameAs": ["https://github.com/arrow501/AreaImageCalc"],
+    "image": "https://areaimagecalc.pages.dev/og-image.png",
+    "featureList": "Area measurement, distance measurement, scale calibration, polygon and freehand drawing, PDF page support, perspective correction, square calibration, notes, CSV and JSON export, undo/redo, offline-capable, no upload"
+  }
+  </script>
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -244,7 +277,7 @@
     .shape-menu {
       background: none;
       border: none;
-      color: #666;
+      color: #8f8f8f;
       cursor: pointer;
       font-size: 12px;
       padding: 0 2px;
@@ -276,7 +309,7 @@
     }
     .group-header:hover { background: #262626; color: #ddd; }
     .group-header.drop-into { outline: 1px dashed #FF6B35; }
-    .group-caret { color: #666; font-size: 9px; width: 10px; text-align: center; }
+    .group-caret { color: #8f8f8f; font-size: 9px; width: 10px; text-align: center; }
     .group-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .group-sub {
       font-family: 'JetBrains Mono', monospace;
@@ -294,7 +327,7 @@
     }
     .shape-info .perim {
       font-family: 'JetBrains Mono', monospace;
-      color: #666;
+      color: #8f8f8f;
       font-size: 10px;
     }
     .shape-name {
@@ -308,7 +341,7 @@
     .shape-eye {
       background: none;
       border: none;
-      color: #666;
+      color: #8f8f8f;
       cursor: pointer;
       font-size: 11px;
       padding: 0 2px;
@@ -319,7 +352,7 @@
     .shape-del {
       background: none;
       border: none;
-      color: #555;
+      color: #8f8f8f;
       cursor: pointer;
       font-size: 16px;
       padding: 0 2px;
@@ -338,6 +371,16 @@
       min-height: 26px;
       display: flex;
       align-items: center;
+      flex-shrink: 0;
+    }
+    #tool-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #FF8A5C;
+      border-right: 1px solid #444;
+      padding-right: 10px;
+      margin-right: 10px;
+      min-width: 8ch;
       flex-shrink: 0;
     }
 
@@ -436,9 +479,18 @@
       outline-offset: -8px;
       pointer-events: auto;
     }
-    .dz-content { text-align: center; color: #555; pointer-events: none; }
-    .dz-content .big { font-size: 20px; color: #777; margin-bottom: 6px; }
+    .dz-content { text-align: center; color: #9a9a9a; pointer-events: none; }
+    .dz-content .big { font-size: 20px; color: #ababab; margin-bottom: 6px; }
     .dz-content .sub { font-size: 12px; }
+    .dz-content .tagline { font-size: 11px; color: #8f8f8f; margin-top: 18px; max-width: 420px; line-height: 1.5; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
 
     /* ========== CURSORS ========== */
     .cursor-crosshair #overlay-canvas { cursor: crosshair; }
@@ -548,7 +600,7 @@
     }
     .ap-hint {
       font-size: 10px;
-      color: #666;
+      color: #8f8f8f;
       margin-bottom: 6px;
       line-height: 1.4;
     }
@@ -608,7 +660,7 @@
       border-bottom: 1px solid #2a2a2a;
     }
     .pane-header:hover { background: #242424; }
-    .pane-caret { color: #666; font-size: 10px; width: 12px; text-align: center; }
+    .pane-caret { color: #8f8f8f; font-size: 10px; width: 12px; text-align: center; }
     .pane-title { flex: 1; }
     .pane-body { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; }
     .pane-body::-webkit-scrollbar { width: 6px; }
@@ -617,7 +669,7 @@
     #btn-new-doc {
       background: none;
       border: none;
-      color: #666;
+      color: #8f8f8f;
       cursor: pointer;
       font-size: 16px;
       padding: 0 8px;
@@ -647,7 +699,7 @@
     .doc-caret {
       width: 14px;
       text-align: center;
-      color: #666;
+      color: #8f8f8f;
       flex-shrink: 0;
       font-size: 10px;
     }
@@ -659,11 +711,11 @@
       white-space: nowrap;
       min-width: 0;
     }
-    .doc-count { color: #555; font-size: 10px; flex-shrink: 0; }
+    .doc-count { color: #8f8f8f; font-size: 10px; flex-shrink: 0; }
     .doc-close {
       background: none;
       border: none;
-      color: #555;
+      color: #8f8f8f;
       cursor: pointer;
       font-size: 14px;
       padding: 0 4px;
@@ -711,7 +763,7 @@
       padding: 0;
       cursor: pointer;
     }
-    #page-nav button:hover { color: #fff; border-color: #666; }
+    #page-nav button:hover { color: #fff; border-color: #8f8f8f; }
     #page-nav button.disabled { opacity: 0.3; pointer-events: none; }
 
     /* ========== PDF MODAL ========== */
@@ -768,7 +820,7 @@
       align-items: center;
       justify-content: center;
     }
-    .pdf-thumb:hover { border-color: #666; }
+    .pdf-thumb:hover { border-color: #8f8f8f; }
     .pdf-thumb.selected { border-color: #FF6B35; }
     .pdf-thumb.selected::after {
       content: '\2713';
@@ -936,7 +988,7 @@
     }
     #btn-shortcuts:hover { color: #FF6B35; border-color: #FF6B35; }
     #credit-link {
-      color: #666; font-size: 11px; text-decoration: none;
+      color: #8f8f8f; font-size: 11px; text-decoration: none;
       margin-left: auto; margin-right: 8px;
     }
     #credit-link:hover { color: #FF6B35; text-decoration: underline; }
@@ -944,6 +996,35 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
     }
+
+    /* ========== HIGH CONTRAST MODE ========== */
+    html.hc, html.hc body { background: #000; color: #fff; }
+    html.hc #toolbar, html.hc #statusbar { background: #000; color: #fff; border-color: #aaa; }
+    html.hc .tb-btn { color: #fff; }
+    html.hc .tb-btn:hover { background: #333; }
+    html.hc .tb-btn.disabled { opacity: 0.55; }
+    html.hc .tb-sep { background: #aaa; }
+    html.hc .tb-info, html.hc .sl-group span, html.hc #tool-display { color: #fff; }
+    html.hc .sl-group { background: #000; border: 1px solid #aaa; }
+    html.hc #canvas-wrap { background: #000; }
+    html.hc .dz-content, html.hc .dz-content .big, html.hc .dz-content .tagline { color: #fff; }
+    html.hc #sidebar { background: #000; border-color: #aaa; }
+    html.hc .pane-header { background: #000; color: #fff; border-color: #aaa; }
+    html.hc .shape-item, html.hc .doc-row, html.hc .doc-page, html.hc .group-header { color: #fff; }
+    html.hc .shape-item.selected, html.hc .doc-item.active .doc-row, html.hc .doc-page.active { background: #333; outline: 1px solid #fff; }
+    html.hc .shape-info .perim, html.hc .group-sub, html.hc .doc-count,
+    html.hc .shape-menu, html.hc .shape-eye, html.hc .shape-del,
+    html.hc .doc-caret, html.hc .pane-caret, html.hc .group-caret,
+    html.hc .doc-close, html.hc #btn-new-doc, html.hc #credit-link,
+    html.hc #shapes-total, html.hc .ap-hint { color: #e6e6e6; }
+    html.hc .dropdown-menu, html.hc .sc-panel, html.hc .storage-modal,
+    html.hc #scale-popup, html.hc #label-popup, html.hc #rotate-popup, html.hc #persp-panel {
+      background: #000; border-color: #fff; color: #fff;
+    }
+    html.hc .dropdown-menu button { color: #fff; }
+    html.hc .dropdown-menu button:hover { background: #333; }
+    html.hc input, html.hc select { background: #000; color: #fff; border-color: #aaa; }
+    html.hc #status-text { color: #fff; }
 
     /* ========== ROTATE POPUP ========== */
     #rotate-popup {
@@ -1002,10 +1083,14 @@
 </head>
 <body>
 
+<noscript>
+  <p>AreaImageCalc is a free, open-source tool that measures area, distance and perimeter on images, floor plans, maps and PDFs. It needs JavaScript to run &mdash; everything happens locally in your browser and nothing is uploaded. Source code and downloads: <a href="https://github.com/arrow501/AreaImageCalc">github.com/arrow501/AreaImageCalc</a>.</p>
+</noscript>
+
 <div id="app">
   <!-- ========== TOOLBAR ========== -->
   <div id="toolbar" data-stage="0">
-    <button class="tb-btn" id="btn-file-menu" title="File menu" aria-label="File menu" aria-haspopup="true">&#9776; File</button>
+    <button class="tb-btn" id="btn-file-menu" title="File menu" aria-label="File menu" aria-haspopup="true" aria-expanded="false">&#9776; File</button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-scale" data-tool="scale" title="Calibrate scale — click 2 known points [S]" aria-label="Scale tool (shortcut S) — click 2 known points">Scale</button>
     <button class="tb-btn disabled" id="btn-polygon" data-tool="polygon" title="Polygon area — click vertices, close to finish [P]" aria-label="Polygon tool (shortcut P) — click vertices, close to finish"><span class="lbl-full">Polygon</span><span class="lbl-short">Poly</span></button>
@@ -1025,23 +1110,23 @@
     <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)"><span class="lbl-full">Perspective</span><span class="lbl-short">Persp</span></button>
     <div class="tb-sep"></div>
-    <button class="tb-btn active" id="btn-toggle-sidebar" title="Show/hide sidebar" aria-label="Show or hide sidebar">Panel</button>
+    <button class="tb-btn active" id="btn-toggle-sidebar" title="Show/hide sidebar" aria-label="Show or hide sidebar" aria-expanded="true">Panel</button>
 
     <!-- Brightness / Contrast Sliders -->
     <div class="tb-sliders-wrap">
-      <button class="tb-btn" id="btn-sliders-toggle" title="Brightness / Contrast" aria-label="Show brightness and contrast controls" aria-haspopup="true">B/C</button>
+      <button class="tb-btn" id="btn-sliders-toggle" title="Brightness / Contrast" aria-label="Show brightness and contrast controls" aria-haspopup="true" aria-expanded="false">B/C</button>
       <div class="tb-sliders" id="tb-sliders">
         <div class="sl-group" title="Brightness">
-          <span>B</span>
-          <div class="sl-track" data-slider="bright">
+          <span aria-hidden="true">B</span>
+          <div class="sl-track" data-slider="bright" role="slider" tabindex="0" aria-label="Brightness" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
             <div class="sl-fill"></div>
             <div class="sl-thumb"></div>
           </div>
           <input type="number" class="sl-val" data-slider="bright" value="0" min="-100" max="100">
         </div>
         <div class="sl-group" title="Contrast">
-          <span>C</span>
-          <div class="sl-track" data-slider="contrast">
+          <span aria-hidden="true">C</span>
+          <div class="sl-track" data-slider="contrast" role="slider" tabindex="0" aria-label="Contrast" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0">
             <div class="sl-fill"></div>
             <div class="sl-thumb"></div>
           </div>
@@ -1061,19 +1146,19 @@
     <!-- ========== SIDEBAR (documents + shapes + future panes) ========== -->
     <div id="sidebar">
       <div class="pane" id="pane-docs">
-        <div class="pane-header" data-pane="docs">
-          <span class="pane-caret">&#9662;</span>
+        <div class="pane-header" data-pane="docs" tabindex="0" role="button" aria-expanded="true">
+          <span class="pane-caret" aria-hidden="true">&#9662;</span>
           <span class="pane-title">Documents</span>
           <button id="btn-new-doc" title="New document tab" aria-label="New document tab">+</button>
         </div>
         <div class="pane-body">
-          <div id="doc-list"></div>
+          <div id="doc-list" role="list" aria-label="Open documents"></div>
         </div>
       </div>
       <div id="pane-splitter" title="Drag to resize panes" aria-label="Drag to resize panes"></div>
       <div class="pane" id="pane-shapes">
-        <div class="pane-header" data-pane="shapes">
-          <span class="pane-caret">&#9662;</span>
+        <div class="pane-header" data-pane="shapes" tabindex="0" role="button" aria-expanded="true">
+          <span class="pane-caret" aria-hidden="true">&#9662;</span>
           <span class="pane-title">Shapes</span>
         </div>
         <div id="hidden-notice">
@@ -1081,7 +1166,7 @@
           <button id="btn-showall">show all</button>
         </div>
         <div class="pane-body">
-          <div id="shapes-list"></div>
+          <div id="shapes-list" role="listbox" aria-label="Measured shapes"></div>
         </div>
         <div id="shapes-total"></div>
       </div>
@@ -1093,8 +1178,10 @@
 
       <div id="dropzone">
         <div class="dz-content">
+          <h1 class="sr-only">AreaImageCalc — measure area and distance on images, floor plans, maps and PDFs</h1>
           <div class="big">Drop image, PDF, or project here</div>
           <div class="sub">or click <b>Open</b> &middot; <kbd>Ctrl+V</kbd> to paste</div>
+          <p class="tagline">Free, open-source area and distance measurement with real-world scale calibration. Everything runs in your browser &mdash; nothing is uploaded.</p>
         </div>
       </div>
 
@@ -1167,6 +1254,7 @@
 
   <!-- ========== STATUS BAR ========== -->
   <div id="statusbar" role="status" aria-live="polite" aria-atomic="true">
+    <span id="tool-display">No tool</span>
     <span id="status-text">Drop an image, click Open, or paste to start</span>
     <div id="page-nav" style="display:none">
       <button id="page-prev" title="Previous page [PgUp]" aria-label="Previous page">&#8249;</button>
@@ -1180,18 +1268,19 @@
 
 <input type="file" id="file-input" accept="image/*,.pdf,.arcalc,.html,.htm" multiple style="display:none">
 
-<div id="file-menu" class="dropdown-menu">
-  <button id="btn-new">New Project</button>
-  <button id="btn-open">Open&hellip;</button>
-  <button id="btn-export-project">Save Project (.arcalc.html)</button>
+<div id="file-menu" class="dropdown-menu" role="menu" aria-label="File menu">
+  <button id="btn-new" role="menuitem">New Project</button>
+  <button id="btn-open" role="menuitem">Open&hellip;</button>
+  <button id="btn-export-project" role="menuitem">Save Project (.arcalc.html)</button>
   <div class="menu-sep"></div>
-  <button id="btn-export-csv">Export Measurements (CSV)</button>
-  <button id="btn-export-json">Export Measurements (JSON)</button>
+  <button id="btn-export-csv" role="menuitem">Export Measurements (CSV)</button>
+  <button id="btn-export-json" role="menuitem">Export Measurements (JSON)</button>
   <div class="menu-sep"></div>
-  <button id="btn-dock-side">Move Panel to Right</button>
+  <button id="btn-dock-side" role="menuitem">Move Panel to Right</button>
+  <button id="btn-hc" role="menuitem" aria-pressed="false">High Contrast: Off</button>
 </div>
 
-<div id="shape-menu" class="dropdown-menu"></div>
+<div id="shape-menu" class="dropdown-menu" role="menu" aria-label="Shape options"></div>
 
 <div id="color-popover" class="dropdown-menu">
   <div id="color-swatches"></div>
