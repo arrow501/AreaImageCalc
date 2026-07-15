@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { distSeg, pip, centroid, segmentLength, nearestPoint, fitScale } from '../../js/math.js';
+import { distSeg, pip, centroid, segmentLength, nearestPoint, fitScale, bilinearPoint, rotateAround } from '../../js/math.js';
 
 // ─── fitScale ───────────────────────────────────────────────────────────────
 
@@ -257,5 +257,79 @@ describe('nearestPoint', () => {
     const b = closed('b', [{ x: 10, y: 0 }]);
     const hit = nearestPoint({ x: 9, y: 0 }, [a, b], 5);
     expect(hit.shape.id).toBe('b');
+  });
+});
+
+// ─── bilinearPoint ──────────────────────────────────────────────────────────
+
+describe('bilinearPoint', () => {
+  const unit = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
+
+  test('corners map to their own uv', () => {
+    expect(bilinearPoint(unit, 0, 0)).toEqual({ x: 0, y: 0 });
+    expect(bilinearPoint(unit, 1, 0)).toEqual({ x: 1, y: 0 });
+    expect(bilinearPoint(unit, 1, 1)).toEqual({ x: 1, y: 1 });
+    expect(bilinearPoint(unit, 0, 1)).toEqual({ x: 0, y: 1 });
+  });
+
+  test('centre of a square is its midpoint', () => {
+    const p = bilinearPoint(unit, 0.5, 0.5);
+    expect(p.x).toBeCloseTo(0.5);
+    expect(p.y).toBeCloseTo(0.5);
+  });
+
+  test('thirds points on an axis-aligned rect', () => {
+    const rect = [{ x: 0, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 90 }, { x: 0, y: 90 }];
+    const p = bilinearPoint(rect, 1 / 3, 2 / 3);
+    expect(p.x).toBeCloseTo(100);
+    expect(p.y).toBeCloseTo(60);
+  });
+
+  test('moving one corner by d moves its thirds point by d * weight', () => {
+    const base = bilinearPoint(unit, 1 / 3, 1 / 3);
+    const moved = [{ x: 0 + 9, y: 0 + 4.5 }, unit[1], unit[2], unit[3]];
+    const p = bilinearPoint(moved, 1 / 3, 1 / 3);
+    expect(p.x - base.x).toBeCloseTo(9 * (2 / 3) * (2 / 3));
+    expect(p.y - base.y).toBeCloseTo(4.5 * (2 / 3) * (2 / 3));
+  });
+
+  test('interpolates a skewed quad', () => {
+    const quad = [{ x: 0, y: 0 }, { x: 10, y: 2 }, { x: 12, y: 10 }, { x: 2, y: 8 }];
+    const p = bilinearPoint(quad, 0.5, 0.5);
+    expect(p.x).toBeCloseTo((0 + 10 + 12 + 2) / 4);
+    expect(p.y).toBeCloseTo((0 + 2 + 10 + 8) / 4);
+  });
+});
+
+// ─── rotateAround ───────────────────────────────────────────────────────────
+
+describe('rotateAround', () => {
+  test('zero angle is identity', () => {
+    const p = rotateAround({ x: 3, y: 4 }, 1, 1, 0);
+    expect(p.x).toBeCloseTo(3);
+    expect(p.y).toBeCloseTo(4);
+  });
+
+  test('90 degrees CW in screen coords', () => {
+    const p = rotateAround({ x: 2, y: 0 }, 0, 0, Math.PI / 2);
+    expect(p.x).toBeCloseTo(0);
+    expect(p.y).toBeCloseTo(2);
+  });
+
+  test('rotation about a non-origin centre', () => {
+    const p = rotateAround({ x: 11, y: 10 }, 10, 10, Math.PI);
+    expect(p.x).toBeCloseTo(9);
+    expect(p.y).toBeCloseTo(10);
+  });
+
+  test('centre point is a fixed point', () => {
+    const p = rotateAround({ x: 5, y: 5 }, 5, 5, 1.234);
+    expect(p.x).toBeCloseTo(5);
+    expect(p.y).toBeCloseTo(5);
+  });
+
+  test('preserves distance from the centre', () => {
+    const p = rotateAround({ x: 8, y: 1 }, 2, 3, 0.77);
+    expect(Math.hypot(p.x - 2, p.y - 3)).toBeCloseTo(Math.hypot(8 - 2, 1 - 3));
   });
 });

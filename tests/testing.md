@@ -28,7 +28,7 @@ Runs in Node.js — no browser, no DOM, no mocks needed.
 
 | File | Module under test | Covers |
 |------|-------------------|--------|
-| `math.test.js` | `js/math.js` | `distSeg`, `pip`, `centroid`, `segmentLength`, `nearestPoint`, `fitScale` |
+| `math.test.js` | `js/math.js` | `distSeg`, `pip`, `centroid`, `segmentLength`, `nearestPoint`, `fitScale`, `bilinearPoint`, `rotateAround` |
 | `constants.test.js` | `js/constants.js` | palette validity, save-version ordering (legacy < compat < current), storage limits |
 | `handles.test.js` | `js/handles.js` | grab-ring layout: no displacement when apart, collision push-apart, control point never exits its ring, deterministic coincident separation, hit-testing against displaced ring centres |
 | `arcalcFormat.test.js` | `js/arcalcFormat.js` | HTML polyglot structure, `<`-escaping, round-trips (incl. hostile strings), legacy JSON + BOM acceptance, rejection of unrelated/truncated files |
@@ -78,6 +78,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/path/to/chrome npm run test:e2e
 | `export.spec.js` | .arcalc is self-describing HTML, .arcalc round-trip, legacy JSON import, File-menu CSV export content, JSON export content |
 | `notes.spec.js` | Note pinning via hotkey, cancel leaves no shape, double-click text editing, note undo |
 | `shapespane.spec.js` | Inline rename, color popover (rgb() input + palette), grouping with subtotal/collapse, drag reorder, move tool, pane splitter resize, dock-right persistence, scale-from-area calibration, overlap selection cycling |
+| `uitools.spec.js` | Toolbar Undo button, Clear in Shapes pane header, Scale pane (reference display, value/unit edit, drag keeps entered value), scale tool Known Area mode, interactive rotate popup, perspective rotation control, document drag reorder |
 
 ### Common patterns
 

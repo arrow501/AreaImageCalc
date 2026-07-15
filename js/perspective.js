@@ -1,7 +1,7 @@
 import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
 import { i2s, centroid, drawGrabRing } from './geometry.js';
 import { HANDLE_RING_R } from './handles.js';
-import { fitScale, segmentLength } from './math.js';
+import { fitScale, segmentLength, bilinearPoint, rotateAround } from './math.js';
 import { encodeCanvas } from './canvasUtil.js';
 import { setTool, enableTools, status, updateScaleDisp, fitView, updatePanel } from './ui.js';
 import { scheduleSave } from './storage.js';
@@ -89,6 +89,8 @@ export function enterPerspective() {
   S.perspSrcCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
   S.perspCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
   S.perspDragIdx = -1;
+  _perspRotDeg = 0;
+  $('#persp-rot-input').val(0);
   enableTools(false);
   $('#btn-persp').addClass('active').removeClass('disabled');
   $('#persp-bar').addClass('visible');
@@ -121,9 +123,68 @@ export function resetPerspective() {
   if (!S.perspActive) return;
   const iw = S.view.iw, ih = S.view.ih;
   S.perspCorners = [{x:0,y:0},{x:iw,y:0},{x:iw,y:ih},{x:0,y:ih}];
+  _perspRotDeg = 0;
+  $('#persp-rot-input').val(0);
   iCvs.style.transform = '';
   S.overlayDirty = true;
   status('Corners reset. Drag to adjust.');
+}
+
+// ---- Rotation (part of perspective): spins the destination corners around
+// their centroid so small tilt fixes don't require juggling all 4 corners ----
+
+let _perspRotDeg = 0;
+
+export function setPerspRotation(deg) {
+  if (!S.perspActive || !S.perspCorners) return;
+  const delta = deg - _perspRotDeg;
+  if (!delta) return;
+  _perspRotDeg = deg;
+  let cx = 0, cy = 0;
+  for (let i = 0; i < 4; i++) { cx += S.perspCorners[i].x; cy += S.perspCorners[i].y; }
+  cx /= 4; cy /= 4;
+  const rad = delta * Math.PI / 180;
+  for (let i = 0; i < 4; i++) {
+    S.perspCorners[i] = rotateAround(S.perspCorners[i], cx, cy, rad);
+  }
+  updatePerspPreview();
+  S.overlayDirty = true;
+}
+
+// ---- Inner control points: rule-of-thirds intersections that mirror the
+// outer corners. Dragging one moves its corner by 1/weight so the inner
+// point tracks the pointer exactly — perspective control while zoomed in ----
+
+const INNER_UV = [[1/3, 1/3], [2/3, 1/3], [2/3, 2/3], [1/3, 2/3]];
+const INNER_AMP = 1 / ((2/3) * (2/3)); // bilinear weight of a corner at its own thirds point
+
+export function innerPerspPoint(i) {
+  return bilinearPoint(S.perspCorners, INNER_UV[i][0], INNER_UV[i][1]);
+}
+
+// Grab a handle (0-3 outer corner, 4-7 inner point): records the pointer
+// offset so the handle doesn't jump on the first move.
+export function grabPerspHandle(idx, mix, miy) {
+  const p = idx < 4 ? S.perspCorners[idx] : innerPerspPoint(idx - 4);
+  S.perspDragIdx = idx;
+  S.perspDragOffset = { x: p.x - mix, y: p.y - miy };
+}
+
+export function dragPerspHandle(mix, miy) {
+  const idx = S.perspDragIdx;
+  if (idx < 0) return;
+  const tx = mix + S.perspDragOffset.x;
+  const ty = miy + S.perspDragOffset.y;
+  if (idx < 4) {
+    S.perspCorners[idx] = { x: tx, y: ty };
+  } else {
+    const i = idx - 4;
+    const cur = innerPerspPoint(i);
+    S.perspCorners[i] = {
+      x: S.perspCorners[i].x + (tx - cur.x) * INNER_AMP,
+      y: S.perspCorners[i].y + (ty - cur.y) * INNER_AMP
+    };
+  }
 }
 
 export function updatePerspPreview() {
@@ -213,11 +274,59 @@ export function drawPerspOverlay(ctx) {
   for (let i = 1; i < 4; i++) ctx.lineTo(cs[i].x,cs[i].y);
   ctx.closePath(); ctx.stroke();
 
+  // Rule-of-thirds grid across the destination quad
+  ctx.strokeStyle = 'rgba(255,107,53,0.45)';
+  ctx.lineWidth = 1;
+  for (let t = 1; t <= 2; t++) {
+    const u = t / 3;
+    const pa = bilinearPoint(S.perspCorners, u, 0), pb = bilinearPoint(S.perspCorners, u, 1);
+    const pc = bilinearPoint(S.perspCorners, 0, u), pd = bilinearPoint(S.perspCorners, 1, u);
+    const a = i2s(pa.x, pa.y), b = i2s(pb.x, pb.y), c = i2s(pc.x, pc.y), d = i2s(pd.x, pd.y);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke();
+  }
+
   const HR = 8;
+  const IR = 6;
   const labels = ['TL','TR','BR','BL'];
   ctx.font = '600 9px "JetBrains Mono", monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const hov = S.perspDragIdx >= 0 ? S.perspDragIdx : findPerspHandle(S.mx, S.my);
+
+  // Inner thirds handles: mirror their corner (amplified) with an arrow
+  // pointing at it, so perspective stays adjustable while zoomed in
+  for (let i = 0; i < 4; i++) {
+    const p = innerPerspPoint(i);
+    const sp = i2s(p.x, p.y);
+    const active = (i + 4 === S.perspDragIdx);
+
+    const dx = cs[i].x - sp.x, dy = cs[i].y - sp.y;
+    const dd = Math.hypot(dx, dy);
+    if (dd > 1) {
+      const ux = dx / dd, uy = dy / dd;
+      const ax = sp.x + ux * (IR + 3), ay = sp.y + uy * (IR + 3);
+      const tipX = sp.x + ux * (IR + 13), tipY = sp.y + uy * (IR + 13);
+      ctx.strokeStyle = active ? '#FF6B35' : 'rgba(255,107,53,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(tipX, tipY); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tipX + ux * 5, tipY + uy * 5);
+      ctx.lineTo(tipX - uy * 3.5, tipY + ux * 3.5);
+      ctx.lineTo(tipX + uy * 3.5, tipY - ux * 3.5);
+      ctx.closePath();
+      ctx.fillStyle = active ? '#FF6B35' : 'rgba(255,107,53,0.7)';
+      ctx.fill();
+    }
+
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, IR, 0, Math.PI*2);
+    ctx.fillStyle = active ? '#FF6B35' : 'rgba(255,107,53,0.55)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (i + 4 === hov) {
+      drawGrabRing(ctx, { x: sp.x, y: sp.y, rx: sp.x, ry: sp.y }, active, HANDLE_RING_R);
+    }
+  }
+
   for (let i = 0; i < 4; i++) {
     const cp = cs[i], active = (i === S.perspDragIdx);
     ctx.beginPath(); ctx.arc(cp.x,cp.y,HR,0,Math.PI*2);
@@ -232,10 +341,16 @@ export function drawPerspOverlay(ctx) {
   ctx.restore();
 }
 
+// 0-3: outer corners, 4-7: inner thirds handles, -1: none
 export function findPerspHandle(sx, sy) {
   for (let i = 0; i < 4; i++) {
     const sp = i2s(S.perspCorners[i].x, S.perspCorners[i].y);
     if (Math.hypot(sx - sp.x, sy - sp.y) <= HANDLE_RING_R) return i;
+  }
+  for (let i = 0; i < 4; i++) {
+    const p = innerPerspPoint(i);
+    const sp = i2s(p.x, p.y);
+    if (Math.hypot(sx - sp.x, sy - sp.y) <= HANDLE_RING_R) return i + 4;
   }
   return -1;
 }

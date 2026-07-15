@@ -4,19 +4,19 @@ import { resize, refreshCanvasRect } from './render.js';
 import {
   closePoly, closeSegment, finishFH, delShape, selectAt, hitsAt, translateShape,
   loadImg, zoomAt, setInteract, showScalePopup, confirmScale, reopenScalePopup,
-  rotateImage, renameShape, hideShape, showAllShapes,
+  rotateImage, enterRotate, exitRotate, setRotatePreview, renameShape, hideShape, showAllShapes,
   showLabelPopup, confirmLabel, beginNoteAt,
   setShapeColor, setShapeGroup, existingGroups, reorderShape, setScaleFromArea
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, updatePanelSelection, status, updateFilters, updateScaleDisp,
-  setSlider, initToolbarReflow, toggleGroupCollapsed
+  updateScalePane, updateScaleAreaHint, setSlider, initToolbarReflow, toggleGroupCollapsed
 } from './ui.js';
 import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
-import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle } from './perspective.js';
+import { enterPerspective, cancelPerspective, applyPerspective, resetPerspective, findPerspHandle, grabPerspHandle, dragPerspHandle, setPerspRotation } from './perspective.js';
 import { enterSqCalib, cancelSqCalib, applySqCalib, onSqCalibPoint, switchPerspMode } from './squareCalib.js';
-import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage } from './tabs.js';
+import { createTab, switchToTab, closeTab, closeDoc, toggleDocCollapsed, navPage, reorderDocGroup } from './tabs.js';
 import { HC_KEY } from './constants.js';
 import { loadPdf } from './pdf.js';
 import { exportProject, importProject, exportMeasurements, exportMeasurementsCsv, hasExistingWork } from './export.js';
@@ -71,14 +71,20 @@ $(oCvs).on('mousedown', function(e) {
 
   if (e.button !== 0 || !S.img) return;
 
+  if (S.rotateActive) {
+    const c = i2s(S.view.iw / 2, S.view.ih / 2);
+    S.rotateDrag = {
+      base: S.rotateAngle,
+      start: Math.atan2(S.my - c.y, S.mx - c.x)
+    };
+    $('body').addClass('cursor-grabbing');
+    return;
+  }
+
   if (S.perspActive) {
     const hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
-      S.perspDragIdx = hi;
-      S.perspDragOffset = {
-        x: S.perspCorners[hi].x - S.mix,
-        y: S.perspCorners[hi].y - S.miy
-      };
+      grabPerspHandle(hi, S.mix, S.miy);
       S.overlayDirty = true;
     }
     return;
@@ -100,6 +106,10 @@ $(oCvs).on('mousedown', function(e) {
       break;
 
     case 'scale':
+      if (S.scaleMode === 'area') {
+        selectScaleAreaShapeAt(ip);
+        break;
+      }
       if (S.scaleState === 0) {
         S.scaleP1 = ip;
         S.scaleState = 1;
@@ -158,9 +168,11 @@ $(oCvs).on('mousedown', function(e) {
       } else if (h && h.kind === 'scale') {
         recordHistory();
         S.dragScaleIdx = h.idx;
-        S.dragScaleReal = S.scalePPU > 0
-          ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
-          : 0;
+        S.dragScaleReal = S.scaleRef && S.scaleRef.kind === 'line' && S.scaleRef.value > 0
+          ? S.scaleRef.value
+          : (S.scalePPU > 0
+            ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
+            : 0);
         oCvs.style.cursor = 'grabbing';
         S.overlayDirty = true;
         status('Drag to adjust the scale line — the entered distance is kept');
@@ -220,13 +232,23 @@ $(document).on('mousemove', function(e) {
     S.view.ox = S.panSt.ox + (e.clientX - S.panSt.x);
     S.view.oy = S.panSt.oy + (e.clientY - S.panSt.y);
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) emit(EVT.VIEW_CHANGE);
+    if (S.perspActive || S.rotateActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
 
+  if (S.rotateActive && S.rotateDrag) {
+    const c = i2s(S.view.iw / 2, S.view.ih / 2);
+    const a = Math.atan2(S.my - c.y, S.mx - c.x);
+    let deg = S.rotateDrag.base + (a - S.rotateDrag.start) * 180 / Math.PI;
+    deg = Math.round(deg * 10) / 10;
+    setRotatePreview(deg);
+    $('#rotate-angle-input').val(deg);
+    return;
+  }
+
   if (S.perspActive && S.perspDragIdx >= 0) {
-    S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
+    dragPerspHandle(S.mix, S.miy);
     emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
@@ -294,6 +316,26 @@ $(document).on('mousemove', function(e) {
   if (S.tool === 'segment' && S.polyPts.length > 0) S.overlayDirty = true;
   if (S.tool === 'scale' && S.scaleState === 1) S.overlayDirty = true;
 });
+
+// Scale tool, Known Area mode: pick the closed shape whose area the user knows
+function selectScaleAreaShapeAt(ip) {
+  const hits = hitsAt(ip);
+  let id = null;
+  for (let i = 0; i < hits.length; i++) {
+    const sh = findShape(hits[i]);
+    if (sh && sh.closed && sh.area != null) { id = sh.id; break; }
+  }
+  if (!id) {
+    status('No closed shape here — click a polygon or freehand region.');
+    return;
+  }
+  S.scaleAreaShapeId = id;
+  S.selId = id;
+  S.overlayDirty = true;
+  updatePanelSelection();
+  updateScaleAreaHint();
+  $('#scale-bar-value').focus();
+}
 
 function startMoveDrag(ip) {
   const hits = hitsAt(ip);
@@ -382,6 +424,12 @@ function moveScaleHandle() {
 }
 
 $(document).on('mouseup', function(e) {
+  if (S.rotateDrag) {
+    S.rotateDrag = null;
+    $('body').removeClass('cursor-grabbing');
+    return;
+  }
+
   if (S.isPan) {
     S.isPan = false;
     $('body').removeClass('cursor-grabbing');
@@ -551,14 +599,19 @@ oCvs.addEventListener('touchstart', function(e) {
 
   if (!S.img) return;
 
+  if (S.rotateActive) {
+    const c = i2s(S.view.iw / 2, S.view.ih / 2);
+    S.rotateDrag = {
+      base: S.rotateAngle,
+      start: Math.atan2(S.my - c.y, S.mx - c.x)
+    };
+    return;
+  }
+
   if (S.perspActive) {
     const hi = findPerspHandle(S.mx, S.my);
     if (hi >= 0) {
-      S.perspDragIdx = hi;
-      S.perspDragOffset = {
-        x: S.perspCorners[hi].x - S.mix,
-        y: S.perspCorners[hi].y - S.miy
-      };
+      grabPerspHandle(hi, S.mix, S.miy);
       S.overlayDirty = true;
     }
     return;
@@ -579,6 +632,10 @@ oCvs.addEventListener('touchstart', function(e) {
       break;
 
     case 'scale':
+      if (S.scaleMode === 'area') {
+        selectScaleAreaShapeAt(ip);
+        break;
+      }
       if (S.scaleState === 0) {
         S.scaleP1 = ip;
         S.scaleState = 1;
@@ -633,9 +690,11 @@ oCvs.addEventListener('touchstart', function(e) {
       } else if (h && h.kind === 'scale') {
         recordHistory();
         S.dragScaleIdx = h.idx;
-        S.dragScaleReal = S.scalePPU > 0
-          ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
-          : 0;
+        S.dragScaleReal = S.scaleRef && S.scaleRef.kind === 'line' && S.scaleRef.value > 0
+          ? S.scaleRef.value
+          : (S.scalePPU > 0
+            ? Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y) / S.scalePPU
+            : 0);
         S.overlayDirty = true;
         status('Drag to adjust the scale line');
       }
@@ -685,7 +744,7 @@ oCvs.addEventListener('touchmove', function(e) {
     S.touchPanSt.oy = S.view.oy;
 
     S.imageDirty = S.overlayDirty = true;
-    if (S.perspActive) emit(EVT.VIEW_CHANGE);
+    if (S.perspActive || S.rotateActive) emit(EVT.VIEW_CHANGE);
     setInteract();
     return;
   }
@@ -696,8 +755,18 @@ oCvs.addEventListener('touchmove', function(e) {
 
   touchXY(touch);
 
+  if (S.rotateActive && S.rotateDrag) {
+    const c = i2s(S.view.iw / 2, S.view.ih / 2);
+    const a = Math.atan2(S.my - c.y, S.mx - c.x);
+    let deg = S.rotateDrag.base + (a - S.rotateDrag.start) * 180 / Math.PI;
+    deg = Math.round(deg * 10) / 10;
+    setRotatePreview(deg);
+    $('#rotate-angle-input').val(deg);
+    return;
+  }
+
   if (S.perspActive && S.perspDragIdx >= 0) {
-    S.perspCorners[S.perspDragIdx] = { x: S.mix + S.perspDragOffset.x, y: S.miy + S.perspDragOffset.y };
+    dragPerspHandle(S.mix, S.miy);
     emit(EVT.VIEW_CHANGE);
     S.overlayDirty = true;
     return;
@@ -748,6 +817,11 @@ function touchEnd(e) {
   if (found) return;
 
   S.touchId = null;
+
+  if (S.rotateDrag) {
+    S.rotateDrag = null;
+    return;
+  }
 
   if (S.perspActive && S.perspDragIdx >= 0) {
     S.perspDragIdx = -1;
@@ -818,16 +892,25 @@ $(document).on('keydown', function(e) {
       if ((S.tool === 'polygon' || S.tool === 'segment') && S.polyPts.length > 0) {
         S.polyPts.pop();
         S.overlayDirty = true;
-      } else if (!S.perspActive && S.tool !== 'squarecal') {
+      } else if (!S.perspActive && S.tool !== 'squarecal' && !S.rotateActive) {
         undo();
       }
     } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
       e.preventDefault();
-      if (!S.perspActive && S.tool !== 'squarecal') redo();
+      if (!S.perspActive && S.tool !== 'squarecal' && !S.rotateActive) redo();
     } else if (k === '0' && S.img) {
       e.preventDefault();
       fitView();
     }
+    return;
+  }
+
+  // Rotate mode captures the keyboard: Enter applies, Escape cancels
+  if (S.rotateActive) {
+    if (e.key === 'Escape') exitRotate(false);
+    else if (e.key === 'Enter') applyRotate();
+    else if (e.key === ' ') return; // allow space-pan
+    e.preventDefault();
     return;
   }
 
@@ -1203,6 +1286,7 @@ $(document).on('dragover drop', function(e) {
 
 $('.tb-btn[data-tool]').on('click', function() {
   if (!S.img) return;
+  if (S.rotateActive) exitRotate(false);
   const t = $(this).data('tool');
   setTool(S.tool === t ? 'idle' : t);
 });
@@ -1211,7 +1295,18 @@ $('#btn-delete').on('click', function() {
   if (S.selId) delShape(S.selId);
 });
 
-$('#btn-clear').on('click', function() {
+$('#btn-undo').on('click', function() {
+  if (!S.img || S.perspActive || S.tool === 'squarecal') return;
+  if ((S.tool === 'polygon' || S.tool === 'segment') && S.polyPts.length > 0) {
+    S.polyPts.pop();
+    S.overlayDirty = true;
+    return;
+  }
+  undo();
+});
+
+$('#btn-clear').on('click', function(e) {
+  e.stopPropagation();
   if (!S.shapes.length) return;
   recordHistory();
   const n = S.shapes.length;
@@ -1219,6 +1314,10 @@ $('#btn-clear').on('click', function() {
   S.selId = null;
   S.colorIdx = 0;
   S.shapeN = 0;
+  if (S.scaleRef && S.scaleRef.kind === 'area') {
+    S.scaleRef = null;
+    updateScaleDisp();
+  }
   S.overlayDirty = true;
   updatePanel();
   status('Cleared ' + n + ' shape' + (n !== 1 ? 's' : '') + ' — Ctrl+Z to undo');
@@ -1240,7 +1339,7 @@ $('#btn-toggle-sidebar').on('click', function() {
 });
 
 $('.pane-header').on('click', function(e) {
-  if ($(e.target).closest('#btn-new-doc').length) return;
+  if ($(e.target).closest('#btn-new-doc, #btn-clear').length) return;
   const $pane = $(this).closest('.pane');
   $pane.toggleClass('collapsed');
   // A splitter-dragged inline height would defeat the collapse — park it
@@ -1333,10 +1432,101 @@ $('#scale-value').on('keydown', function(e) {
   }
 });
 
+// ---- Scale pane (sidebar): edit the reference value / unit ----
+
+function applyScalePaneEdit() {
+  const ref = S.scaleRef;
+  if (!ref) return;
+  const v = parseFloat($('#scale-pane-value').val());
+  const unit = $('#scale-pane-unit').val();
+  if (!(v > 0)) {
+    status('Enter a value > 0');
+    updateScalePane();
+    return;
+  }
+  if (v === ref.value && unit === S.scaleUnit) return;
+
+  let ppu = null;
+  if (ref.kind === 'line' && S.scaleLine) {
+    const px = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
+    if (px > 1e-6) ppu = px / v;
+  } else if (ref.kind === 'area') {
+    const sh = findShape(ref.shapeId);
+    if (sh && sh.area > 0) ppu = Math.sqrt(sh.area / v);
+  }
+  if (ppu == null) {
+    status('Reference geometry is missing — recalibrate with the Scale tool');
+    updateScalePane();
+    return;
+  }
+
+  recordHistory();
+  ref.value = v;
+  S.scaleUnit = unit;
+  S.scalePPU = ppu;
+  S.overlayDirty = true;
+  updateScaleDisp();
+  updatePanel();
+  scheduleSave();
+  status('Scale updated: ' + v + ' ' + unit + (ref.kind === 'area' ? '²' : ''));
+}
+
+$('#scale-pane-value').on('keydown', function(e) {
+  if (e.key === 'Enter') { applyScalePaneEdit(); this.blur(); }
+  if (e.key === 'Escape') { updateScalePane(); this.blur(); }
+  e.stopPropagation();
+});
+$('#scale-pane-value').on('change', applyScalePaneEdit);
+$('#scale-pane-unit').on('change', applyScalePaneEdit);
+
+$('#scale-ref-row').on('click', function() {
+  const ref = S.scaleRef;
+  if (!ref || !S.img) return;
+  if (ref.kind === 'area') {
+    const sh = findShape(ref.shapeId);
+    if (!sh) return;
+    S.selId = sh.id;
+  }
+  setTool('edit');
+  updatePanelSelection();
+  S.overlayDirty = true;
+  status(ref.kind === 'area'
+    ? 'Reference shape selected — drag its points; the entered area stays fixed'
+    : 'Drag the scale line endpoints — the entered distance stays fixed');
+});
+
+// ---- Scale tool option bar (Distance / Known Area) ----
+
+$('#scale-bar .persp-tab').on('click', function() {
+  const m = $(this).data('scale-mode');
+  if (S.scaleMode === m) return;
+  S.scaleMode = m;
+  setTool('scale');
+});
+
+function applyScaleBarArea() {
+  const id = S.scaleAreaShapeId;
+  const val = parseFloat($('#scale-bar-value').val());
+  if (!id) { status('Click a closed shape first.'); return; }
+  if (!(val > 0)) { status('Enter a valid area > 0'); return; }
+  if (setScaleFromArea(id, val, $('#scale-bar-unit').val())) {
+    setTool('idle');
+  }
+}
+
+$('#scale-bar-apply').on('click', applyScaleBarArea);
+
+$('#scale-bar-value').on('keydown', function(e) {
+  if (e.key === 'Enter') applyScaleBarArea();
+  if (e.key === 'Escape') { setTool('idle'); }
+  e.stopPropagation();
+});
+
 // ---- Perspective Buttons ----
 
 $('#btn-persp').on('click', function() {
   if (!S.img) return;
+  if (S.rotateActive) exitRotate(false);
   if (S.perspActive)          { cancelPerspective(); return; }
   if (S.tool === 'squarecal') { cancelSqCalib();    return; }
   enterPerspective();
@@ -1345,9 +1535,30 @@ $('#persp-apply').on('click', function() { applyPerspective(); });
 $('#persp-cancel').on('click', function() { cancelPerspective(); });
 $('#persp-reset').on('click', function() { resetPerspective(); });
 
+// ---- Perspective rotation control ----
+
+function bumpPerspRotation(delta) {
+  const v = Math.round(((parseFloat($('#persp-rot-input').val()) || 0) + delta) * 10) / 10;
+  $('#persp-rot-input').val(v);
+  setPerspRotation(v);
+}
+
+$('#persp-rot-cw').on('click', function() { bumpPerspRotation(1); });
+$('#persp-rot-ccw').on('click', function() { bumpPerspRotation(-1); });
+
+$('#persp-rot-input').on('input', function() {
+  const v = parseFloat(this.value);
+  if (!isNaN(v)) setPerspRotation(v);
+});
+
+$('#persp-rot-input').on('keydown', function(e) {
+  if (e.key === 'Enter') this.blur();
+  e.stopPropagation();
+});
+
 // ---- Perspective Mode Tabs ----
 
-$('.persp-tab').on('click', function() {
+$('#persp-bar .persp-tab').on('click', function() {
   switchPerspMode($(this).data('persp-mode'));
 });
 
@@ -1651,7 +1862,7 @@ $('#shapes-list').on('dragend', '.shape-item', function() {
 $(window).on('resize', function() {
   resize();
   S.imageDirty = S.overlayDirty = true;
-  if (S.perspActive) emit(EVT.VIEW_CHANGE);
+  if (S.perspActive || S.rotateActive) emit(EVT.VIEW_CHANGE);
 });
 
 // ---- Brightness / Contrast Sliders ----
@@ -1770,6 +1981,45 @@ $(document).on('click', '#doc-list .doc-close', function(e) {
   } else if (idxAttr !== undefined && idxAttr !== '') {
     closeTab(parseInt(idxAttr, 10));
   }
+});
+
+// ---- Documents: drag to reorder ----
+
+let _dragDocIdx = null;
+
+$(document).on('dragstart', '#doc-list .doc-row', function(e) {
+  _dragDocIdx = parseInt($(this).attr('data-idx'), 10);
+  e.originalEvent.dataTransfer.effectAllowed = 'move';
+  e.originalEvent.dataTransfer.setData('text/plain', String(_dragDocIdx));
+});
+
+$(document).on('dragover', '#doc-list .doc-row', function(e) {
+  if (_dragDocIdx == null) return;
+  e.preventDefault();
+  const r = this.getBoundingClientRect();
+  const before = (e.originalEvent.clientY - r.top) < r.height / 2;
+  $(this).toggleClass('drop-before', before).toggleClass('drop-after', !before);
+});
+
+$(document).on('dragleave', '#doc-list .doc-row', function() {
+  $(this).removeClass('drop-before drop-after');
+});
+
+$(document).on('drop', '#doc-list .doc-row', function(e) {
+  e.preventDefault();
+  const before = $(this).hasClass('drop-before');
+  $(this).removeClass('drop-before drop-after');
+  const target = parseInt($(this).attr('data-idx'), 10);
+  if (_dragDocIdx != null && !isNaN(target)) {
+    reorderDocGroup(_dragDocIdx, target, before);
+    scheduleSave();
+  }
+  _dragDocIdx = null;
+});
+
+$(document).on('dragend', '#doc-list .doc-row', function() {
+  _dragDocIdx = null;
+  $('#doc-list .drop-before, #doc-list .drop-after').removeClass('drop-before drop-after');
 });
 
 $(document).on('click', '#btn-new-doc', function() {
@@ -1924,53 +2174,60 @@ $('#btn-export-json').on('click', function() {
 
 // ---- Rotate Buttons ----
 
+function nudgeRotatePreview(delta) {
+  const deg = Math.round((S.rotateAngle + delta) * 10) / 10;
+  setRotatePreview(deg);
+  $('#rotate-angle-input').val(deg);
+}
+
 $('#btn-rotate-ccw').on('click', function() {
   if (!S.img) return;
+  if (S.rotateActive) { nudgeRotatePreview(-90); return; }
   rotateImage(-90);
 });
 
 $('#btn-rotate-cw').on('click', function() {
   if (!S.img) return;
+  if (S.rotateActive) { nudgeRotatePreview(90); return; }
   rotateImage(90);
 });
 
 $('#btn-rotate-custom').on('click', function() {
   if (!S.img) return;
-  $('#rotate-angle-input').val('');
-  $('#rotate-popup').show();
-  $('#rotate-angle-input').focus();
-  status('Enter rotation angle and press Apply');
+  if (S.rotateActive) { exitRotate(false); return; }
+  enterRotate();
 });
 
-function applyCustomRotate() {
+function applyRotate() {
   const val = parseFloat($('#rotate-angle-input').val());
-  if (isNaN(val)) { status('Enter a valid angle'); return; }
-  if (val === 0) { $('#rotate-popup').hide(); return; }
-  $('#rotate-popup').hide();
-  rotateImage(val);
+  if (!isNaN(val)) setRotatePreview(val);
+  exitRotate(true);
 }
 
-$('#rotate-apply').on('click', applyCustomRotate);
+$('#rotate-apply').on('click', applyRotate);
+
+$('#rotate-angle-input').on('input', function() {
+  const val = parseFloat(this.value);
+  setRotatePreview(isNaN(val) ? 0 : val);
+});
 
 $('#rotate-angle-input').on('keydown', function(e) {
-  if (e.key === 'Enter') applyCustomRotate();
-  if (e.key === 'Escape') { $('#rotate-popup').hide(); status('Rotation cancelled'); }
+  if (e.key === 'Enter') applyRotate();
+  if (e.key === 'Escape') exitRotate(false);
+  e.stopPropagation();
 });
 
 $('#rotate-cancel-btn').on('click', function() {
-  $('#rotate-popup').hide();
-  status('Rotation cancelled');
+  exitRotate(false);
 });
 
-// Quick 90° buttons inside the popup
+// Quick 90° buttons inside the popup adjust the pending angle
 $('#rotate-ccw-small').on('click', function() {
-  $('#rotate-popup').hide();
-  rotateImage(-90);
+  nudgeRotatePreview(-90);
 });
 
 $('#rotate-cw-small').on('click', function() {
-  $('#rotate-popup').hide();
-  rotateImage(90);
+  nudgeRotatePreview(90);
 });
 
 // ---- Show All Hidden Shapes ----

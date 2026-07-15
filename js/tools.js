@@ -1,4 +1,4 @@
-import { S, worker, imgWorker } from './state.js';
+import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
 import { parseColor } from './color.js';
 import { encodeCanvas } from './canvasUtil.js';
@@ -8,7 +8,7 @@ import { cancelPerspective } from './perspective.js';
 import { cancelSqCalib } from './squareCalib.js';
 import { cancelTool, setTool, status, enableTools, fitView, updateZoomDisp, updateScaleDisp, updatePanel, updatePanelSelection, updateFilters } from './ui.js';
 import { recordHistory, recordTransformHistory, clearHistory } from './history.js';
-import { EVT, emit } from './events.js';
+import { EVT, emit, on } from './events.js';
 
 // Routes a worker shape result to either the active tab (shown) or a background
 // tab (silent update). `apply(shape, isBg)` performs the actual mutation.
@@ -29,6 +29,13 @@ worker.onmessage = function(e) {
       shape.area = d.area;
       shape.perimeter = d.perimeter;
       if (!isBg) {
+        // The reference shape's pixel area changed (vertex edit, transform):
+        // the entered real area is the constant — re-derive the scale from it.
+        if (S.scaleRef && S.scaleRef.kind === 'area' &&
+            S.scaleRef.shapeId === shape.id && S.scaleRef.value > 0 && shape.area > 0) {
+          S.scalePPU = Math.sqrt(shape.area / S.scaleRef.value);
+          updateScaleDisp();
+        }
         S.overlayDirty = true;
         updatePanel();
       }
@@ -137,6 +144,7 @@ export function loadImg(file, skipConfirm) {
 function _loadIntoCurrentTab(ni, dataUrl, filename) {
   if (S.perspActive) cancelPerspective();
   if (S.tool === 'squarecal') cancelSqCalib();
+  if (S.rotateActive) exitRotate(false);
 
   S.img = ni;
   S.view.iw = ni.naturalWidth;
@@ -189,7 +197,7 @@ export function zoomAt(factor, sx, sy) {
 
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
-  if (S.perspActive) emit(EVT.VIEW_CHANGE);
+  if (S.perspActive || S.rotateActive) emit(EVT.VIEW_CHANGE);
   setInteract();
 }
 
@@ -223,7 +231,9 @@ export function reopenScalePopup() {
   S.scaleP2 = { x: S.scaleLine.p2.x, y: S.scaleLine.p2.y };
   S.scaleState = 2;
   const px = Math.hypot(S.scaleP2.x - S.scaleP1.x, S.scaleP2.y - S.scaleP1.y);
-  const val = S.scalePPU > 0 ? Math.round(px / S.scalePPU * 10000) / 10000 : null;
+  const val = S.scaleRef && S.scaleRef.kind === 'line' && S.scaleRef.value > 0
+    ? S.scaleRef.value
+    : (S.scalePPU > 0 ? Math.round(px / S.scalePPU * 10000) / 10000 : null);
   $('#scale-unit').val(S.scaleUnit);
   showScalePopup(val);
   S.overlayDirty = true;
@@ -256,6 +266,7 @@ export function confirmScale() {
     p1: { x: S.scaleP1.x, y: S.scaleP1.y },
     p2: { x: S.scaleP2.x, y: S.scaleP2.y }
   };
+  S.scaleRef = { kind: 'line', value: val };
 
   cancelTool();
   setTool('idle');
@@ -282,6 +293,7 @@ export function setScaleFromArea(id, realArea, unit) {
   S.scalePPU = Math.sqrt(sh.area / realArea);
   S.scaleUnit = unit;
   S.scaleLine = null; // any previous reference line no longer matches this scale
+  S.scaleRef = { kind: 'area', value: realArea, shapeId: id };
   updateScaleDisp();
   S.overlayDirty = true;
   updatePanel();
@@ -496,6 +508,11 @@ export function delShape(id) {
   recordHistory();
   S.shapes = S.shapes.filter(function(s) { return s.id !== id; });
   if (S.selId === id) S.selId = null;
+  // The scale itself survives deleting its reference — only the link is lost
+  if (S.scaleRef && S.scaleRef.kind === 'area' && S.scaleRef.shapeId === id) {
+    S.scaleRef = null;
+    updateScaleDisp();
+  }
 
   S.overlayDirty = true;
   updatePanel();
@@ -677,6 +694,59 @@ export function reorderShape(id, targetId, before) {
   S.overlayDirty = true;
   updatePanel();
   scheduleSave();
+}
+
+// ---- Interactive Rotate Mode ----
+//
+// A CSS-rotate preview around the image centre; nothing is resampled until
+// Apply, which commits through rotateImage. The overlay is dimmed because
+// shapes cannot follow the preview transform.
+
+on(EVT.VIEW_CHANGE, updateRotatePreview);
+on(EVT.TAB_SWITCH, function() { if (S.rotateActive) exitRotate(false); });
+
+export function enterRotate() {
+  if (!S.img || S.perspActive || S.tool === 'squarecal' || S.rotateActive) return;
+  setTool('idle');
+  S.rotateActive = true;
+  S.rotateAngle = 0;
+  S.rotateDrag = null;
+  oCvs.style.opacity = '0.25';
+  $('#rotate-popup').show();
+  $('#rotate-angle-input').val('');
+  $('#btn-rotate-custom').addClass('active');
+  status('Drag on the image to rotate it, or type an angle. Apply to commit.');
+}
+
+export function setRotatePreview(angleDeg) {
+  if (!S.rotateActive) return;
+  S.rotateAngle = angleDeg || 0;
+  updateRotatePreview();
+}
+
+export function updateRotatePreview() {
+  if (!S.rotateActive) return;
+  const c = i2s(S.view.iw / 2, S.view.ih / 2);
+  iCvs.style.transformOrigin = c.x + 'px ' + c.y + 'px';
+  iCvs.style.transform = S.rotateAngle ? 'rotate(' + S.rotateAngle + 'deg)' : '';
+}
+
+export function exitRotate(apply) {
+  if (!S.rotateActive) return;
+  const ang = S.rotateAngle;
+  S.rotateActive = false;
+  S.rotateAngle = 0;
+  S.rotateDrag = null;
+  iCvs.style.transform = '';
+  iCvs.style.transformOrigin = '';
+  oCvs.style.opacity = '';
+  $('#rotate-popup').hide();
+  $('#btn-rotate-custom').removeClass('active');
+  if (apply && ang) {
+    rotateImage(ang);
+  } else {
+    status(apply ? 'No rotation applied' : 'Rotation cancelled');
+  }
 }
 
 // ---- Image Rotation ----

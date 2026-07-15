@@ -29,6 +29,16 @@ export const S = {
   scaleP1: null,
   scaleP2: null,
 
+  // Scale reference: what the user actually entered. The value is a constant
+  // — editing the reference geometry re-derives scalePPU from it, never the
+  // other way around.
+  // null | { kind: 'line', value } | { kind: 'area', value, shapeId }
+  scaleRef: null,
+
+  // Scale tool mode ('distance' | 'area') + pending shape for area mode
+  scaleMode: 'distance',
+  scaleAreaShapeId: null,
+
   // Current tool
   tool: 'idle',
 
@@ -78,6 +88,11 @@ export const S = {
   // Image adjustments
   brightness: 0,
   contrast: 0,
+
+  // Interactive rotate (preview mode; committed via rotateImage on Apply)
+  rotateActive: false,
+  rotateAngle: 0,
+  rotateDrag: null,
 
   // Perspective correction (manual)
   perspActive: false,

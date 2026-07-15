@@ -49,6 +49,23 @@ export function fitScale(w, h, maxPixels, maxSide) {
   return Math.min(1, k);
 }
 
+// Bilinear interpolation inside a quad. corners = [TL, TR, BR, BL];
+// u runs left→right, v runs top→bottom, both in [0,1].
+export function bilinearPoint(corners, u, v) {
+  const w0 = (1 - u) * (1 - v), w1 = u * (1 - v), w2 = u * v, w3 = (1 - u) * v;
+  return {
+    x: corners[0].x * w0 + corners[1].x * w1 + corners[2].x * w2 + corners[3].x * w3,
+    y: corners[0].y * w0 + corners[1].y * w1 + corners[2].y * w2 + corners[3].y * w3
+  };
+}
+
+// Rotate point p around centre (cx, cy) by rad (positive = CW in screen coords)
+export function rotateAround(p, cx, cy, rad) {
+  const c = Math.cos(rad), s = Math.sin(rad);
+  const dx = p.x - cx, dy = p.y - cy;
+  return { x: cx + dx * c - dy * s, y: cy + dx * s + dy * c };
+}
+
 // Nearest hit-testable point across a set of shapes. Returns { shape, idx, dist }
 // or null if none within `thr`. A shape is hit-testable if it is closed or a
 // segment; hidden shapes are skipped.

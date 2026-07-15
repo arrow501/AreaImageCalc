@@ -499,7 +499,8 @@
     .cursor-move #overlay-canvas { cursor: move; }
 
     /* ========== PERSPECTIVE MODE ========== */
-    #persp-bar {
+    #persp-bar,
+    #scale-bar {
       display: none;
       position: absolute;
       top: 8px;
@@ -517,8 +518,13 @@
       flex-direction: column;
       min-width: 260px;
     }
-    #persp-bar.visible { display: flex; }
-    #persp-bar button {
+    #persp-bar.visible, #scale-bar.visible { display: flex; }
+    #scale-bar { min-width: 240px; }
+    #scale-bar-apply { background: #FF6B35; color: #fff; }
+    #scale-bar-apply:hover { background: #e55a20; }
+    #scale-bar-apply.disabled { opacity: 0.35; pointer-events: none; }
+    #persp-bar button,
+    #scale-bar button {
       border: none;
       padding: 4px 14px;
       border-radius: 3px;
@@ -605,6 +611,9 @@
       line-height: 1.4;
     }
     #sq-calib-apply.disabled { opacity: 0.35; pointer-events: none; }
+    #persp-rot-ccw, #persp-rot-cw { background: #333; color: #ddd; padding: 4px 10px; }
+    #persp-rot-ccw:hover, #persp-rot-cw:hover { background: #444; color: #fff; }
+    #persp-rot-input { text-align: center; }
 
     /* ========== SIDEBAR (paned) ========== */
     #sidebar {
@@ -629,6 +638,50 @@
       flex-direction: column;
       min-height: 0;
     }
+    #pane-scale { flex: 0 0 auto; }
+    #scale-pane-content {
+      padding: 6px 8px 8px;
+      min-width: 229px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #scale-ref-row {
+      background: none;
+      border: none;
+      text-align: left;
+      color: #4A9EFF;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #scale-ref-row:hover { color: #7ab8ff; text-decoration: underline; }
+    #scale-ref-row.noref { color: #8f8f8f; cursor: default; text-decoration: none; }
+    .scale-input-row { display: flex; gap: 4px; align-items: center; }
+    .scale-input-row input {
+      width: 80px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .scale-input-row input:focus { outline: none; border-color: #FF6B35; }
+    .scale-input-row select {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 3px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+    #scale-pane-sq { color: #8f8f8f; font-size: 11px; }
     #pane-docs { flex: 0 1 auto; max-height: 45%; }
     #pane-shapes { flex: 1 1 auto; }
     #pane-splitter {
@@ -677,6 +730,18 @@
       border-radius: 3px;
     }
     #btn-new-doc:hover { color: #ccc; background: #333; }
+    #btn-clear {
+      background: none;
+      border: none;
+      color: #8f8f8f;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 400;
+      padding: 1px 8px;
+      line-height: 1.4;
+      border-radius: 3px;
+    }
+    #btn-clear:hover { color: #ff8888; background: #333; }
     #doc-list { padding: 4px; min-width: 229px; }
     .doc-item { border-radius: 3px; margin-bottom: 1px; }
     .doc-row {
@@ -739,6 +804,8 @@
       user-select: none;
     }
     .doc-page:hover { background: #2a2a2a; color: #ccc; }
+    .doc-row.drop-before { box-shadow: 0 -2px 0 #FF6B35; }
+    .doc-row.drop-after { box-shadow: 0 2px 0 #FF6B35; }
     .doc-page.active { background: #333; color: #e8e8e8; box-shadow: inset 2px 0 0 #FF6B35; }
 
     /* ========== PAGE NAV (status bar) ========== */
@@ -1102,10 +1169,10 @@
     <button class="tb-btn disabled" id="btn-label" data-tool="label" title="Rename shape — click a shape to rename it [L]" aria-label="Label tool (shortcut L) — click a shape to rename it"><span class="lbl-full">Label</span><span class="lbl-short">Lbl</span></button>
     <button class="tb-btn disabled" id="btn-note" data-tool="note" title="Pin a text note [N]" aria-label="Note tool (shortcut N) — click to pin a text note"><span class="lbl-full">Note</span><span class="lbl-short">Nt</span></button>
     <button class="tb-btn disabled" id="btn-delete" title="Delete selected shape [Del]" aria-label="Delete selected shape (Delete key)"><span class="lbl-full">Delete</span><span class="lbl-short">Del</span></button>
-    <button class="tb-btn disabled" id="btn-clear" title="Remove all shapes" aria-label="Remove all shapes"><span class="lbl-full">Clear</span><span class="lbl-short">Clr</span></button>
+    <button class="tb-btn disabled" id="btn-undo" title="Undo [Ctrl+Z]" aria-label="Undo last change (Ctrl+Z)"><span class="lbl-full">Undo</span><span class="lbl-short">Un</span></button>
     <div class="tb-sep"></div>
     <button class="tb-btn disabled" id="btn-fit" title="Fit image to view [Ctrl+0]" aria-label="Fit image to view (Ctrl+0)">Fit</button>
-    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate by custom angle" aria-label="Rotate by custom angle"><span class="lbl-full">Rotate&hellip;</span><span class="lbl-short">Rot&hellip;</span></button>
+    <button class="tb-btn disabled" id="btn-rotate-custom" title="Rotate interactively or by custom angle" aria-label="Rotate interactively or by custom angle"><span class="lbl-full">Rotate&hellip;</span><span class="lbl-short">Rot&hellip;</span></button>
     <button class="tb-btn tb-icon disabled" id="btn-rotate-cw" title="Rotate 90° clockwise" aria-label="Rotate 90 degrees clockwise">&#8635;</button>
     <button class="tb-btn tb-icon disabled" id="btn-rotate-ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">&#8634;</button>
     <button class="tb-btn disabled" id="btn-persp" title="Perspective correction [W]" aria-label="Perspective correction (shortcut W)"><span class="lbl-full">Perspective</span><span class="lbl-short">Persp</span></button>
@@ -1145,6 +1212,28 @@
   <div id="main">
     <!-- ========== SIDEBAR (documents + shapes + future panes) ========== -->
     <div id="sidebar">
+      <div class="pane" id="pane-scale">
+        <div class="pane-header" data-pane="scale" tabindex="0" role="button" aria-expanded="true">
+          <span class="pane-caret" aria-hidden="true">&#9662;</span>
+          <span class="pane-title">Scale</span>
+        </div>
+        <div class="pane-body">
+          <div id="scale-pane-content">
+            <button id="scale-ref-row" class="noref" title="Select the scale reference for editing">No scale set</button>
+            <div class="scale-input-row" id="scale-input-row" style="display:none">
+              <input type="number" id="scale-pane-value" min="0.000001" step="any" aria-label="Reference value">
+              <select id="scale-pane-unit" aria-label="Scale unit">
+                <option value="mm">mm</option>
+                <option value="cm">cm</option>
+                <option value="m">m</option>
+                <option value="in">in</option>
+                <option value="ft">ft</option>
+                <option value="yd">yd</option>
+              </select><span id="scale-pane-sq" aria-hidden="true">&sup2;</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="pane" id="pane-docs">
         <div class="pane-header" data-pane="docs" tabindex="0" role="button" aria-expanded="true">
           <span class="pane-caret" aria-hidden="true">&#9662;</span>
@@ -1160,6 +1249,7 @@
         <div class="pane-header" data-pane="shapes" tabindex="0" role="button" aria-expanded="true">
           <span class="pane-caret" aria-hidden="true">&#9662;</span>
           <span class="pane-title">Shapes</span>
+          <button id="btn-clear" title="Remove all shapes" aria-label="Remove all shapes">clear</button>
         </div>
         <div id="hidden-notice">
           <span id="hidden-count-label"></span>
@@ -1181,7 +1271,7 @@
           <h1 class="sr-only">AreaImageCalc — measure area and distance on images, floor plans, maps and PDFs</h1>
           <div class="big">Drop image, PDF, or project here</div>
           <div class="sub">or click <b>Open</b> &middot; <kbd>Ctrl+V</kbd> to paste</div>
-          <p class="tagline">Free, open-source area and distance measurement with real-world scale calibration. Everything runs in your browser &mdash; nothing is uploaded.</p>
+          <p class="tagline">Free, open-source area and distance measurement with real-world scale calibration.</p>
         </div>
       </div>
 
@@ -1200,7 +1290,7 @@
       </div>
 
       <div id="rotate-popup">
-        <label>Rotation angle (degrees, + = CW):</label>
+        <label>Drag the image to rotate, or type an angle (degrees, + = CW):</label>
         <div class="rotate-row">
           <button id="rotate-ccw-small" title="90° counter-clockwise">&#8634; 90°</button>
           <input type="number" id="rotate-angle-input" step="any" placeholder="45">
@@ -1216,12 +1306,41 @@
         <button id="label-confirm">Set</button>
       </div>
 
+      <div id="scale-bar">
+        <div class="persp-tabs">
+          <button class="persp-tab active" data-scale-mode="distance">Distance</button>
+          <button class="persp-tab" data-scale-mode="area">Known Area</button>
+        </div>
+        <div class="persp-content hidden" id="scale-area-content">
+          <div class="ap-hint" id="scale-area-hint">Click a closed shape whose real area you know.</div>
+          <div class="sq-side-row">
+            <label>Area:</label>
+            <input type="number" id="scale-bar-value" min="0.000001" step="any" placeholder="0.00">
+            <select id="scale-bar-unit" aria-label="Area unit">
+              <option value="mm">mm&sup2;</option>
+              <option value="cm" selected>cm&sup2;</option>
+              <option value="m">m&sup2;</option>
+              <option value="in">in&sup2;</option>
+              <option value="ft">ft&sup2;</option>
+              <option value="yd">yd&sup2;</option>
+            </select>
+            <button id="scale-bar-apply" class="disabled">Set Scale</button>
+          </div>
+        </div>
+      </div>
+
       <div id="persp-bar">
         <div class="persp-tabs">
           <button class="persp-tab active" data-persp-mode="manual">Manual</button>
           <button class="persp-tab" data-persp-mode="auto">Square Cal</button>
         </div>
         <div class="persp-content" id="persp-manual-content">
+          <div class="sq-side-row">
+            <label>Rotate&deg;:</label>
+            <button id="persp-rot-ccw" title="Rotate 1&deg; counter-clockwise" aria-label="Rotate 1 degree counter-clockwise">&#8634;</button>
+            <input type="number" id="persp-rot-input" step="0.1" value="0" aria-label="Rotation in degrees">
+            <button id="persp-rot-cw" title="Rotate 1&deg; clockwise" aria-label="Rotate 1 degree clockwise">&#8635;</button>
+          </div>
           <div class="persp-actions">
             <button id="persp-reset">Reset</button>
             <button id="persp-cancel">Cancel</button>

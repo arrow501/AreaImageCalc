@@ -28,6 +28,7 @@ function snapshot() {
     scalePPU: S.scalePPU,
     scaleUnit: S.scaleUnit,
     scaleLine: S.scaleLine,
+    scaleRef: S.scaleRef,
     colorIdx: S.colorIdx,
     shapeN: S.shapeN
   }));
@@ -39,6 +40,7 @@ function apply(snap) {
   S.scalePPU = snap.scalePPU;
   S.scaleUnit = snap.scaleUnit;
   S.scaleLine = snap.scaleLine;
+  S.scaleRef = snap.scaleRef || null;
   S.colorIdx = snap.colorIdx;
   S.shapeN = snap.shapeN;
   if (tab) {
@@ -46,6 +48,7 @@ function apply(snap) {
     tab.scalePPU = S.scalePPU;
     tab.scaleUnit = S.scaleUnit;
     tab.scaleLine = S.scaleLine;
+    tab.scaleRef = S.scaleRef;
     tab.colorIdx = S.colorIdx;
     tab.shapeN = S.shapeN;
   }
@@ -138,6 +141,7 @@ function undoTransform(tab) {
       scalePPU: slot.scalePPU,
       scaleUnit: slot.scaleUnit,
       scaleLine: slot.scaleLine,
+      scaleRef: slot.scaleRef,
       colorIdx: slot.colorIdx,
       shapeN: slot.shapeN
     });

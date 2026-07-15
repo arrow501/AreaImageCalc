@@ -2,7 +2,7 @@
 // Imports only state.js and geometry.js — no feature modules, no cycles.
 
 import { S, iCvs, oCvs } from './state.js';
-import { fmtArea, fmtPerim, fmtLen } from './geometry.js';
+import { fmtArea, fmtPerim, fmtLen, findShape } from './geometry.js';
 import { EVT, emit } from './events.js';
 
 // ---- Tool State ----
@@ -24,6 +24,7 @@ export function cancelTool() {
   S.touchIsPan = false;
   S.labelShapeId = null;
   S.pendingNotePt = null;
+  S.scaleAreaShapeId = null;
   oCvs.style.cursor = '';
   $('#scale-popup').hide();
   $('#label-popup').hide();
@@ -58,12 +59,17 @@ export function setTool(t) {
     $('body').addClass('cursor-move');
   }
 
+  $('#scale-bar').toggleClass('visible', t === 'scale');
+  if (t === 'scale') syncScaleBar();
+
   switch (t) {
     case 'idle':
       status(S.img ? 'Select a tool or click a shape' : 'Drop an image or click Open');
       break;
     case 'scale':
-      status('Click first point of known distance');
+      status(S.scaleMode === 'area'
+        ? 'Click a closed shape whose real area you know.'
+        : 'Click first point of known distance');
       break;
     case 'polygon':
       status('Click to place vertices. Click the first point or double-click to close. Backspace removes the last point.');
@@ -94,6 +100,31 @@ export function setTool(t) {
   S.overlayDirty = true;
 }
 
+// ---- Scale tool option bar (Distance / Known Area) ----
+
+export function syncScaleBar() {
+  const area = S.scaleMode === 'area';
+  $('#scale-bar .persp-tab').removeClass('active');
+  $('#scale-bar .persp-tab[data-scale-mode="' + (area ? 'area' : 'distance') + '"]').addClass('active');
+  $('#scale-area-content').toggleClass('hidden', !area);
+  if (area) {
+    $('#scale-bar-unit').val(S.scaleUnit || 'cm');
+    $('#scale-bar-value').val('');
+    updateScaleAreaHint();
+  }
+}
+
+export function updateScaleAreaHint() {
+  const sh = findShape(S.scaleAreaShapeId);
+  const anyClosed = S.shapes.some(function(s) { return s.closed && s.area != null; });
+  $('#scale-area-hint').text(sh
+    ? '"' + (sh.name || 'Shape') + '" selected — enter its real area.'
+    : anyClosed
+      ? 'Click a closed shape whose real area you know.'
+      : 'No closed shapes yet — draw a Polygon or Freehand region first.');
+  $('#scale-bar-apply').toggleClass('disabled', !sh);
+}
+
 // ---- Status Bar ----
 
 export function status(t) {
@@ -103,7 +134,7 @@ export function status(t) {
 // ---- Toolbar State ----
 
 export function enableTools(on) {
-  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-move, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-clear, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
+  const btns = $('#btn-scale, #btn-polygon, #btn-freehand, #btn-move, #btn-edit, #btn-segment, #btn-label, #btn-note, #btn-delete, #btn-undo, #btn-fit, #btn-persp, #btn-rotate-ccw, #btn-rotate-cw, #btn-rotate-custom');
   on ? btns.removeClass('disabled') : btns.addClass('disabled');
 }
 
@@ -122,7 +153,7 @@ export function fitView() {
 
   S.imageDirty = S.overlayDirty = true;
   updateZoomDisp();
-  if (S.perspActive) emit(EVT.VIEW_CHANGE);
+  if (S.perspActive || S.rotateActive) emit(EVT.VIEW_CHANGE);
 }
 
 export function updateZoomDisp() {
@@ -137,6 +168,39 @@ export function updateScaleDisp() {
   } else {
     $('#scale-display').text('No scale');
   }
+  updateScalePane();
+}
+
+// ---- Scale pane (sidebar) ----
+
+export function updateScalePane() {
+  const $row = $('#scale-ref-row');
+  const $inp = $('#scale-pane-value');
+  const ref = S.scaleRef;
+
+  if (!ref || !(ref.value > 0)) {
+    $row.addClass('noref').text(S.scalePPU > 0
+      ? 'No reference — 1px = ' + (1 / S.scalePPU).toFixed(3) + S.scaleUnit
+      : 'No scale — use the Scale tool');
+    $('#scale-input-row').hide();
+    return;
+  }
+
+  $row.removeClass('noref');
+  if (ref.kind === 'area') {
+    const sh = findShape(ref.shapeId);
+    $row.text('Reference area: ' + ((sh && sh.name) || 'missing shape'))
+      .attr('title', 'Select the reference shape — drag its points, the entered area stays fixed');
+  } else {
+    $row.text('Reference distance')
+      .attr('title', 'Select the scale line — drag its endpoints, the entered distance stays fixed');
+  }
+
+  $('#scale-input-row').css('display', 'flex');
+  // Never clobber the field mid-edit — that is exactly how entered values get lost
+  if (document.activeElement !== $inp[0]) $inp.val(ref.value);
+  $('#scale-pane-unit').val(S.scaleUnit);
+  $('#scale-pane-sq').toggle(ref.kind === 'area');
 }
 
 // Selection-only refresh: toggles classes in place instead of rebuilding
@@ -267,6 +331,8 @@ export function updatePanel() {
   } else {
     $('#hidden-notice').css('display', 'none');
   }
+
+  updateScalePane();
 }
 
 // ---- Image Adjustments ----

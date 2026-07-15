@@ -46,6 +46,7 @@ export function makeTabData() {
     scalePPU: 0,
     scaleUnit: 'cm',
     scaleLine: null,
+    scaleRef: null,
     brightness: 0,
     contrast: 0,
     pdfSource: null,
@@ -66,6 +67,7 @@ export function snapshotCurrentTab() {
   tab.scalePPU = S.scalePPU;
   tab.scaleUnit = S.scaleUnit;
   tab.scaleLine = S.scaleLine;
+  tab.scaleRef = S.scaleRef;
   tab.brightness = S.brightness;
   tab.contrast = S.contrast;
 }
@@ -91,6 +93,9 @@ export function applyTabToState(idx) {
   S.scalePPU = tab.scalePPU;
   S.scaleUnit = tab.scaleUnit;
   S.scaleLine = tab.scaleLine;
+  S.scaleRef = tab.scaleRef;
+  S.scaleMode = 'distance';
+  S.scaleAreaShapeId = null;
   S.brightness = tab.brightness;
   S.contrast = tab.contrast;
 
@@ -329,6 +334,7 @@ export function renderSidebar() {
       .attr('role', 'listitem');
     const $row = $('<div class="doc-row">')
       .attr('tabindex', '0')
+      .attr('draggable', 'true')
       .attr('role', 'button')
       .attr('aria-label', grp.label + (multi ? ', ' + grp.pages.length + ' pages' : ''))
       .attr('aria-current', isDocActive ? 'true' : 'false');
@@ -381,6 +387,37 @@ export function renderSidebar() {
   updatePageNav();
 }
 
+// Move the whole document group containing srcTabIdx before/after the group
+// containing dstTabIdx. Pages of a document always travel together.
+export function reorderDocGroup(srcTabIdx, dstTabIdx, before) {
+  if (srcTabIdx === dstTabIdx) return;
+  const groups = buildDocGroups();
+  function groupOf(idx) {
+    for (let g = 0; g < groups.length; g++) {
+      if (groups[g].pages.some(function(p) { return p.idx === idx; })) return g;
+    }
+    return -1;
+  }
+  const si = groupOf(srcTabIdx);
+  let di = groupOf(dstTabIdx);
+  if (si < 0 || di < 0 || si === di) return;
+
+  const cur = getActiveTab();
+  const moved = groups.splice(si, 1)[0];
+  if (si < di) di--;
+  if (!before) di++;
+  groups.splice(di, 0, moved);
+
+  const flat = [];
+  for (let g = 0; g < groups.length; g++) {
+    for (let p = 0; p < groups[g].pages.length; p++) flat.push(groups[g].pages[p].tab);
+  }
+  S.tabs.length = 0;
+  Array.prototype.push.apply(S.tabs, flat);
+  if (cur) S.currentTabIdx = S.tabs.indexOf(cur);
+  renderSidebar();
+}
+
 export function toggleDocCollapsed(docId) {
   _collapsedDocs[docId] = !_collapsedDocs[docId];
   renderSidebar();
@@ -425,6 +462,7 @@ export function serializeTab(tab) {
     scalePPU: tab.scalePPU,
     scaleUnit: tab.scaleUnit,
     scaleLine: tab.scaleLine,
+    scaleRef: tab.scaleRef,
     brightness: tab.brightness || 0,
     contrast: tab.contrast || 0
   };
@@ -442,6 +480,11 @@ export function hydrateTabFields(tab, td) {
   tab.scalePPU = td.scalePPU || 0;
   tab.scaleUnit = td.scaleUnit || 'cm';
   tab.scaleLine = td.scaleLine || null;
+  // Older saves have no scaleRef — reconstruct the entered distance from the line
+  tab.scaleRef = td.scaleRef ||
+    (tab.scaleLine && tab.scalePPU > 0
+      ? { kind: 'line', value: Math.hypot(tab.scaleLine.p2.x - tab.scaleLine.p1.x, tab.scaleLine.p2.y - tab.scaleLine.p1.y) / tab.scalePPU }
+      : null);
   tab.brightness = td.brightness || 0;
   tab.contrast = td.contrast || 0;
 }
