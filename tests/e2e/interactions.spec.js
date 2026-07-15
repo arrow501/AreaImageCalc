@@ -83,14 +83,20 @@ test('undo restores a deleted shape', async ({ page }) => {
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(1);
 });
 
-test('Clear is undoable without a confirm dialog', async ({ page }) => {
+test('Clear asks for confirmation and is undoable', async ({ page }) => {
   await page.locator('#btn-polygon').click();
   const { cx, cy } = await canvasCenter(page);
   await drawTriangle(page, cx, cy);
   await drawTriangle(page, cx, cy, 120);
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(2);
 
+  // Cancelling the confirm leaves everything untouched
   await page.locator('#btn-clear').click();
+  await page.locator('.storage-modal button', { hasText: 'Cancel' }).click();
+  await expect(page.locator('#shapes-list .shape-item')).toHaveCount(2);
+
+  await page.locator('#btn-clear').click();
+  await page.locator('.storage-modal .btn-primary').click();
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(0);
 
   await page.keyboard.press('Control+z');

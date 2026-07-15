@@ -48,6 +48,7 @@ test('Clear lives in the Shapes pane header and does not collapse the pane', asy
 
   await expect(page.locator('#pane-shapes #btn-clear')).toBeVisible();
   await page.locator('#btn-clear').click();
+  await page.locator('.storage-modal .btn-primary').click();
   await expect(page.locator('#shapes-list .shape-item')).toHaveCount(0);
   await expect(page.locator('#pane-shapes')).not.toHaveClass(/collapsed/);
 });

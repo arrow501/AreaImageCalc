@@ -1305,9 +1305,7 @@ $('#btn-undo').on('click', function() {
   undo();
 });
 
-$('#btn-clear').on('click', function(e) {
-  e.stopPropagation();
-  if (!S.shapes.length) return;
+function doClearShapes() {
   recordHistory();
   const n = S.shapes.length;
   S.shapes = [];
@@ -1322,6 +1320,17 @@ $('#btn-clear').on('click', function(e) {
   updatePanel();
   status('Cleared ' + n + ' shape' + (n !== 1 ? 's' : '') + ' — Ctrl+Z to undo');
   scheduleSave();
+}
+
+$('#btn-clear').on('click', function(e) {
+  e.stopPropagation();
+  if (!S.shapes.length) return;
+  const n = S.shapes.length;
+  showConfirmModal(
+    'Remove all ' + n + ' shape' + (n !== 1 ? 's' : '') + ' from this document?',
+    'Clear Shapes',
+    doClearShapes
+  );
 });
 
 $('#btn-fit').on('click', function() {
