@@ -162,17 +162,61 @@ export function innerPerspPoint(i) {
   return bilinearPoint(S.perspCorners, INNER_UV[i][0], INNER_UV[i][1]);
 }
 
-// Grab a handle (0-3 outer corner, 4-7 inner point): records the pointer
-// offset so the handle doesn't jump on the first move.
+function perspCentroid() {
+  let cx = 0, cy = 0;
+  for (let i = 0; i < 4; i++) { cx += S.perspCorners[i].x; cy += S.perspCorners[i].y; }
+  return { x: cx / 4, y: cy / 4 };
+}
+
+// Rotation grab handles: pushed outward from the top/bottom edge midpoints,
+// a fixed screen distance past the quad. Returns screen coords plus the
+// stem anchor on the edge.
+const ROT_HANDLE_OFF = 26;
+
+export function rotHandleScreenPos(i) {
+  const mid = bilinearPoint(S.perspCorners, 0.5, i === 0 ? 0 : 1);
+  const cen = perspCentroid();
+  const ms = i2s(mid.x, mid.y);
+  const cs = i2s(cen.x, cen.y);
+  let dx = ms.x - cs.x, dy = ms.y - cs.y;
+  const d = Math.hypot(dx, dy) || 1;
+  dx /= d; dy /= d;
+  return { x: ms.x + dx * ROT_HANDLE_OFF, y: ms.y + dy * ROT_HANDLE_OFF, ax: ms.x, ay: ms.y };
+}
+
+// Grab a handle (0-3 outer corner, 4-7 inner point, 8-9 rotation): records
+// the pointer offset so the handle doesn't jump on the first move.
+let _rotDragLast = 0;
+
 export function grabPerspHandle(idx, mix, miy) {
-  const p = idx < 4 ? S.perspCorners[idx] : innerPerspPoint(idx - 4);
   S.perspDragIdx = idx;
+  if (idx >= 8) {
+    const cen = perspCentroid();
+    _rotDragLast = Math.atan2(miy - cen.y, mix - cen.x);
+    S.perspDragOffset = { x: 0, y: 0 };
+    return;
+  }
+  const p = idx < 4 ? S.perspCorners[idx] : innerPerspPoint(idx - 4);
   S.perspDragOffset = { x: p.x - mix, y: p.y - miy };
 }
 
 export function dragPerspHandle(mix, miy) {
   const idx = S.perspDragIdx;
   if (idx < 0) return;
+
+  if (idx >= 8) {
+    const cen = perspCentroid();
+    const a = Math.atan2(miy - cen.y, mix - cen.x);
+    let d = a - _rotDragLast;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    _rotDragLast = a;
+    const deg = Math.round((_perspRotDeg + d * 180 / Math.PI) * 10) / 10;
+    setPerspRotation(deg);
+    $('#persp-rot-input').val(deg);
+    return;
+  }
+
   const tx = mix + S.perspDragOffset.x;
   const ty = miy + S.perspDragOffset.y;
   if (idx < 4) {
@@ -338,10 +382,48 @@ export function drawPerspOverlay(ctx) {
       drawGrabRing(ctx, { x: cp.x, y: cp.y, rx: cp.x, ry: cp.y }, active, HANDLE_RING_R);
     }
   }
+
+  // Rotation handles: stem + circle with an arc-arrow icon
+  for (let i = 0; i < 2; i++) {
+    const h = rotHandleScreenPos(i);
+    const active = (i + 8 === S.perspDragIdx);
+
+    ctx.strokeStyle = active ? '#FF6B35' : 'rgba(255,107,53,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(h.ax, h.ay); ctx.lineTo(h.x, h.y); ctx.stroke();
+
+    ctx.beginPath(); ctx.arc(h.x, h.y, HR, 0, Math.PI * 2);
+    ctx.fillStyle = active ? '#FF6B35' : 'rgba(37,37,37,0.9)';
+    ctx.fill();
+    ctx.strokeStyle = active ? '#fff' : 'rgba(255,107,53,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // arc arrow icon (font-independent)
+    const ir = 4;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, ir, -Math.PI * 0.25, Math.PI, false);
+    ctx.stroke();
+    const tipA = -Math.PI * 0.25;
+    const tx = h.x + ir * Math.cos(tipA), ty = h.y + ir * Math.sin(tipA);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(tx + 2.5, ty - 2.5);
+    ctx.lineTo(tx + 2.5, ty + 2);
+    ctx.lineTo(tx - 2, ty - 2);
+    ctx.closePath();
+    ctx.fill();
+
+    if (i + 8 === hov) {
+      drawGrabRing(ctx, { x: h.x, y: h.y, rx: h.x, ry: h.y }, active, HANDLE_RING_R);
+    }
+  }
   ctx.restore();
 }
 
-// 0-3: outer corners, 4-7: inner thirds handles, -1: none
+// 0-3: outer corners, 4-7: inner thirds handles, 8-9: rotation, -1: none
 export function findPerspHandle(sx, sy) {
   for (let i = 0; i < 4; i++) {
     const sp = i2s(S.perspCorners[i].x, S.perspCorners[i].y);
@@ -351,6 +433,10 @@ export function findPerspHandle(sx, sy) {
     const p = innerPerspPoint(i);
     const sp = i2s(p.x, p.y);
     if (Math.hypot(sx - sp.x, sy - sp.y) <= HANDLE_RING_R) return i + 4;
+  }
+  for (let i = 0; i < 2; i++) {
+    const h = rotHandleScreenPos(i);
+    if (Math.hypot(sx - h.x, sy - h.y) <= HANDLE_RING_R) return i + 8;
   }
   return -1;
 }

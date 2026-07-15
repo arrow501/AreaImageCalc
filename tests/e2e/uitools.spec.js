@@ -181,6 +181,28 @@ test('perspective rotation control rotates corners and applies', async ({ page }
   await expect(page.locator('#status-text')).toContainText('Perspective correction applied', { timeout: 20000 });
 });
 
+test('perspective rotation handle drags the quad rotation', async ({ page }) => {
+  await page.locator('#btn-persp').click();
+  await expect(page.locator('#persp-bar')).toBeVisible();
+
+  // The test image is 800x600; compute the top rotation handle position:
+  // top edge midpoint of the fitted image, pushed 26px further from centre.
+  const box = await page.locator('#overlay-canvas').boundingBox();
+  const fit = Math.min(box.width / 800, box.height / 600, 1);
+  const ox = box.x + (box.width - 800 * fit) / 2;
+  const oy = box.y + (box.height - 600 * fit) / 2;
+  const hx = ox + 400 * fit;
+  const hy = oy - 26;
+
+  await page.mouse.move(hx, hy);
+  await page.mouse.down();
+  await page.mouse.move(hx + 80, hy + 20, { steps: 8 });
+  await page.mouse.up();
+
+  const val = parseFloat(await page.locator('#persp-rot-input').inputValue());
+  expect(Math.abs(val)).toBeGreaterThan(0.5);
+});
+
 test('documents can be reordered by drag and drop', async ({ page }) => {
   // Load a second, differently named image into a new tab
   const pngBytes = await page.evaluate(() =>

@@ -1,4 +1,4 @@
-import { S, worker, imgWorker, iCvs, oCvs } from './state.js';
+import { S, worker, imgWorker, iCvs } from './state.js';
 import { findShape, nextColor, s2i, i2s, fmtArea, fmtPerim, fmtLen, distSeg, pip, segmentLength } from './geometry.js';
 import { parseColor } from './color.js';
 import { encodeCanvas } from './canvasUtil.js';
@@ -711,7 +711,7 @@ export function enterRotate() {
   S.rotateActive = true;
   S.rotateAngle = 0;
   S.rotateDrag = null;
-  oCvs.style.opacity = '0.25';
+  S.overlayDirty = true;
   $('#rotate-popup').show();
   $('#rotate-angle-input').val('');
   $('#btn-rotate-custom').addClass('active');
@@ -722,6 +722,7 @@ export function setRotatePreview(angleDeg) {
   if (!S.rotateActive) return;
   S.rotateAngle = angleDeg || 0;
   updateRotatePreview();
+  S.overlayDirty = true;
 }
 
 export function updateRotatePreview() {
@@ -739,7 +740,7 @@ export function exitRotate(apply) {
   S.rotateDrag = null;
   iCvs.style.transform = '';
   iCvs.style.transformOrigin = '';
-  oCvs.style.opacity = '';
+  S.overlayDirty = true;
   $('#rotate-popup').hide();
   $('#btn-rotate-custom').removeClass('active');
   if (apply && ang) {

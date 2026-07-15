@@ -1,7 +1,8 @@
 import { S, COLORS, $wrap, iCvs, oCvs, iCtx, oCtx } from './state.js';
 import { s2i, i2s, centroid, fmtArea, fmtLen, segmentLength, dot, roundRect, handlesNear, drawGrabRing } from './geometry.js';
 import { hitTestHandles, HANDLE_RING_R, placeLabel } from './handles.js';
-import { drawPerspOverlay } from './perspective.js';
+import { drawPerspOverlay, computeHomography, applyHomography } from './perspective.js';
+import { rotateAround } from './math.js';
 import './squareCalib.js';   // ensures squarecal event listeners are registered
 
 // ---- Font memoization ----
@@ -507,6 +508,71 @@ function drawSideLabels(ctx, boxes) {
   }
 }
 
+// During a live transform preview (perspective or interactive rotate) shapes
+// follow the image: mapped through the same transform, drawn muted, labels
+// suppressed. Returns a point mapper or null when no preview is active.
+function previewTransform() {
+  if (S.rotateActive) {
+    const rad = (S.rotateAngle || 0) * Math.PI / 180;
+    const cx = S.view.iw / 2, cy = S.view.ih / 2;
+    return function(p) { return rotateAround(p, cx, cy, rad); };
+  }
+  if (S.perspActive && S.perspCorners) {
+    const H = computeHomography(S.perspSrcCorners, S.perspCorners);
+    if (!H) return function(p) { return p; };
+    return function(p) { return applyHomography(H, p.x, p.y); };
+  }
+  return null;
+}
+
+function drawShapesPreview(ctx, inv, xf) {
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+
+  if (S.scaleLine) {
+    const p1 = xf(S.scaleLine.p1), p2 = xf(S.scaleLine.p2);
+    ctx.beginPath();
+    ctx.setLineDash([6 * inv, 4 * inv]);
+    ctx.strokeStyle = '#4A9EFF';
+    ctx.lineWidth = 1.5 * inv;
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  for (let si = 0; si < S.shapes.length; si++) {
+    const sh = S.shapes[si];
+    if (sh.hidden) continue;
+
+    if (sh.type === 'note') {
+      const p = xf(sh.points[0]);
+      dot(ctx, p.x, p.y, 4 * inv, sh.color);
+      continue;
+    }
+
+    const pts = sh.points;
+    if (pts.length < 2) continue;
+    ctx.beginPath();
+    const p0 = xf(pts[0]);
+    ctx.moveTo(p0.x, p0.y);
+    for (let pi = 1; pi < pts.length; pi++) {
+      const p = xf(pts[pi]);
+      ctx.lineTo(p.x, p.y);
+    }
+    if (sh.closed) {
+      ctx.closePath();
+      ctx.fillStyle = sh.color + '18';
+      ctx.fill();
+    }
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth = 1.5 * inv;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawOverlay() {
   S.overlayDirty = false;
 
@@ -518,6 +584,20 @@ function drawOverlay() {
 
   const s = S.view.zoom * S.view.fit;
   const inv = 1 / s;
+
+  const xf = previewTransform();
+  if (xf) {
+    ctx.save();
+    ctx.scale(S.dpr, S.dpr);
+    ctx.save();
+    ctx.translate(S.view.ox, S.view.oy);
+    ctx.scale(s, s);
+    drawShapesPreview(ctx, inv, xf);
+    ctx.restore();
+    drawPerspOverlay(ctx);
+    ctx.restore();
+    return;
+  }
 
   ctx.save();
   ctx.scale(S.dpr, S.dpr);
