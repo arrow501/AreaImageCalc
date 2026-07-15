@@ -10,7 +10,7 @@ import {
 } from './tools.js';
 import {
   setTool, cancelTool, fitView, updatePanel, updatePanelSelection, status, updateFilters, updateScaleDisp,
-  updateScalePane, updateScaleAreaHint, setSlider, initToolbarReflow, toggleGroupCollapsed
+  updateScalePane, updateScaleAreaHint, scaleRefValid, setSlider, initToolbarReflow, toggleGroupCollapsed
 } from './ui.js';
 import { recordHistory, undo, redo } from './history.js';
 import { scheduleSave } from './storage.js';
@@ -1444,40 +1444,64 @@ $('#scale-value').on('keydown', function(e) {
 // ---- Scale pane (sidebar): edit the reference value / unit ----
 
 function applyScalePaneEdit() {
-  const ref = S.scaleRef;
-  if (!ref) return;
   const v = parseFloat($('#scale-pane-value').val());
   const unit = $('#scale-pane-unit').val();
+  const ref = S.scaleRef;
+  const valid = scaleRefValid();
+
   if (!(v > 0)) {
+    // Unit-only change before any scale exists just picks the default unit
+    if (!valid && !(S.scalePPU > 0)) {
+      if (unit !== S.scaleUnit) {
+        S.scaleUnit = unit;
+        updateScaleDisp();
+        scheduleSave();
+      }
+      return;
+    }
     status('Enter a value > 0');
     updateScalePane();
     return;
   }
-  if (v === ref.value && unit === S.scaleUnit) return;
 
-  let ppu = null;
-  if (ref.kind === 'line' && S.scaleLine) {
-    const px = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
-    if (px > 1e-6) ppu = px / v;
-  } else if (ref.kind === 'area') {
-    const sh = findShape(ref.shapeId);
-    if (sh && sh.area > 0) ppu = Math.sqrt(sh.area / v);
-  }
-  if (ppu == null) {
-    status('Reference geometry is missing — recalibrate with the Scale tool');
-    updateScalePane();
-    return;
+  if (valid) {
+    if (v === ref.value && unit === S.scaleUnit) return;
+
+    let ppu = null;
+    if (ref.kind === 'line') {
+      const px = Math.hypot(S.scaleLine.p2.x - S.scaleLine.p1.x, S.scaleLine.p2.y - S.scaleLine.p1.y);
+      if (px > 1e-6) ppu = px / v;
+    } else {
+      const sh = findShape(ref.shapeId);
+      if (sh && sh.area > 0) ppu = Math.sqrt(sh.area / v);
+    }
+    if (ppu == null) {
+      status('Reference geometry is missing — recalibrate with the Scale tool');
+      updateScalePane();
+      return;
+    }
+
+    recordHistory();
+    ref.value = v;
+    S.scaleUnit = unit;
+    S.scalePPU = ppu;
+    status('Scale updated: ' + v + ' ' + unit + (ref.kind === 'area' ? '²' : ''));
+  } else {
+    // Manual scale: 1 px = v unit, no geometric reference
+    const cur = S.scalePPU > 0 ? 1 / S.scalePPU : 0;
+    if (Math.abs(v - cur) < 1e-12 && unit === S.scaleUnit) return;
+    recordHistory();
+    S.scalePPU = 1 / v;
+    S.scaleUnit = unit;
+    S.scaleRef = null;
+    S.scaleLine = null; // a stale reference line no longer matches this scale
+    status('Scale set manually: 1 px = ' + v + ' ' + unit);
   }
 
-  recordHistory();
-  ref.value = v;
-  S.scaleUnit = unit;
-  S.scalePPU = ppu;
   S.overlayDirty = true;
   updateScaleDisp();
   updatePanel();
   scheduleSave();
-  status('Scale updated: ' + v + ' ' + unit + (ref.kind === 'area' ? '²' : ''));
 }
 
 $('#scale-pane-value').on('keydown', function(e) {
@@ -1488,7 +1512,7 @@ $('#scale-pane-value').on('keydown', function(e) {
 $('#scale-pane-value').on('change', applyScalePaneEdit);
 $('#scale-pane-unit').on('change', applyScalePaneEdit);
 
-$('#scale-ref-row').on('click', function() {
+$('#scale-ref-slot').on('click', '.scale-ref-item', function() {
   const ref = S.scaleRef;
   if (!ref || !S.img) return;
   if (ref.kind === 'area') {

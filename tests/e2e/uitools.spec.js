@@ -53,11 +53,26 @@ test('Clear lives in the Shapes pane header and does not collapse the pane', asy
   await expect(page.locator('#pane-shapes')).not.toHaveClass(/collapsed/);
 });
 
+test('scale pane allows manual scale entry without any reference', async ({ page }) => {
+  await expect(page.locator('#scale-input-row')).toBeVisible();
+  await expect(page.locator('#scale-pane-prefix')).toBeVisible();
+  await expect(page.locator('#scale-ref-slot')).toContainText('No reference');
+
+  await page.locator('#scale-pane-value').fill('0.5');
+  await page.locator('#scale-pane-value').press('Enter');
+
+  await expect(page.locator('#scale-display')).toContainText('1px=0.500cm');
+  // Manual entry is undoable
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('#scale-display')).toContainText('No scale');
+});
+
 test('scale pane shows the entered distance and edits re-derive the scale', async ({ page }) => {
   const { cx, cy } = await canvasCenter(page);
   await calibrateScale(page, cx, cy);
 
-  await expect(page.locator('#scale-ref-row')).toContainText('Reference distance');
+  await expect(page.locator('#scale-ref-slot .scale-ref-item')).toContainText('Scale line');
+  await expect(page.locator('#scale-ref-slot .scale-ref-item')).toContainText('10 cm');
   await expect(page.locator('#scale-pane-value')).toHaveValue('10');
 
   const before = await page.locator('#scale-display').textContent();
@@ -112,7 +127,8 @@ test('scale tool offers a Known Area mode that calibrates from a shape', async (
   await page.locator('#scale-bar-apply').click();
 
   await expect(page.locator('#scale-display')).not.toContainText('No scale');
-  await expect(page.locator('#scale-ref-row')).toContainText('Reference area');
+  await expect(page.locator('#scale-ref-slot .scale-ref-item')).toContainText('Area 1');
+  await expect(page.locator('#scale-ref-slot .scale-ref-item')).toContainText('50 cm²');
 });
 
 test('editing the area reference value re-derives the scale', async ({ page }) => {

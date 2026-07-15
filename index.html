@@ -646,21 +646,28 @@
       flex-direction: column;
       gap: 6px;
     }
-    #scale-ref-row {
-      background: none;
-      border: none;
-      text-align: left;
-      color: #4A9EFF;
+    .scale-ref-item { cursor: pointer; margin-bottom: 0; }
+    .scale-ref-empty {
+      color: #8f8f8f;
+      font-size: 11px;
+      padding: 4px 4px 4px 8px;
+    }
+    .scale-ref-badge {
+      font-size: 9px;
+      font-weight: 600;
+      color: #FF6B35;
+      border: 1px solid #FF6B35;
+      border-radius: 2px;
+      padding: 0 3px;
+      flex-shrink: 0;
+      letter-spacing: 0.5px;
+    }
+    #scale-pane-prefix {
+      color: #8f8f8f;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
-      cursor: pointer;
-      padding: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      flex-shrink: 0;
     }
-    #scale-ref-row:hover { color: #7ab8ff; text-decoration: underline; }
-    #scale-ref-row.noref { color: #8f8f8f; cursor: default; text-decoration: none; }
     .scale-input-row { display: flex; gap: 4px; align-items: center; }
     .scale-input-row input {
       width: 80px;
@@ -1219,9 +1226,10 @@
         </div>
         <div class="pane-body">
           <div id="scale-pane-content">
-            <button id="scale-ref-row" class="noref" title="Select the scale reference for editing">No scale set</button>
-            <div class="scale-input-row" id="scale-input-row" style="display:none">
-              <input type="number" id="scale-pane-value" min="0.000001" step="any" aria-label="Reference value">
+            <div id="scale-ref-slot" aria-label="Scale reference"></div>
+            <div class="scale-input-row" id="scale-input-row">
+              <span id="scale-pane-prefix">1 px =</span>
+              <input type="number" id="scale-pane-value" min="0.000001" step="any" placeholder="0.00" aria-label="Scale value">
               <select id="scale-pane-unit" aria-label="Scale unit">
                 <option value="mm">mm</option>
                 <option value="cm">cm</option>

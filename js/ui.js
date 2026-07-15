@@ -173,34 +173,62 @@ export function updateScaleDisp() {
 
 // ---- Scale pane (sidebar) ----
 
+// The reference is valid only while its geometry still exists.
+export function scaleRefValid() {
+  const ref = S.scaleRef;
+  if (!ref || !(ref.value > 0)) return false;
+  return ref.kind === 'area' ? !!findShape(ref.shapeId) : !!S.scaleLine;
+}
+
+function buildScaleRefRow(color, name, valText, tip) {
+  return $('<div class="shape-item scale-ref-item">')
+    .attr('tabindex', '0')
+    .attr('role', 'button')
+    .attr('title', tip)
+    .attr('aria-label', 'Scale reference: ' + name + ', ' + valText)
+    .append($('<span class="shape-swatch">').css('background', color))
+    .append(
+      $('<div class="shape-info">')
+        .append($('<div class="shape-name">').text(name))
+        .append($('<div class="area">').text(valText))
+    )
+    .append($('<span class="scale-ref-badge" aria-hidden="true">').text('REF'));
+}
+
 export function updateScalePane() {
-  const $row = $('#scale-ref-row');
+  const $slot = $('#scale-ref-slot');
   const $inp = $('#scale-pane-value');
   const ref = S.scaleRef;
+  const valid = scaleRefValid();
 
-  if (!ref || !(ref.value > 0)) {
-    $row.addClass('noref').text(S.scalePPU > 0
-      ? 'No reference — 1px = ' + (1 / S.scalePPU).toFixed(3) + S.scaleUnit
-      : 'No scale — use the Scale tool');
-    $('#scale-input-row').hide();
-    return;
-  }
-
-  $row.removeClass('noref');
-  if (ref.kind === 'area') {
+  $slot.empty();
+  if (valid && ref.kind === 'area') {
     const sh = findShape(ref.shapeId);
-    $row.text('Reference area: ' + ((sh && sh.name) || 'missing shape'))
-      .attr('title', 'Select the reference shape — drag its points, the entered area stays fixed');
+    $slot.append(buildScaleRefRow(
+      sh.color, sh.name || 'Area',
+      ref.value + ' ' + S.scaleUnit + '²',
+      'Reference area — click to edit its outline; the entered area stays fixed'
+    ));
+  } else if (valid) {
+    $slot.append(buildScaleRefRow(
+      '#4A9EFF', 'Scale line',
+      ref.value + ' ' + S.scaleUnit,
+      'Reference distance — click to edit the endpoints; the entered distance stays fixed'
+    ));
   } else {
-    $row.text('Reference distance')
-      .attr('title', 'Select the scale line — drag its endpoints, the entered distance stays fixed');
+    $slot.append($('<div class="scale-ref-empty">').text('No reference — Scale tool sets one'));
   }
 
-  $('#scale-input-row').css('display', 'flex');
+  // Without a reference the input is direct manual scale: 1 px = value unit
+  $('#scale-pane-prefix').toggle(!valid);
+  $('#scale-pane-sq').toggle(valid && ref.kind === 'area');
   // Never clobber the field mid-edit — that is exactly how entered values get lost
-  if (document.activeElement !== $inp[0]) $inp.val(ref.value);
+  if (document.activeElement !== $inp[0]) {
+    if (valid) $inp.val(ref.value);
+    else if (S.scalePPU > 0) $inp.val(+(1 / S.scalePPU).toPrecision(6));
+    else $inp.val('');
+  }
   $('#scale-pane-unit').val(S.scaleUnit);
-  $('#scale-pane-sq').toggle(ref.kind === 'area');
 }
 
 // Selection-only refresh: toggles classes in place instead of rebuilding
