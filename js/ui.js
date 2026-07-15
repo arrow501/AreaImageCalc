@@ -157,7 +157,9 @@ export function fitView() {
 }
 
 export function updateZoomDisp() {
-  $('#zoom-display').text(Math.round(S.view.zoom * 100) + '%');
+  const t = Math.round(S.view.zoom * 100) + '%';
+  $('#zoom-display').text(t);
+  $('#scale-zoom-disp').text(t);
 }
 
 // ---- Scale / Measurements Display ----
@@ -181,17 +183,19 @@ export function scaleRefValid() {
 }
 
 function buildScaleRefRow(color, name, valText, tip) {
+  const $info = $('<div class="shape-info">')
+    .append($('<div class="shape-name">').text(name))
+    .append($('<div class="area">').text(valText));
+  if (S.scalePPU > 0) {
+    $info.append($('<div class="perim">').text('1px = ' + (1 / S.scalePPU).toFixed(3) + S.scaleUnit));
+  }
   return $('<div class="shape-item scale-ref-item">')
     .attr('tabindex', '0')
     .attr('role', 'button')
     .attr('title', tip)
     .attr('aria-label', 'Scale reference: ' + name + ', ' + valText)
     .append($('<span class="shape-swatch">').css('background', color))
-    .append(
-      $('<div class="shape-info">')
-        .append($('<div class="shape-name">').text(name))
-        .append($('<div class="area">').text(valText))
-    )
+    .append($info)
     .append($('<span class="scale-ref-badge" aria-hidden="true">').text('REF'));
 }
 
@@ -200,9 +204,10 @@ export function updateScalePane() {
   const $inp = $('#scale-pane-value');
   const ref = S.scaleRef;
   const valid = scaleRefValid();
+  const isArea = valid && ref.kind === 'area';
 
   $slot.empty();
-  if (valid && ref.kind === 'area') {
+  if (isArea) {
     const sh = findShape(ref.shapeId);
     $slot.append(buildScaleRefRow(
       sh.color, sh.name || 'Area',
@@ -221,7 +226,9 @@ export function updateScalePane() {
 
   // Without a reference the input is direct manual scale: 1 px = value unit
   $('#scale-pane-prefix').toggle(!valid);
-  $('#scale-pane-sq').toggle(valid && ref.kind === 'area');
+  $('#scale-pane-unit option').each(function() {
+    this.textContent = this.value + (isArea ? '²' : '');
+  });
   // Never clobber the field mid-edit — that is exactly how entered values get lost
   if (document.activeElement !== $inp[0]) {
     if (valid) $inp.val(ref.value);

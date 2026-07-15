@@ -639,24 +639,33 @@
       min-height: 0;
     }
     #pane-scale { flex: 0 0 auto; }
+    #scale-zoom-disp {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 400;
+      font-size: 10px;
+      color: #8f8f8f;
+      flex-shrink: 0;
+      padding-right: 4px;
+    }
     #scale-pane-content {
-      padding: 6px 8px 8px;
+      padding: 4px;
       min-width: 229px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 2px;
     }
     .scale-ref-item { cursor: pointer; margin-bottom: 0; }
     .scale-ref-empty {
-      color: #8f8f8f;
-      font-size: 11px;
-      padding: 4px 4px 4px 8px;
+      color: #777;
+      font-size: 10px;
+      font-style: italic;
+      padding: 3px 4px 3px 8px;
     }
     .scale-ref-badge {
       font-size: 9px;
       font-weight: 600;
       color: #FF6B35;
-      border: 1px solid #FF6B35;
+      border: 1px solid rgba(255,107,53,0.6);
       border-radius: 2px;
       padding: 0 3px;
       flex-shrink: 0;
@@ -665,14 +674,15 @@
     #scale-pane-prefix {
       color: #8f8f8f;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
+      font-size: 10px;
       flex-shrink: 0;
     }
-    .scale-input-row { display: flex; gap: 4px; align-items: center; }
+    .scale-input-row { display: flex; gap: 4px; align-items: center; padding: 2px 4px 2px 8px; }
     .scale-input-row input {
-      width: 80px;
+      flex: 1;
+      min-width: 0;
       background: #1a1a1a;
-      border: 1px solid #444;
+      border: 1px solid #333;
       color: #e0e0e0;
       padding: 3px 6px;
       border-radius: 3px;
@@ -681,14 +691,14 @@
     }
     .scale-input-row input:focus { outline: none; border-color: #FF6B35; }
     .scale-input-row select {
+      flex-shrink: 0;
       background: #1a1a1a;
-      border: 1px solid #444;
-      color: #e0e0e0;
-      padding: 3px;
+      border: 1px solid #333;
+      color: #ccc;
+      padding: 3px 2px;
       border-radius: 3px;
       font-size: 11px;
     }
-    #scale-pane-sq { color: #8f8f8f; font-size: 11px; }
     #pane-docs { flex: 0 1 auto; max-height: 45%; }
     #pane-shapes { flex: 1 1 auto; }
     #pane-splitter {
@@ -1223,13 +1233,14 @@
         <div class="pane-header" data-pane="scale" tabindex="0" role="button" aria-expanded="true">
           <span class="pane-caret" aria-hidden="true">&#9662;</span>
           <span class="pane-title">Scale</span>
+          <span id="scale-zoom-disp" title="Zoom">100%</span>
         </div>
         <div class="pane-body">
           <div id="scale-pane-content">
             <div id="scale-ref-slot" aria-label="Scale reference"></div>
             <div class="scale-input-row" id="scale-input-row">
-              <span id="scale-pane-prefix">1 px =</span>
-              <input type="number" id="scale-pane-value" min="0.000001" step="any" placeholder="0.00" aria-label="Scale value">
+              <span id="scale-pane-prefix">1px =</span>
+              <input type="number" id="scale-pane-value" min="0" step="any" placeholder="0.00" aria-label="Scale value">
               <select id="scale-pane-unit" aria-label="Scale unit">
                 <option value="mm">mm</option>
                 <option value="cm">cm</option>
@@ -1237,7 +1248,7 @@
                 <option value="in">in</option>
                 <option value="ft">ft</option>
                 <option value="yd">yd</option>
-              </select><span id="scale-pane-sq" aria-hidden="true">&sup2;</span>
+              </select>
             </div>
           </div>
         </div>
@@ -1285,7 +1296,7 @@
 
       <div id="scale-popup">
         <label>Known distance between points:</label>
-        <input type="number" id="scale-value" min="0.001" step="any" placeholder="0.00">
+        <input type="number" id="scale-value" min="0" step="any" placeholder="0.00">
         <select id="scale-unit">
           <option value="mm">mm</option>
           <option value="cm" selected>cm</option>
@@ -1323,7 +1334,7 @@
           <div class="ap-hint" id="scale-area-hint">Click a closed shape whose real area you know.</div>
           <div class="sq-side-row">
             <label>Area:</label>
-            <input type="number" id="scale-bar-value" min="0.000001" step="any" placeholder="0.00">
+            <input type="number" id="scale-bar-value" min="0" step="any" placeholder="0.00">
             <select id="scale-bar-unit" aria-label="Area unit">
               <option value="mm">mm&sup2;</option>
               <option value="cm" selected>cm&sup2;</option>
@@ -1359,7 +1370,7 @@
           <div class="ap-hint" id="sq-hint">Click 4 corners of a real-world square (any order).</div>
           <div class="sq-side-row">
             <label>Side:</label>
-            <input type="number" id="sq-side-value" min="0.001" step="any" placeholder="0.00">
+            <input type="number" id="sq-side-value" min="0" step="any" placeholder="0.00">
             <select id="sq-side-unit">
               <option value="mm">mm</option>
               <option value="cm" selected>cm</option>
@@ -1428,7 +1439,7 @@
 <div id="areascale-popover" class="dropdown-menu">
   <label for="areascale-input">Known real area of this shape:</label>
   <div class="color-row">
-    <input type="number" id="areascale-input" min="0.000001" step="any" placeholder="0.00" aria-label="Known area">
+    <input type="number" id="areascale-input" min="0" step="any" placeholder="0.00" aria-label="Known area">
     <select id="areascale-unit" aria-label="Area unit">
       <option value="mm">mm&sup2;</option>
       <option value="cm" selected>cm&sup2;</option>
