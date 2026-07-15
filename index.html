@@ -113,16 +113,6 @@
     .storage-modal button:hover { background: #333; }
     .storage-modal button.btn-primary { background: #FF6B35; border-color: #e55a20; color: #fff; font-weight: 600; }
     .tb-sep { width: 1px; height: 20px; background: #444; margin: 0 4px; flex-shrink: 0; }
-    .tb-info {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: #888;
-      display: flex;
-      gap: 12px;
-      flex-shrink: 0;
-      margin-left: 8px;
-    }
-    #scale-display { min-width: 15ch; }
 
     /* ========== SLIDERS (Brightness/Contrast) ========== */
     .tb-sliders-wrap { display: flex; gap: 4px; margin-left: auto; align-items: center; flex-shrink: 0; }
@@ -639,14 +629,14 @@
       min-height: 0;
     }
     #pane-scale { flex: 0 0 auto; }
-    #scale-zoom-disp {
+    #scale-display, #zoom-display {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 400;
       font-size: 10px;
       color: #8f8f8f;
       flex-shrink: 0;
-      padding-right: 4px;
     }
+    #zoom-display { padding-right: 4px; color: #666; }
     #scale-pane-content {
       padding: 4px;
       min-width: 229px;
@@ -681,24 +671,39 @@
     .scale-input-row input {
       flex: 1;
       min-width: 0;
+      height: 22px;
       background: #1a1a1a;
       border: 1px solid #333;
       color: #e0e0e0;
-      padding: 3px 6px;
+      padding: 0 0 0 6px;
       border-radius: 3px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
+      line-height: 20px;
     }
     .scale-input-row input:focus { outline: none; border-color: #FF6B35; }
     .scale-input-row select {
       flex-shrink: 0;
+      height: 22px;
       background: #1a1a1a;
       border: 1px solid #333;
       color: #ccc;
-      padding: 3px 2px;
+      padding: 0 2px;
       border-radius: 3px;
       font-size: 11px;
     }
+
+    /* Dark-theme number spinners: keep them, invert to match, full height */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      opacity: 0.45;
+      filter: invert(0.8);
+      cursor: pointer;
+      height: 100%;
+      align-self: stretch;
+    }
+    input[type=number]:hover::-webkit-inner-spin-button,
+    input[type=number]:focus::-webkit-inner-spin-button { opacity: 0.85; }
     #pane-docs { flex: 0 1 auto; max-height: 45%; }
     #pane-shapes { flex: 1 1 auto; }
     #pane-splitter {
@@ -1088,7 +1093,7 @@
     html.hc .tb-btn:hover { background: #333; }
     html.hc .tb-btn.disabled { opacity: 0.55; }
     html.hc .tb-sep { background: #aaa; }
-    html.hc .tb-info, html.hc .sl-group span, html.hc #tool-display { color: #fff; }
+    html.hc #scale-display, html.hc #zoom-display, html.hc .sl-group span, html.hc #tool-display { color: #fff; }
     html.hc .sl-group { background: #000; border: 1px solid #aaa; }
     html.hc #canvas-wrap { background: #000; }
     html.hc .dz-content, html.hc .dz-content .big, html.hc .dz-content .tagline { color: #fff; }
@@ -1219,10 +1224,6 @@
       </div>
     </div>
 
-    <div class="tb-info">
-      <span id="zoom-display">100%</span>
-      <span id="scale-display">No scale</span>
-    </div>
   </div>
 
   <!-- ========== MAIN CONTENT ========== -->
@@ -1233,7 +1234,8 @@
         <div class="pane-header" data-pane="scale" tabindex="0" role="button" aria-expanded="true">
           <span class="pane-caret" aria-hidden="true">&#9662;</span>
           <span class="pane-title">Scale</span>
-          <span id="scale-zoom-disp" title="Zoom">100%</span>
+          <span id="scale-display" title="Current scale">No scale</span>
+          <span id="zoom-display" title="Zoom">100%</span>
         </div>
         <div class="pane-body">
           <div id="scale-pane-content">

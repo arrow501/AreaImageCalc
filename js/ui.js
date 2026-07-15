@@ -157,9 +157,7 @@ export function fitView() {
 }
 
 export function updateZoomDisp() {
-  const t = Math.round(S.view.zoom * 100) + '%';
-  $('#zoom-display').text(t);
-  $('#scale-zoom-disp').text(t);
+  $('#zoom-display').text(Math.round(S.view.zoom * 100) + '%');
 }
 
 // ---- Scale / Measurements Display ----
@@ -186,9 +184,6 @@ function buildScaleRefRow(color, name, valText, tip) {
   const $info = $('<div class="shape-info">')
     .append($('<div class="shape-name">').text(name))
     .append($('<div class="area">').text(valText));
-  if (S.scalePPU > 0) {
-    $info.append($('<div class="perim">').text('1px = ' + (1 / S.scalePPU).toFixed(3) + S.scaleUnit));
-  }
   return $('<div class="shape-item scale-ref-item">')
     .attr('tabindex', '0')
     .attr('role', 'button')
